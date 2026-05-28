@@ -32,9 +32,14 @@ class LeadModel {
   final String supportNotes;
   final String? supportDocumentPath;
 
-  // NEW WORKFLOW FIELDS
   String status;
   String liaisonNote;
+
+  final String liaisonDocumentPath;
+
+  // Installation Team fields
+  final String installationNote;
+  final String installationDocumentPath;
 
   LeadModel({
     required this.name,
@@ -65,6 +70,9 @@ class LeadModel {
     this.supportDocumentPath,
     this.status = 'New Lead',
     this.liaisonNote = '',
+    this.liaisonDocumentPath = '',
+    this.installationNote = '',
+    this.installationDocumentPath = '',
   });
 
   LeadModel copyWith({
@@ -96,6 +104,9 @@ class LeadModel {
     String? supportDocumentPath,
     String? status,
     String? liaisonNote,
+    String? liaisonDocumentPath,
+    String? installationNote,
+    String? installationDocumentPath,
   }) {
     return LeadModel(
       name: name ?? this.name,
@@ -127,6 +138,11 @@ class LeadModel {
       supportDocumentPath: supportDocumentPath ?? this.supportDocumentPath,
       status: status ?? this.status,
       liaisonNote: liaisonNote ?? this.liaisonNote,
+      liaisonDocumentPath:
+          liaisonDocumentPath ?? this.liaisonDocumentPath,
+      installationNote: installationNote ?? this.installationNote,
+      installationDocumentPath:
+          installationDocumentPath ?? this.installationDocumentPath,
     );
   }
 
@@ -160,6 +176,9 @@ class LeadModel {
       'supportDocumentPath': supportDocumentPath,
       'status': status,
       'liaisonNote': liaisonNote,
+      'liaisonDocumentPath': liaisonDocumentPath,
+      'installationNote': installationNote,
+      'installationDocumentPath': installationDocumentPath,
     };
   }
 
@@ -193,6 +212,10 @@ class LeadModel {
       supportDocumentPath: json['supportDocumentPath'] as String?,
       status: json['status'] as String? ?? 'New Lead',
       liaisonNote: json['liaisonNote'] as String? ?? '',
+      liaisonDocumentPath: json['liaisonDocumentPath'] as String? ?? '',
+      installationNote: json['installationNote'] as String? ?? '',
+      installationDocumentPath:
+          json['installationDocumentPath'] as String? ?? '',
     );
   }
 }

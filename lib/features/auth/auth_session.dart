@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'screens/login_screen.dart';
+
 class AuthSession {
   const AuthSession._();
 
@@ -12,8 +14,8 @@ class AuthSession {
     await prefs.remove('userRole');
     await prefs.remove('lastLoggedInUser');
 
-    navigator.pushNamedAndRemoveUntil(
-      '/',
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
   }

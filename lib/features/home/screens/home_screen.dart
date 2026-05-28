@@ -111,7 +111,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hideParentChrome = isLoadingRole || userRole == 'support';
+    final hideParentChrome =
+        isLoadingRole ||
+        userRole == 'support' ||
+        userRole == 'liaison' ||
+        userRole == 'finance' ||
+        userRole == 'installation';
 
     return Scaffold(
       backgroundColor: bgColor,
