@@ -84,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'support':
         return 'Support Team';
       case 'leasing':
-        return 'Leasing Team';
+        return 'Liaison Officer';
       case 'finance':
         return 'Finance Team';
       case 'installation':
@@ -221,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       DropdownMenuItem(
                         value: 'leasing',
-                        child: Text('Leasing Team'),
+                        child: Text('Liaison Officer'),
                       ),
                       DropdownMenuItem(
                         value: 'finance',

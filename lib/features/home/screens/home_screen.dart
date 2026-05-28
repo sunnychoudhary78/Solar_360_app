@@ -9,7 +9,7 @@ import '../../leads/screens/lead_form_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
 
 import '../../workflow/screens/support_team_screen.dart';
-import '../../workflow/screens/leasing_process_screen.dart';
+import '../../workflow/screens/liaison_process_screen.dart';
 import '../../workflow/screens/finance_team_screen.dart';
 import '../../workflow/screens/installation_team_screen.dart';
 
@@ -27,6 +27,7 @@ class HomeScreen extends StatefulWidget {
 
     try {
       final decoded = jsonDecode(rawLeads);
+
       if (decoded is! List) return;
 
       leads
@@ -35,7 +36,9 @@ class HomeScreen extends StatefulWidget {
           decoded
               .whereType<Map>()
               .map(
-                (lead) => LeadModel.fromJson(Map<String, dynamic>.from(lead)),
+                (lead) => LeadModel.fromJson(
+                  Map<String, dynamic>.from(lead),
+                ),
               )
               .toList(),
         );
@@ -46,7 +49,10 @@ class HomeScreen extends StatefulWidget {
 
   static Future<void> saveLeads() async {
     final prefs = await SharedPreferences.getInstance();
-    final encoded = jsonEncode(leads.map((lead) => lead.toJson()).toList());
+    final encoded = jsonEncode(
+      leads.map((lead) => lead.toJson()).toList(),
+    );
+
     await prefs.setString(_leadsKey, encoded);
   }
 
@@ -66,11 +72,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUserRole();
+    _loadUserRoleAndLeads();
   }
 
-  Future<void> _loadUserRole() async {
+  Future<void> _loadUserRoleAndLeads() async {
     final prefs = await SharedPreferences.getInstance();
+
     await HomeScreen.loadLeads();
 
     if (!mounted) return;
@@ -85,8 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (userRole) {
       case 'support':
         return 'Support Team';
-      case 'leasing':
-        return 'Leasing Team';
+      case 'liaison':
+        return 'Liaison Officer';
       case 'finance':
         return 'Finance Team';
       case 'installation':
@@ -135,6 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(
                     Icons.notifications_none_rounded,
                     size: 31,
+                    color: textColor,
                   ),
                 ),
               ],
@@ -154,8 +162,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return const SupportTeamScreen();
     }
 
-    if (userRole == 'leasing') {
-      return const LeasingProcessScreen();
+    if (userRole == 'liaison') {
+      return const LiaisonProcessScreen();
     }
 
     if (userRole == 'finance') {
@@ -167,7 +175,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return const Center(
-      child: Text('Invalid user role'),
+      child: Text(
+        'Invalid user role',
+        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      ),
     );
   }
 
@@ -220,7 +231,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
 
-              setState(() {});
+              await HomeScreen.loadLeads();
+
+              if (mounted) setState(() {});
             },
           ),
           const SizedBox(height: 16),
@@ -228,13 +241,17 @@ class _HomeScreenState extends State<HomeScreen> {
             title: 'All Leads',
             subtitle: 'View all saved leads and workflow progress',
             icon: Icons.list_alt_rounded,
-            onTap: () {
-              Navigator.push(
+            onTap: () async {
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => const AllLeadsScreen(),
                 ),
               );
+
+              await HomeScreen.loadLeads();
+
+              if (mounted) setState(() {});
             },
           ),
         ],
@@ -451,22 +468,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   );
 
-                  setState(() {});
+                  await HomeScreen.loadLeads();
+
+                  if (mounted) setState(() {});
                 },
               ),
             if (userRole == 'sales')
               _drawerItem(
                 Icons.list_alt_outlined,
                 'All Leads',
-                () {
+                () async {
                   Navigator.pop(context);
 
-                  Navigator.push(
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const AllLeadsScreen(),
                     ),
                   );
+
+                  await HomeScreen.loadLeads();
+
+                  if (mounted) setState(() {});
                 },
               ),
             _drawerItem(
@@ -483,7 +506,7 @@ class _HomeScreenState extends State<HomeScreen> {
               'Logout',
               () async {
                 final prefs = await SharedPreferences.getInstance();
-                await prefs.clear();
+                await prefs.remove('userRole');
 
                 if (!mounted) return;
 
@@ -494,6 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
+            const SizedBox(height: 24),
           ],
         ),
       ),

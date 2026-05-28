@@ -131,6 +131,21 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
         (_hasFile(lead.roofImagePath) ? 1 : 0);
   }
 
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'Documents Submitted':
+        return Colors.orange;
+      case 'Liaison Process Started':
+        return Colors.blue;
+      case 'Bank Coordination In Progress':
+        return Colors.indigo;
+      case 'Liaison Completed':
+        return Colors.green;
+      default:
+        return primaryColor;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final leads = HomeScreen.leads;
@@ -187,9 +202,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                 color: textColor,
                 size: 31,
               ),
-              onPressed: () {
-                _setSelectedPage(5);
-              },
+              onPressed: () => _setSelectedPage(5),
             ),
             const SizedBox(width: 8),
           ],
@@ -198,9 +211,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
           index: _selectedPage,
           children: [
             _dashboard(leads.length, docsCount, notedCount, pendingCount),
-            leads.isEmpty
-                ? _emptyState('No new leads available')
-                : _leadsList(leads),
+            leads.isEmpty ? _emptyState('No new leads available') : _leadsList(leads),
             _documentsScreen(leads),
             _notesScreen(leads),
             _pendingScreen(leads),
@@ -236,11 +247,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
         child: Column(
           children: [
             const SizedBox(height: 34),
-            const Icon(
-              Icons.solar_power_rounded,
-              color: primaryColor,
-              size: 76,
-            ),
+            const Icon(Icons.solar_power_rounded, color: primaryColor, size: 76),
             const SizedBox(height: 18),
             const Text(
               'Support Team',
@@ -251,44 +258,16 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
               ),
             ),
             const SizedBox(height: 36),
-            _drawerItem(
-              icon: Icons.dashboard_outlined,
-              title: 'Dashboard',
-              pageIndex: 0,
-            ),
-            _drawerItem(
-              icon: Icons.people_alt_outlined,
-              title: 'New Leads',
-              pageIndex: 1,
-            ),
-            _drawerItem(
-              icon: Icons.file_copy_outlined,
-              title: 'Documents',
-              pageIndex: 2,
-            ),
-            _drawerItem(
-              icon: Icons.edit_note_rounded,
-              title: 'Notes Added',
-              pageIndex: 3,
-            ),
-            _drawerItem(
-              icon: Icons.pending_actions_outlined,
-              title: 'Pending',
-              pageIndex: 4,
-            ),
-            _drawerItem(
-              icon: Icons.notifications_none_rounded,
-              title: 'Notifications',
-              pageIndex: 5,
-            ),
+            _drawerItem(icon: Icons.dashboard_outlined, title: 'Dashboard', pageIndex: 0),
+            _drawerItem(icon: Icons.people_alt_outlined, title: 'New Leads', pageIndex: 1),
+            _drawerItem(icon: Icons.file_copy_outlined, title: 'Documents', pageIndex: 2),
+            _drawerItem(icon: Icons.edit_note_rounded, title: 'Notes Added', pageIndex: 3),
+            _drawerItem(icon: Icons.pending_actions_outlined, title: 'Pending', pageIndex: 4),
+            _drawerItem(icon: Icons.notifications_none_rounded, title: 'Notifications', pageIndex: 5),
             const Spacer(),
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 28),
-              leading: const Icon(
-                Icons.logout_rounded,
-                color: primaryColor,
-                size: 33,
-              ),
+              leading: const Icon(Icons.logout_rounded, color: primaryColor, size: 33),
               title: const Text(
                 'Logout',
                 style: TextStyle(
@@ -398,37 +377,17 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
           const SizedBox(height: 20),
           Row(
             children: [
-              _statCard(
-                'New Leads',
-                '$total',
-                Icons.person_add_alt_1_rounded,
-                pageIndex: 1,
-              ),
+              _statCard('New Leads', '$total', Icons.person_add_alt_1_rounded, pageIndex: 1),
               const SizedBox(width: 14),
-              _statCard(
-                'Documents',
-                '$docs',
-                Icons.file_copy_rounded,
-                pageIndex: 2,
-              ),
+              _statCard('Documents', '$docs', Icons.file_copy_rounded, pageIndex: 2),
             ],
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              _statCard(
-                'Notes Added',
-                '$notes',
-                Icons.edit_note_rounded,
-                pageIndex: 3,
-              ),
+              _statCard('Notes Added', '$notes', Icons.edit_note_rounded, pageIndex: 3),
               const SizedBox(width: 14),
-              _statCard(
-                'Pending',
-                '$pending',
-                Icons.pending_actions,
-                pageIndex: 4,
-              ),
+              _statCard('Pending', '$pending', Icons.pending_actions, pageIndex: 4),
             ],
           ),
           const SizedBox(height: 24),
@@ -442,13 +401,8 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                 backgroundColor: primaryColor,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 18),
-                textStyle: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
+                textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               ),
             ),
           ),
@@ -548,8 +502,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
   }
 
   Widget _notesScreen(List<LeadModel> leads) {
-    final filtered =
-        leads.where((lead) => lead.supportNotes.trim().isNotEmpty).toList();
+    final filtered = leads.where((lead) => lead.supportNotes.trim().isNotEmpty).toList();
 
     if (filtered.isEmpty) return _emptyState('No notes added');
 
@@ -564,8 +517,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
   }
 
   Widget _pendingScreen(List<LeadModel> leads) {
-    final filtered =
-        leads.where((lead) => lead.supportNotes.trim().isEmpty).toList();
+    final filtered = leads.where((lead) => lead.supportNotes.trim().isEmpty).toList();
 
     if (filtered.isEmpty) return _emptyState('No pending leads');
 
@@ -582,6 +534,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
   Widget _leadCard(int index, LeadModel lead) {
     final allDocCount = _allDocsCount(lead);
     final downloadableCount = _downloadableDocs(lead).length;
+    final statusColor = _statusColor(lead.status);
 
     return InkWell(
       borderRadius: BorderRadius.circular(28),
@@ -629,18 +582,15 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
-                    color: allDocCount > 0
-                        ? Colors.green.withOpacity(0.12)
-                        : primaryColor.withOpacity(0.12),
+                    color: statusColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Text(
-                    allDocCount > 0 ? '$allDocCount DOCS' : 'NEW LEAD',
+                    lead.status,
                     style: TextStyle(
-                      color: allDocCount > 0 ? Colors.green : primaryColor,
+                      color: statusColor,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -656,17 +606,9 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
             if (lead.supportNotes.trim().isNotEmpty)
               _quickInfo(Icons.note_alt_outlined, 'Notes', lead.supportNotes),
             if (allDocCount > 0)
-              _quickInfo(
-                Icons.attach_file_rounded,
-                'Documents',
-                '$allDocCount files available',
-              ),
+              _quickInfo(Icons.attach_file_rounded, 'Documents', '$allDocCount files available'),
             if (downloadableCount > 0)
-              _quickInfo(
-                Icons.download_rounded,
-                'Separate Docs',
-                '$downloadableCount PDF files need separate open',
-              ),
+              _quickInfo(Icons.download_rounded, 'Separate Docs', '$downloadableCount PDF files need separate open'),
             const SizedBox(height: 18),
             Row(
               children: [
@@ -679,9 +621,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                       foregroundColor: primaryColor,
                       side: const BorderSide(color: primaryColor),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
                   ),
                 ),
@@ -695,9 +635,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                       backgroundColor: primaryColor,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
                   ),
                 ),
@@ -708,13 +646,10 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                     icon: const Icon(Icons.download_rounded),
                     label: const Text('Docs'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          downloadableCount > 0 ? Colors.green : Colors.grey,
+                      backgroundColor: downloadableCount > 0 ? Colors.green : Colors.grey,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
                   ),
                 ),
@@ -737,10 +672,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
           const SizedBox(width: 10),
           Text(
             '$title: ',
-            style: const TextStyle(
-              color: textColor,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(color: textColor, fontWeight: FontWeight.bold),
           ),
           Expanded(
             child: Text(
@@ -757,8 +689,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
 
   void _openLeadDetails(int index) {
     LeadModel currentLead = HomeScreen.leads[index];
-    final notesController =
-        TextEditingController(text: currentLead.supportNotes);
+    final notesController = TextEditingController(text: currentLead.supportNotes);
     List<String> selectedSupportDocs = _supportDocsFromLead(currentLead);
 
     showModalBottomSheet(
@@ -776,9 +707,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
             final customerDocs = _customerDocsFromLead(currentLead);
 
             return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
               child: DraggableScrollableSheet(
                 expand: false,
                 initialChildSize: 0.92,
@@ -787,8 +716,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                 builder: (context, scrollController) {
                   return SingleChildScrollView(
                     controller: scrollController,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -807,6 +735,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                             _row('K No', currentLead.kNo),
                             _row('Ref No', currentLead.refNo),
                             _row('Discom', currentLead.discom),
+                            _row('Status', currentLead.status),
                           ],
                         ),
                         _section(
@@ -816,10 +745,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                             _fileBox('Aadhaar Back', currentLead.aadhaarBackPath),
                             _fileBox('PAN Front', currentLead.panFrontPath),
                             _fileBox('PAN Back', currentLead.panBackPath),
-                            _fileBox(
-                              'Electricity Bill',
-                              currentLead.electricityBillPath,
-                            ),
+                            _fileBox('Electricity Bill', currentLead.electricityBillPath),
                             if (!_hasFile(currentLead.aadhaarFrontPath) &&
                                 !_hasFile(currentLead.aadhaarBackPath) &&
                                 !_hasFile(currentLead.panFrontPath) &&
@@ -891,10 +817,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
-                              borderSide: const BorderSide(
-                                color: primaryColor,
-                                width: 1.5,
-                              ),
+                              borderSide: const BorderSide(color: primaryColor, width: 1.5),
                             ),
                           ),
                         ),
@@ -919,9 +842,10 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
 
                             HomeScreen.leads[index] = currentLead.copyWith(
                               supportNotes: notesController.text.trim(),
-                              supportDocumentPath:
-                                  _docsToString(selectedSupportDocs),
+                              supportDocumentPath: _docsToString(selectedSupportDocs),
+                              status: 'Documents Submitted',
                             );
+
                             await HomeScreen.saveLeads();
 
                             setState(() {});
@@ -933,9 +857,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                             foregroundColor: primaryColor,
                             side: const BorderSide(color: primaryColor),
                             minimumSize: const Size(double.infinity, 52),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -943,9 +865,10 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                           onPressed: () async {
                             HomeScreen.leads[index] = currentLead.copyWith(
                               supportNotes: notesController.text.trim(),
-                              supportDocumentPath:
-                                  _docsToString(selectedSupportDocs),
+                              supportDocumentPath: _docsToString(selectedSupportDocs),
+                              status: 'Documents Submitted',
                             );
+
                             await HomeScreen.saveLeads();
 
                             setState(() {});
@@ -955,20 +878,18 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                  'Saved successfully. Lead updated.',
+                                  'Saved successfully. Lead sent to Liaison Officer.',
                                 ),
                               ),
                             );
                           },
                           icon: const Icon(Icons.save_rounded),
-                          label: const Text('Save & Back'),
+                          label: const Text('Save & Send To Liaison'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primaryColor,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 54),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -980,24 +901,19 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                             backgroundColor: Colors.red,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 54),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                           ),
                         ),
                         const SizedBox(height: 12),
                         ElevatedButton.icon(
-                          onPressed: () =>
-                              _showDownloadableDocs(HomeScreen.leads[index]),
+                          onPressed: () => _showDownloadableDocs(HomeScreen.leads[index]),
                           icon: const Icon(Icons.download_rounded),
                           label: const Text('Download Separate Docs'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 54),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                           ),
                         ),
                       ],
@@ -1177,10 +1093,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                           ),
                           subtitle: const Text('Tap to open / download'),
                           trailing: IconButton(
-                            icon: const Icon(
-                              Icons.open_in_new_rounded,
-                              color: primaryColor,
-                            ),
+                            icon: const Icon(Icons.open_in_new_rounded, color: primaryColor),
                             onPressed: () => OpenFilex.open(path),
                           ),
                         ),
@@ -1211,11 +1124,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
           const CircleAvatar(
             radius: 32,
             backgroundColor: Colors.white24,
-            child: Icon(
-              Icons.support_agent_rounded,
-              color: Colors.white,
-              size: 34,
-            ),
+            child: Icon(Icons.support_agent_rounded, color: Colors.white, size: 34),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -1259,10 +1168,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
           pw.SizedBox(height: 14),
           pw.Text(
             title,
-            style: pw.TextStyle(
-              fontSize: 16,
-              fontWeight: pw.FontWeight.bold,
-            ),
+            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 8),
           pw.Image(image, height: 220, fit: pw.BoxFit.contain),
@@ -1286,6 +1192,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
             _pdfRow('K No', lead.kNo),
             _pdfRow('Ref No', lead.refNo),
             _pdfRow('Discom', lead.discom),
+            _pdfRow('Status', lead.status),
             _pdfRow('Geo Location', lead.geoLocation),
             _pdfRow('Longitude', lead.longitude),
             _pdfRow('Latitude', lead.latitude),
@@ -1345,8 +1252,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
     );
 
     final dir = await getApplicationDocumentsDirectory();
-    final safeName =
-        lead.name.trim().isEmpty ? 'lead' : lead.name.replaceAll(' ', '_');
+    final safeName = lead.name.trim().isEmpty ? 'lead' : lead.name.replaceAll(' ', '_');
     final file = File('${dir.path}/${safeName}_details.pdf');
 
     await file.writeAsBytes(await pdf.save());
@@ -1442,10 +1348,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-            ),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(18),
@@ -1488,10 +1391,7 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 17,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
               ),
             ),
             const Icon(Icons.open_in_new, color: primaryColor),

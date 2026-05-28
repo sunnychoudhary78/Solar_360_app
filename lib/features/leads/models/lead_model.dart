@@ -27,11 +27,14 @@ class LeadModel {
 
   final bool electricityBillIsPdf;
 
-  // multiple customer uploaded docs
   final String? customerDocuments;
 
   final String supportNotes;
   final String? supportDocumentPath;
+
+  // NEW WORKFLOW FIELDS
+  String status;
+  String liaisonNote;
 
   LeadModel({
     required this.name,
@@ -60,6 +63,8 @@ class LeadModel {
     this.customerDocuments,
     this.supportNotes = '',
     this.supportDocumentPath,
+    this.status = 'New Lead',
+    this.liaisonNote = '',
   });
 
   LeadModel copyWith({
@@ -89,6 +94,8 @@ class LeadModel {
     String? customerDocuments,
     String? supportNotes,
     String? supportDocumentPath,
+    String? status,
+    String? liaisonNote,
   }) {
     return LeadModel(
       name: name ?? this.name,
@@ -118,6 +125,8 @@ class LeadModel {
       customerDocuments: customerDocuments ?? this.customerDocuments,
       supportNotes: supportNotes ?? this.supportNotes,
       supportDocumentPath: supportDocumentPath ?? this.supportDocumentPath,
+      status: status ?? this.status,
+      liaisonNote: liaisonNote ?? this.liaisonNote,
     );
   }
 
@@ -149,6 +158,8 @@ class LeadModel {
       'customerDocuments': customerDocuments,
       'supportNotes': supportNotes,
       'supportDocumentPath': supportDocumentPath,
+      'status': status,
+      'liaisonNote': liaisonNote,
     };
   }
 
@@ -180,6 +191,8 @@ class LeadModel {
       customerDocuments: json['customerDocuments'] as String?,
       supportNotes: json['supportNotes'] as String? ?? '',
       supportDocumentPath: json['supportDocumentPath'] as String?,
+      status: json['status'] as String? ?? 'New Lead',
+      liaisonNote: json['liaisonNote'] as String? ?? '',
     );
   }
 }
