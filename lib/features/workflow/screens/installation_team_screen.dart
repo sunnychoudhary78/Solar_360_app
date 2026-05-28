@@ -177,8 +177,9 @@ class _InstallationTeamScreenState extends State<InstallationTeamScreen> {
       onWillPop: () async {
         if (selectedPage != 0) {
           setState(() => selectedPage = 0);
+          return false;
         }
-        return false;
+        return true;
       },
       child: Scaffold(
         backgroundColor: bgColor,
@@ -319,7 +320,8 @@ class _InstallationTeamScreenState extends State<InstallationTeamScreen> {
         leads.where((lead) => lead.status == 'Installation In Progress').length;
     final completed =
         leads.where((lead) => lead.status == 'Installation Done').length;
-    final docsCount = leads.fold<int>(0, (value, lead) => value + _totalDocs(lead));
+    final docsCount =
+        leads.fold<int>(0, (value, lead) => value + _totalDocs(lead));
 
     return RefreshIndicator(
       onRefresh: _loadLatestLeads,
@@ -896,50 +898,80 @@ class _CompleteInstallationFormScreenState
   final fileNo = TextEditingController();
   final clientName = TextEditingController();
   final capacity = TextEditingController();
-  final date = TextEditingController();
+  final formDate = TextEditingController();
   final email = TextEditingController();
   final mobile = TextEditingController();
 
+  final registrationPortal = TextEditingController();
   final registrationId = TextEditingController();
   final registrationDateTime = TextEditingController();
+  final clientType = TextEditingController();
+  final reference = TextEditingController();
   final paymentMode = TextEditingController();
   final bankNameBranch = TextEditingController();
+
+  final aadhaarCard = TextEditingController();
+  final panCard = TextEditingController();
+  final electricityBill = TextEditingController();
+  final cancelledCheque = TextEditingController();
 
   final state = TextEditingController();
   final district = TextEditingController();
   final blockVillage = TextEditingController();
   final address = TextEditingController();
   final pinCode = TextEditingController();
+  final kgVendorApproval = TextEditingController();
+  final kgVendorDate = TextEditingController();
+  final kgVendorReason = TextEditingController();
   final discomAgency = TextEditingController();
+  final consumerAgencyNo = TextEditingController();
   final sanctionLoad = TextEditingController();
 
   final bankName = TextEditingController();
   final bankIfsc = TextEditingController();
   final bankBranch = TextEditingController();
+  final enrollmentDate = TextEditingController();
+  final enrollmentEndDate = TextEditingController();
+
+  final totalQuotationAmount = TextEditingController();
+  final quotationRefNo = TextEditingController();
+  final receiptFirst = TextEditingController();
+  final receiptSecond = TextEditingController();
+  final receiptThird = TextEditingController();
+  final receiptFourth = TextEditingController();
+  final totalAmount = TextEditingController();
+
+  final dcrCertificateNo = TextEditingController();
+  final applicationNo = TextEditingController();
+  final stampPaper = TextEditingController();
+  final centralGovtSubDate = TextEditingController();
+  final stateGovtSubDate = TextEditingController();
 
   final sp1 = TextEditingController();
   final sp2 = TextEditingController();
   final sp3 = TextEditingController();
   final sp4 = TextEditingController();
   final sp5 = TextEditingController();
-  final panelBrand = TextEditingController();
+  final solarPanelBrand = TextEditingController();
   final solarPanelCount = TextEditingController();
-  final netMeterDate = TextEditingController();
+  final installNetMeterDate = TextEditingController();
   final discomInspectDate = TextEditingController();
 
-  final quotationAmount = TextEditingController();
-  final quotationRef = TextEditingController();
-  final receiptFirst = TextEditingController();
-  final totalAmount = TextEditingController();
+  final docAadhaar = TextEditingController();
+  final docPan = TextEditingController();
+  final docElectricity = TextEditingController();
+  final docCheque = TextEditingController();
 
-  final transportDate = TextEditingController();
+  final transportationDate = TextEditingController();
   final invoiceNo = TextEditingController();
   final ewayBillNo = TextEditingController();
+  final ewayBillDate = TextEditingController();
 
   final agreementMadeDate = TextEditingController();
   final agreementSignDate = TextEditingController();
   final agreementUploadDate = TextEditingController();
-  final delayReason = TextEditingController();
+  final delayReasonA = TextEditingController();
+  final delayReasonB = TextEditingController();
 
   final remarks = TextEditingController();
 
@@ -952,7 +984,7 @@ class _CompleteInstallationFormScreenState
     clientName.text = widget.lead.name;
     email.text = widget.lead.email;
     mobile.text = widget.lead.mobile;
-    quotationAmount.text = widget.lead.quotationAmount;
+    totalQuotationAmount.text = widget.lead.quotationAmount;
     discomAgency.text = widget.lead.discom;
     bankNameBranch.text = widget.lead.bankDetails;
   }
@@ -963,43 +995,70 @@ class _CompleteInstallationFormScreenState
       fileNo,
       clientName,
       capacity,
-      date,
+      formDate,
       email,
       mobile,
+      registrationPortal,
       registrationId,
       registrationDateTime,
+      clientType,
+      reference,
       paymentMode,
       bankNameBranch,
+      aadhaarCard,
+      panCard,
+      electricityBill,
+      cancelledCheque,
       state,
       district,
       blockVillage,
       address,
       pinCode,
+      kgVendorApproval,
+      kgVendorDate,
+      kgVendorReason,
       discomAgency,
+      consumerAgencyNo,
       sanctionLoad,
       bankName,
       bankIfsc,
       bankBranch,
+      enrollmentDate,
+      enrollmentEndDate,
+      totalQuotationAmount,
+      quotationRefNo,
+      receiptFirst,
+      receiptSecond,
+      receiptThird,
+      receiptFourth,
+      totalAmount,
+      dcrCertificateNo,
+      applicationNo,
+      stampPaper,
+      centralGovtSubDate,
+      stateGovtSubDate,
       sp1,
       sp2,
       sp3,
       sp4,
       sp5,
-      panelBrand,
+      solarPanelBrand,
       solarPanelCount,
-      netMeterDate,
+      installNetMeterDate,
       discomInspectDate,
-      quotationAmount,
-      quotationRef,
-      receiptFirst,
-      totalAmount,
-      transportDate,
+      docAadhaar,
+      docPan,
+      docElectricity,
+      docCheque,
+      transportationDate,
       invoiceNo,
       ewayBillNo,
+      ewayBillDate,
       agreementMadeDate,
       agreementSignDate,
       agreementUploadDate,
-      delayReason,
+      delayReasonA,
+      delayReasonB,
       remarks,
     ]) {
       c.dispose();
@@ -1078,15 +1137,24 @@ INSTALLATION COMPLETED
 File No: ${fileNo.text}
 Client Name: ${clientName.text}
 Capacity: ${capacity.text}
-Date: ${date.text}
-Email: ${email.text}
+Date: ${formDate.text}
+Email ID: ${email.text}
 Mobile: ${mobile.text}
 
 REGISTRATION
+Registration on PM Portal: ${registrationPortal.text}
 Registration ID: ${registrationId.text}
 Registration Date & Time: ${registrationDateTime.text}
+Client Type: ${clientType.text}
+Reference: ${reference.text}
 Payment Mode: ${paymentMode.text}
 Bank Name & Branch: ${bankNameBranch.text}
+
+CLIENT KYC
+Aadhaar Card: ${aadhaarCard.text}
+PAN Card: ${panCard.text}
+Electricity Bill Current: ${electricityBill.text}
+Cancelled Cheque: ${cancelledCheque.text}
 
 CLIENT DETAILS
 State: ${state.text}
@@ -1094,13 +1162,35 @@ District: ${district.text}
 Block/Village: ${blockVillage.text}
 Address: ${address.text}
 Pin Code: ${pinCode.text}
+KG Vendor Approval: ${kgVendorApproval.text}
+If Yes Date: ${kgVendorDate.text}
+If Yes Reason: ${kgVendorReason.text}
 Discom Agency: ${discomAgency.text}
+Consumer Agency No: ${consumerAgencyNo.text}
 Sanction Load KW: ${sanctionLoad.text}
 
 BANK DETAILS
 Bank Name: ${bankName.text}
-IFSC: ${bankIfsc.text}
-Branch: ${bankBranch.text}
+Bank IFSC Code: ${bankIfsc.text}
+Bank Branch: ${bankBranch.text}
+Enrollment Date: ${enrollmentDate.text}
+Enrollment End Date: ${enrollmentEndDate.text}
+
+PAYMENT RECEIVED STATUS
+Total Quotation Amount: ${totalQuotationAmount.text}
+Quotation Reference No: ${quotationRefNo.text}
+Receipt No First: ${receiptFirst.text}
+Second: ${receiptSecond.text}
+Third: ${receiptThird.text}
+Fourth: ${receiptFourth.text}
+Total Amount: ${totalAmount.text}
+
+DCR PANEL SUBSIDY
+DCR Certificate No: ${dcrCertificateNo.text}
+Application No: ${applicationNo.text}
+Stamp Paper Rs.100: ${stampPaper.text}
+Central Govt Subsidy Date: ${centralGovtSubDate.text}
+State Govt Subsidy Date: ${stateGovtSubDate.text}
 
 INSTALLATION DETAILS
 S.P No.1: ${sp1.text}
@@ -1108,29 +1198,32 @@ S.P No.2: ${sp2.text}
 S.P No.3: ${sp3.text}
 S.P No.4: ${sp4.text}
 S.P No.5: ${sp5.text}
-Solar Panel Brand: ${panelBrand.text}
+Solar Panel Brand: ${solarPanelBrand.text}
 No. of Solar Panel: ${solarPanelCount.text}
-Install Net Meter Date: ${netMeterDate.text}
+Install Net Meter Date: ${installNetMeterDate.text}
 Inspect of Discom Date: ${discomInspectDate.text}
 
-PAYMENT
-Quotation Amount: ${quotationAmount.text}
-Quotation Ref No: ${quotationRef.text}
-Receipt First: ${receiptFirst.text}
-Total Amount: ${totalAmount.text}
+DOCUMENT COLLECTED
+Aadhaar Card: ${docAadhaar.text}
+PAN Card: ${docPan.text}
+Electricity Bill: ${docElectricity.text}
+Cancelled Cheque: ${docCheque.text}
 
 TRANSPORTATION
-Date: ${transportDate.text}
+Date of Transportation: ${transportationDate.text}
 Invoice No: ${invoiceNo.text}
 E-Way Bill No: ${ewayBillNo.text}
+E-Way Bill Dated: ${ewayBillDate.text}
 
 AGREEMENT
 Agreement Made Date: ${agreementMadeDate.text}
 Agreement Sign Date: ${agreementSignDate.text}
 Agreement Upload Date: ${agreementUploadDate.text}
-Reason of Delay: ${delayReason.text}
+Reason Of Delay A: ${delayReasonA.text}
+Reason Of Delay B: ${delayReasonB.text}
 
-Remarks: ${remarks.text}
+REMARKS
+${remarks.text}
 ''';
 
     Navigator.pop(context, {
@@ -1160,65 +1253,92 @@ Remarks: ${remarks.text}
             _section('Basic Details'),
             _field(fileNo, 'File No.'),
             _field(clientName, 'Client Name', required: true),
-            _field(
-              capacity,
-              'Capacity KW',
-              required: true,
-              keyboardType: TextInputType.number,
-            ),
-            _field(date, 'Date'),
+            _field(capacity, 'Capacity KW', required: true, keyboardType: TextInputType.number),
+            _field(formDate, 'Date'),
             _field(email, 'Email ID', keyboardType: TextInputType.emailAddress),
             _field(mobile, 'Mobile', required: true, keyboardType: TextInputType.phone),
+
             _section('Registration'),
+            _field(registrationPortal, 'Registration on PM Portal'),
             _field(registrationId, 'Registration ID'),
             _field(registrationDateTime, 'Registration Date & Time'),
-            _field(paymentMode, 'Payment Mode', required: true),
+            _field(clientType, 'Client Type Direct / Distributor'),
+            _field(reference, 'Reference'),
+            _field(paymentMode, 'Payment Mode Cash / Loan', required: true),
             _field(bankNameBranch, 'Bank Name & Branch'),
+
+            _section('Client KYC'),
+            _field(aadhaarCard, 'Aadhaar Card'),
+            _field(panCard, 'PAN Card'),
+            _field(electricityBill, 'Electricity Bill Current'),
+            _field(cancelledCheque, 'Cancelled Cheque'),
+
             _section('Client Details'),
             _field(state, 'State', required: true),
             _field(district, 'District', required: true),
             _field(blockVillage, 'Block / Village'),
             _field(address, 'Address', maxLines: 2, required: true),
             _field(pinCode, 'Pin Code', keyboardType: TextInputType.number),
+            _field(kgVendorApproval, 'KG Vendor Approval Yes / No'),
+            _field(kgVendorDate, 'If Yes Date'),
+            _field(kgVendorReason, 'If Yes Reason'),
             _field(discomAgency, 'Discom Agency', required: true),
+            _field(consumerAgencyNo, 'Consumer Agency No.'),
             _field(sanctionLoad, 'Sanction Load KW', keyboardType: TextInputType.number),
+
             _section('Bank Details'),
             _field(bankName, 'Bank Name'),
             _field(bankIfsc, 'Bank IFSC Code'),
             _field(bankBranch, 'Bank Branch'),
+            _field(enrollmentDate, 'Enrollment Date'),
+            _field(enrollmentEndDate, 'Enrollment End Date'),
+
+            _section('Payment Received Status'),
+            _field(totalQuotationAmount, 'Total Quotation Amount', keyboardType: TextInputType.number),
+            _field(quotationRefNo, 'Quotation Reference No.'),
+            _field(receiptFirst, 'Receipt No. First'),
+            _field(receiptSecond, 'Second'),
+            _field(receiptThird, 'Third'),
+            _field(receiptFourth, 'Fourth'),
+            _field(totalAmount, 'Total Amount', keyboardType: TextInputType.number),
+
+            _section('DCR Panel Subsidy'),
+            _field(dcrCertificateNo, 'DCR Certificate No.'),
+            _field(applicationNo, 'Application No.'),
+            _field(stampPaper, 'Stamp Paper Rs.100'),
+            _field(centralGovtSubDate, 'Central Govt Subsidy Date'),
+            _field(stateGovtSubDate, 'State Govt Subsidy Date'),
+
             _section('Installation Details'),
             _field(sp1, 'S.P No. 1'),
             _field(sp2, 'S.P No. 2'),
             _field(sp3, 'S.P No. 3'),
             _field(sp4, 'S.P No. 4'),
             _field(sp5, 'S.P No. 5'),
-            _field(panelBrand, 'Solar Panel Brand', required: true),
-            _field(
-              solarPanelCount,
-              'No. of Solar Panel',
-              required: true,
-              keyboardType: TextInputType.number,
-            ),
-            _field(netMeterDate, 'Install Net Meter Date'),
+            _field(solarPanelBrand, 'Solar Panel Brand', required: true),
+            _field(solarPanelCount, 'No. of Solar Panel', required: true, keyboardType: TextInputType.number),
+            _field(installNetMeterDate, 'Install Net Meter Date'),
             _field(discomInspectDate, 'Inspect of Discom Date'),
-            _section('Payment Received'),
-            _field(
-              quotationAmount,
-              'Total Quotation Amount',
-              keyboardType: TextInputType.number,
-            ),
-            _field(quotationRef, 'Quotation Reference No.'),
-            _field(receiptFirst, 'Receipt No. First'),
-            _field(totalAmount, 'Total Amount', keyboardType: TextInputType.number),
+
+            _section('Document Collected'),
+            _field(docAadhaar, 'Aadhaar Card Collected'),
+            _field(docPan, 'PAN Card Collected'),
+            _field(docElectricity, 'Electricity Bill Collected'),
+            _field(docCheque, 'Cancelled Cheque Collected'),
+
             _section('Transportation'),
-            _field(transportDate, 'Date of Transportation'),
+            _field(transportationDate, 'Date of Transportation'),
             _field(invoiceNo, 'Invoice No.'),
             _field(ewayBillNo, 'E-Way Bill No.'),
+            _field(ewayBillDate, 'E-Way Bill Dated'),
+
             _section('Agreement'),
             _field(agreementMadeDate, 'Agreement Made Date'),
             _field(agreementSignDate, 'Agreement Sign Date'),
             _field(agreementUploadDate, 'Agreement Upload Date'),
-            _field(delayReason, 'Reason of Delay', maxLines: 2),
+            _field(delayReasonA, 'Reason Of Delay A', maxLines: 2),
+            _field(delayReasonB, 'Reason Of Delay B', maxLines: 2),
+
             _section('Final Remarks'),
             _field(
               remarks,
@@ -1226,6 +1346,7 @@ Remarks: ${remarks.text}
               maxLines: 4,
               required: true,
             ),
+
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _addFiles,
