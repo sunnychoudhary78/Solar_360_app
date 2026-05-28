@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../auth/auth_session.dart';
 import '../../leads/models/lead_model.dart';
 import '../../leads/screens/all_leads_screen.dart';
 import '../../leads/screens/lead_form_screen.dart';
@@ -83,9 +84,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     setState(() {
-      userRole = prefs.getString('userRole') ?? 'sales';
+      userRole = _normalizedRole(prefs.getString('userRole'));
       isLoadingRole = false;
     });
+  }
+
+  String _normalizedRole(String? savedRole) {
+    if (savedRole == 'leasing') return 'liaison';
+    return savedRole ?? 'sales';
   }
 
   String get appTitle {
@@ -505,16 +511,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Icons.logout_rounded,
               'Logout',
               () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove('userRole');
-
                 if (!mounted) return;
-
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/',
-                  (route) => false,
-                );
+                await AuthSession.logout(context);
               },
             ),
             const SizedBox(height: 24),

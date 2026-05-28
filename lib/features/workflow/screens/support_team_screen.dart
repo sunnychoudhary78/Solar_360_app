@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../auth/auth_session.dart';
 import '../../home/screens/home_screen.dart';
 import '../../leads/models/lead_model.dart';
 import '../../notifications/screens/notifications_screen.dart';
@@ -277,16 +278,8 @@ class _SupportTeamScreenState extends State<SupportTeamScreen> {
                 ),
               ),
               onTap: () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.clear();
-
                 if (!mounted) return;
-
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/',
-                  (route) => false,
-                );
+                await AuthSession.logout(context);
               },
             ),
             const SizedBox(height: 24),
