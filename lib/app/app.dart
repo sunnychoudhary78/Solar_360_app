@@ -1,56 +1,46 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/auth/models/auth_user.dart';
+import '../features/auth/providers/auth_provider.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/home/screens/home_screen.dart';
 
-class SolarSalesApp extends StatelessWidget {
+class SolarSalesApp extends ConsumerWidget {
   const SolarSalesApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+
     return MaterialApp(
       title: 'Solar Sales',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         fontFamily: 'Roboto',
-        scaffoldBackgroundColor: const Color(0xFF0E0F14),
+        scaffoldBackgroundColor: const Color(0xFFF7F8FC),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5663A0)),
         useMaterial3: true,
       ),
-      home: const SessionGate(),
-    );
-  }
-}
-
-class SessionGate extends StatefulWidget {
-  const SessionGate({super.key});
-
-  @override
-  State<SessionGate> createState() => _SessionGateState();
-}
-
-class _SessionGateState extends State<SessionGate> {
-  late final Future<bool> _sessionFuture = _hasActiveSession();
-
-  Future<bool> _hasActiveSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('isLoggedIn') ?? false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _sessionFuture,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            backgroundColor: Color(0xFFF7F8FC),
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        return snapshot.data! ? const HomeScreen() : const LoginScreen();
+      routes: {
+        '/login': (_) => const LoginScreen(),
+        '/home': (_) => const HomeScreen(),
       },
+      home: _buildHome(auth),
     );
+  }
+
+  Widget _buildHome(AuthState auth) {
+    if (!auth.initialized || auth.loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (auth.isAuthenticated) {
+      return const HomeScreen();
+    }
+
+    return const LoginScreen();
   }
 }

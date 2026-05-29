@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/auth_session.dart';
-import '../../home/screens/home_screen.dart';
 import '../../leads/models/lead_model.dart';
+import '../../leads/providers/lead_provider.dart';
+import '../../leads/widgets/leads_table.dart';
 import '../../notifications/screens/notifications_screen.dart';
 
-class FinanceTeamScreen extends StatefulWidget {
+class FinanceTeamScreen extends ConsumerStatefulWidget {
   const FinanceTeamScreen({super.key});
 
   @override
-  State<FinanceTeamScreen> createState() => _FinanceTeamScreenState();
+  ConsumerState<FinanceTeamScreen> createState() => _FinanceTeamScreenState();
 }
 
-class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
+class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
   static const bgColor = Color(0xfff4f7fb);
   static const cardColor = Colors.white;
   static const primaryColor = Color(0xFF5663A0);
@@ -20,55 +22,56 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
   static const textColor = Color(0xFF1F2028);
 
   int selectedPage = 0;
+  bool actionLoading = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadLatestLeads();
-  }
+  List<LeadModel> _financeLeads(List<LeadModel> leads) {
+    return leads.where((lead) {
+      final dept = lead.currentDepartment.toLowerCase();
+      final status = lead.status.toLowerCase();
 
-  Future<void> _loadLatestLeads() async {
-    await HomeScreen.loadLeads();
-    if (mounted) setState(() {});
-  }
-
-  List<LeadModel> get financeLeads {
-    return HomeScreen.leads.where((lead) {
-      return lead.status == 'Liaison Completed' ||
-          lead.status == 'Finance Verification Started' ||
-          lead.status == 'Loan Approved';
+      return dept == 'finance' ||
+          status == 'liaison completed' ||
+          status == 'finance verification started' ||
+          status == 'loan approved';
     }).toList();
   }
 
-  List<LeadModel> get liaisonTeamLeads {
-    return financeLeads.where((lead) {
-      return lead.status == 'Liaison Completed' ||
-          lead.status == 'Finance Verification Started';
+  List<LeadModel> _liaisonTeamLeads(List<LeadModel> leads) {
+    return _financeLeads(leads).where((lead) {
+      final status = lead.status.toLowerCase();
+
+      return status == 'liaison completed' ||
+          status == 'finance verification started';
     }).toList();
-  }
-
-  Future<void> _updateLead(LeadModel oldLead, LeadModel updatedLead) async {
-    final index = HomeScreen.leads.indexOf(oldLead);
-    if (index == -1) return;
-
-    setState(() {
-      HomeScreen.leads[index] = updatedLead;
-    });
-
-    await HomeScreen.saveLeads();
   }
 
   Future<void> _changeStatus(LeadModel lead, String status) async {
-    await _updateLead(
-      lead,
-      lead.copyWith(status: status),
-    );
+    try {
+      setState(() => actionLoading = true);
 
-    if (!mounted) return;
+      await ref.read(leadRepositoryProvider).updateLeadStatus(
+            leadId: lead.id,
+            status: status,
+          );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Status updated: $status')),
-    );
+      ref.invalidate(allLeadsProvider);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Status updated: $status')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => actionLoading = false);
+      }
+    }
   }
 
   Color _statusColor(String status) {
@@ -80,21 +83,21 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
       case 'Loan Approved':
         return Colors.green;
       default:
-        return Colors.grey;
+        return primaryColor;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final leads = financeLeads;
-    final liaisonLeads = liaisonTeamLeads;
+    final leadsAsync = ref.watch(allLeadsProvider);
 
     return WillPopScope(
       onWillPop: () async {
         if (selectedPage != 0) {
           setState(() => selectedPage = 0);
+          return false;
         }
-        return false;
+        return true;
       },
       child: Scaffold(
         backgroundColor: bgColor,
@@ -125,27 +128,50 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
           ),
           actions: [
             IconButton(
+              onPressed: () => ref.invalidate(allLeadsProvider),
+              icon: const Icon(Icons.refresh),
+            ),
+            IconButton(
               onPressed: () => setState(() => selectedPage = 2),
               icon: const Icon(Icons.notifications_none_rounded),
             ),
             const SizedBox(width: 8),
           ],
         ),
-        body: IndexedStack(
-          index: selectedPage,
-          children: [
-            _dashboard(leads),
-            liaisonLeads.isEmpty
-                ? _emptyState(
-                    'No leads received from Liaison Team',
-                    'Completed liaison leads will appear here for finance verification.',
-                  )
-                : ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: liaisonLeads.map(_leadCard).toList(),
+        body: leadsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
                   ),
-            const NotificationsScreen(),
-          ],
+                ),
+              ),
+            );
+          },
+          data: (allLeads) {
+            final leads = _financeLeads(allLeads);
+            final liaisonLeads = _liaisonTeamLeads(allLeads);
+
+            return IndexedStack(
+              index: selectedPage,
+              children: [
+                _dashboard(leads),
+                LeadsTable(
+                  leads: liaisonLeads,
+                  emptyMessage:
+                      'No leads received from Liaison Team yet',
+                ),
+                const NotificationsScreen(),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -194,7 +220,7 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
               ListTile(
                 onTap: () async {
                   Navigator.pop(context);
-                  await AuthSession.logout(context);
+                  await AuthSession.logout(context, ref);
                 },
                 leading: const Icon(
                   Icons.logout_rounded,
@@ -245,104 +271,58 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
   }
 
   Widget _dashboard(List<LeadModel> leads) {
-    final fromLiaison = liaisonTeamLeads.length;
-    final verificationCount = leads
-        .where((lead) => lead.status == 'Finance Verification Started')
-        .length;
+    final fromLiaison = leads.where((lead) {
+      final status = lead.status.toLowerCase();
+      return status == 'liaison completed' ||
+          status == 'finance verification started';
+    }).length;
+
     final approvedCount =
         leads.where((lead) => lead.status == 'Loan Approved').length;
-    final quotationTotal = leads.fold<double>(
-      0,
-      (value, lead) =>
-          value + (double.tryParse(lead.quotationAmount.trim()) ?? 0),
-    );
 
-    return RefreshIndicator(
-      onRefresh: _loadLatestLeads,
-      color: primaryColor,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        children: [
-          _financeHeroCard(
-            total: leads.length,
-            fromLiaison: fromLiaison,
-            approved: approvedCount,
-          ),
-          const SizedBox(height: 16),
-          Row(
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
             children: [
-              Expanded(
-                child: _metricCard(
-                  'Pipeline',
-                  leads.length.toString(),
-                  Icons.groups_rounded,
-                  primaryColor,
-                ),
+              _financeHeroCard(
+                total: leads.length,
+                fromLiaison: fromLiaison,
+                approved: approvedCount,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _metricCard(
-                  'Liaison',
-                  fromLiaison.toString(),
-                  Icons.account_tree_rounded,
-                  Colors.orange,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _metricCard(
-                  'Verification',
-                  verificationCount.toString(),
-                  Icons.verified_user_rounded,
-                  Colors.blue,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _metricCard(
-                  'Approved',
-                  approvedCount.toString(),
-                  Icons.check_circle_rounded,
-                  accentColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _valueCard(quotationTotal),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Recent Finance Leads',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _metricCard(
+                      'Pipeline',
+                      leads.length.toString(),
+                      Icons.groups_rounded,
+                      primaryColor,
+                    ),
                   ),
-                ),
-              ),
-              TextButton(
-                onPressed: () => setState(() => selectedPage = 1),
-                child: const Text('View all'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _metricCard(
+                      'Approved',
+                      approvedCount.toString(),
+                      Icons.check_circle_rounded,
+                      accentColor,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          if (leads.isEmpty)
-            _emptyState(
-              'No leads received from Liaison Team',
-              'Finance-ready leads will show up here automatically.',
-            )
-          else
-            ...leads.take(4).map(_leadCard),
-        ],
-      ),
+        ),
+        Expanded(
+          child: LeadsTable(
+            leads: leads,
+            emptyMessage: 'No finance leads in queue',
+          ),
+        ),
+      ],
     );
   }
 
@@ -580,7 +560,7 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
@@ -589,6 +569,7 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
             offset: const Offset(0, 8),
           ),
         ],
+        border: Border.all(color: const Color(0xFFE7EAF2)),
       ),
       child: Column(
         children: [
@@ -605,18 +586,17 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  lead.name.isEmpty ? 'Customer Lead' : lead.name,
+                  lead.fullName.isEmpty ? 'Customer Lead' : lead.fullName,
                   style: const TextStyle(
                     fontSize: 21,
                     fontWeight: FontWeight.bold,
+                    color: textColor,
                   ),
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
           Align(
             alignment: Alignment.centerLeft,
             child: Container(
@@ -629,7 +609,7 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                lead.status,
+                lead.status.isEmpty ? 'No Status' : lead.status,
                 style: TextStyle(
                   color: color,
                   fontSize: 11,
@@ -638,25 +618,23 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 14),
-
-          _shortInfo(Icons.phone, lead.mobile),
-          _shortInfo(Icons.email_outlined, lead.email),
-          _shortInfo(Icons.confirmation_number, 'CA: ${lead.caNo}'),
-          _shortInfo(Icons.numbers, 'K No: ${lead.kNo}'),
+          _shortInfo(Icons.confirmation_number, 'Lead Code: ${lead.leadCode}'),
+          _shortInfo(Icons.phone, 'Mobile: ${lead.mobile}'),
+          _shortInfo(Icons.email_outlined, 'Email: ${lead.email}'),
+          _shortInfo(Icons.confirmation_number, 'CA: ${lead.caNumber}'),
+          _shortInfo(Icons.numbers, 'K No: ${lead.kNumber}'),
           _shortInfo(Icons.business, 'Discom: ${lead.discom}'),
-          _shortInfo(Icons.currency_rupee, 'Quotation: ${lead.quotationAmount}'),
-          _shortInfo(Icons.account_balance, 'Bank: ${lead.bankDetails}'),
-
-          if (lead.liaisonNote.trim().isNotEmpty)
-            _shortInfo(
-              Icons.edit_note_rounded,
-              'Liaison Note: ${lead.liaisonNote}',
-            ),
-
+          _shortInfo(
+            Icons.currency_rupee,
+            'Quotation: ${lead.quotationAmount}',
+          ),
+          _shortInfo(Icons.account_balance, 'Bank: ${lead.bankName}'),
+          _shortInfo(Icons.flag, 'Stage: ${lead.leadStage}'),
+          _shortInfo(Icons.business_center, 'Dept: ${lead.currentDepartment}'),
+          if (lead.notes.trim().isNotEmpty)
+            _shortInfo(Icons.edit_note_rounded, 'Notes: ${lead.notes}'),
           const SizedBox(height: 14),
-
           _actionButton(lead),
         ],
       ),
@@ -664,13 +642,17 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
   }
 
   Widget _shortInfo(IconData icon, String value) {
-    if (value.trim().isEmpty ||
-        value.trim() == 'CA:' ||
-        value.trim() == 'K No:' ||
-        value.trim() == 'Discom:' ||
-        value.trim() == 'Quotation:' ||
-        value.trim() == 'Bank:') {
-      return const SizedBox();
+    final cleanValue = value.trim();
+
+    if (cleanValue.isEmpty ||
+        cleanValue.endsWith(':') ||
+        cleanValue.endsWith(': ')) {
+      return const SizedBox.shrink();
+    }
+
+    final parts = cleanValue.split(':');
+    if (parts.length > 1 && parts.sublist(1).join(':').trim().isEmpty) {
+      return const SizedBox.shrink();
     }
 
     return Padding(
@@ -685,7 +667,7 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              value,
+              cleanValue,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -699,6 +681,13 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
   }
 
   Widget _actionButton(LeadModel lead) {
+    if (actionLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: CircularProgressIndicator(),
+      );
+    }
+
     if (lead.status == 'Liaison Completed') {
       return _mainButton(
         title: 'Start Finance Verification',
@@ -723,7 +712,7 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
       );
     }
 
-    return const SizedBox();
+    return const SizedBox.shrink();
   }
 
   Widget _mainButton({
@@ -735,7 +724,7 @@ class _FinanceTeamScreenState extends State<FinanceTeamScreen> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: onTap,
+        onPressed: actionLoading ? null : onTap,
         icon: Icon(icon),
         label: Text(title),
         style: ElevatedButton.styleFrom(

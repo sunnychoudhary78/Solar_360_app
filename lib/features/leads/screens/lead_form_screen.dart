@@ -2,194 +2,198 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
-import '../../home/screens/home_screen.dart';
-import '../models/lead_model.dart';
+import '../../../core/utils/upload_url.dart';
 
-class LeadFormScreen extends StatefulWidget {
+import '../providers/lead_provider.dart';
+
+class LeadFormScreen extends ConsumerStatefulWidget {
   const LeadFormScreen({super.key});
 
   @override
-  State<LeadFormScreen> createState() => _LeadFormScreenState();
+  ConsumerState<LeadFormScreen> createState() => _LeadFormScreenState();
 }
 
-class _LeadFormScreenState extends State<LeadFormScreen> {
+class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   static const bgColor = Color(0xFFFAF8FF);
   static const cardColor = Color(0xFFFEFBFF);
   static const primaryColor = Color(0xFF5663A0);
   static const textColor = Color(0xFF1F2028);
 
-  final name = TextEditingController();
+  final fullName = TextEditingController();
   final mobile = TextEditingController();
   final email = TextEditingController();
-  final caNo = TextEditingController();
-  final kNo = TextEditingController();
-  final refNo = TextEditingController();
+  final address = TextEditingController();
+  final city = TextEditingController();
+  final state = TextEditingController();
+  final pincode = TextEditingController();
+
+  final caNumber = TextEditingController();
+  final kNumber = TextEditingController();
+  final referenceNumber = TextEditingController();
   final discom = TextEditingController();
+
   final geoLocation = TextEditingController();
-  final longitude = TextEditingController();
   final latitude = TextEditingController();
-  final bankDetails = TextEditingController();
-  final roofArea = TextEditingController();
+  final longitude = TextEditingController();
+
+  final bankAccountName = TextEditingController();
+  final bankName = TextEditingController();
+  final accountNumber = TextEditingController();
+  final ifscCode = TextEditingController();
+
+  final availableShadowFreeArea = TextEditingController();
   final quotationAmount = TextEditingController();
-  final employeeName = TextEditingController();
-  final staffContact = TextEditingController();
+  final visitedEmployeeName = TextEditingController();
+  final visitedEmployeeContact = TextEditingController();
 
-  String? aadhaarFrontPath;
-  String? aadhaarBackPath;
-  String? panFrontPath;
-  String? panBackPath;
-  String? electricityBillPath;
-  String? bankImagePath;
-  String? roofImagePath;
+  final notes = TextEditingController();
 
-  bool electricityBillIsPdf = false;
+  String projectType = 'Residential';
+  String source = 'Website';
+  String priority = 'Medium';
 
-  List<String> customerDocs = [];
+  bool roofLoadBearingCapacity = false;
+  bool shadowFreeRoof = false;
+  bool vendorVisitedSite = false;
+  final ImagePicker _imagePicker = ImagePicker();
 
-  bool _hasFile(String? path) => path != null && path.trim().isNotEmpty;
+  String? roofPhotoPath;
+  String? bankClearPhotoPath;
+  String? chequePassbookPath;
+  final List<String> additionalImages = [];
+  final List<String> additionalDocs = [];
 
-  bool _isPdf(String path) => path.toLowerCase().endsWith('.pdf');
+  bool isLoading = false;
 
-  bool _isImage(String path) {
-    final p = path.toLowerCase();
-    return p.endsWith('.jpg') || p.endsWith('.jpeg') || p.endsWith('.png');
+  @override
+  void dispose() {
+    fullName.dispose();
+    mobile.dispose();
+    email.dispose();
+    address.dispose();
+    city.dispose();
+    state.dispose();
+    pincode.dispose();
+    caNumber.dispose();
+    kNumber.dispose();
+    referenceNumber.dispose();
+    discom.dispose();
+    geoLocation.dispose();
+    latitude.dispose();
+    longitude.dispose();
+    bankAccountName.dispose();
+    bankName.dispose();
+    accountNumber.dispose();
+    ifscCode.dispose();
+    availableShadowFreeArea.dispose();
+    quotationAmount.dispose();
+    visitedEmployeeName.dispose();
+    visitedEmployeeContact.dispose();
+    notes.dispose();
+    super.dispose();
   }
 
-  String _docsToString(List<String> docs) => docs.join('|||');
-
-  Future<String?> _pickSingleDoc() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
-    );
-
-    if (result == null || result.files.single.path == null) return null;
-    return result.files.single.path!;
-  }
-
-  Future<void> _pickDocFor(String type) async {
-    final path = await _pickSingleDoc();
-    if (path == null) return;
-
-    setState(() {
-      if (type == 'aadhaarFront') aadhaarFrontPath = path;
-      if (type == 'aadhaarBack') aadhaarBackPath = path;
-      if (type == 'panFront') panFrontPath = path;
-      if (type == 'panBack') panBackPath = path;
-      if (type == 'electricity') {
-        electricityBillPath = path;
-        electricityBillIsPdf = _isPdf(path);
-      }
-      if (type == 'bank') bankImagePath = path;
-      if (type == 'roof') roofImagePath = path;
-    });
-  }
-
-  Future<void> _pickMultipleDocs() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
-    );
-
-    if (result == null) return;
-
-    setState(() {
-      customerDocs.addAll(
-        result.files.where((e) => e.path != null).map((e) => e.path!),
-      );
-    });
-  }
-
-  void _openFile(String path) {
-    if (_isPdf(path)) {
-      OpenFilex.open(path);
-    } else {
-      _openImagePopup(path);
-    }
+  String? _textOrNull(TextEditingController controller) {
+    final value = controller.text.trim();
+    if (value.isEmpty) return null;
+    return value;
   }
 
   Future<void> saveLead() async {
-    if (name.text.trim().isEmpty || mobile.text.trim().isEmpty) {
+    if (fullName.text.trim().isEmpty || mobile.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Name and Mobile are required')),
+        const SnackBar(content: Text('Full name and mobile are required')),
       );
       return;
     }
 
-    HomeScreen.leads.add(
-      LeadModel(
-        name: name.text.trim(),
-        mobile: mobile.text.trim(),
-        email: email.text.trim(),
-        caNo: caNo.text.trim(),
-        kNo: kNo.text.trim(),
-        refNo: refNo.text.trim(),
-        discom: discom.text.trim(),
-        geoLocation: geoLocation.text.trim(),
-        longitude: longitude.text.trim(),
-        latitude: latitude.text.trim(),
-        bankDetails: bankDetails.text.trim(),
-        roofArea: roofArea.text.trim(),
-        quotationAmount: quotationAmount.text.trim(),
-        employeeName: employeeName.text.trim(),
-        staffContact: staffContact.text.trim(),
-        aadhaarFrontPath: aadhaarFrontPath,
-        aadhaarBackPath: aadhaarBackPath,
-        panFrontPath: panFrontPath,
-        panBackPath: panBackPath,
-        electricityBillPath: electricityBillPath,
-        electricityBillIsPdf: electricityBillIsPdf,
-        bankImagePath: bankImagePath,
-        roofImagePath: roofImagePath,
-        customerDocuments: _docsToString(customerDocs),
-      ),
-    );
+    final data = <String, dynamic>{
+      'full_name': fullName.text.trim(),
+      'mobile': mobile.text.trim(),
+      'email': _textOrNull(email),
+      'address': _textOrNull(address),
+      'city': _textOrNull(city),
+      'state': _textOrNull(state),
+      'pincode': _textOrNull(pincode),
+      'ca_number': _textOrNull(caNumber),
+      'k_number': _textOrNull(kNumber),
+      'reference_number': _textOrNull(referenceNumber),
+      'discom': _textOrNull(discom),
+      'geo_location': _textOrNull(geoLocation),
+      'latitude': _textOrNull(latitude),
+      'longitude': _textOrNull(longitude),
+      'bank_account_name': _textOrNull(bankAccountName),
+      'bank_name': _textOrNull(bankName),
+      'account_number': _textOrNull(accountNumber),
+      'ifsc_code': _textOrNull(ifscCode),
+      'project_type': projectType,
+      'source': source,
+      'priority': priority,
+      'notes': _textOrNull(notes),
+      'roof_photo_status': 'Pending',
+      'available_shadow_free_area': _textOrNull(availableShadowFreeArea),
+      'quotation_amount': _textOrNull(quotationAmount),
+      'visited_employee_name': _textOrNull(visitedEmployeeName),
+      'visited_employee_contact': _textOrNull(visitedEmployeeContact),
+      'roof_load_bearing_capacity': roofLoadBearingCapacity,
+      'shadow_free_roof': shadowFreeRoof,
+      'vendor_visited_site': vendorVisitedSite,
+    };
 
-    await HomeScreen.saveLeads();
+    try {
+      setState(() => isLoading = true);
 
-    if (!mounted) return;
+      await ref.read(leadRepositoryProvider).createLead(
+        data,
+        singleFilePaths: {
+          if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
+          if (bankClearPhotoPath != null)
+            'bank_clear_photo': bankClearPhotoPath!,
+          if (chequePassbookPath != null)
+            'cheque_passbook_copy': chequePassbookPath!,
+        },
+        additionalImagePaths: additionalImages,
+        additionalDocumentPaths: additionalDocs,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Lead saved successfully')),
-    );
+      ref.invalidate(allLeadsProvider);
 
-    Navigator.pop(context);
-  }
+      if (!mounted) return;
 
-  @override
-  void dispose() {
-    name.dispose();
-    mobile.dispose();
-    email.dispose();
-    caNo.dispose();
-    kNo.dispose();
-    refNo.dispose();
-    discom.dispose();
-    geoLocation.dispose();
-    longitude.dispose();
-    latitude.dispose();
-    bankDetails.dispose();
-    roofArea.dispose();
-    quotationAmount.dispose();
-    employeeName.dispose();
-    staffContact.dispose();
-    super.dispose();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lead created successfully')),
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to create lead: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
   }
 
   Widget input(
     String label,
     TextEditingController controller, {
     TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextField(
         controller: controller,
+        enabled: !isLoading,
         keyboardType: keyboardType,
+        maxLines: maxLines,
         decoration: InputDecoration(
           labelText: label,
           filled: true,
@@ -199,7 +203,7 @@ class _LeadFormScreenState extends State<LeadFormScreen> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: primaryColor),
+            borderSide: const BorderSide(color: primaryColor, width: 1.3),
           ),
         ),
       ),
@@ -220,23 +224,136 @@ class _LeadFormScreenState extends State<LeadFormScreen> {
     );
   }
 
-  Widget uploadBox({
-    required String title,
-    required String? path,
-    required VoidCallback onTap,
-    required VoidCallback? onRemove,
+  Widget dropdown({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
   }) {
-    final hasFile = _hasFile(path);
-    final isPdf = hasFile && _isPdf(path!);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: bgColor,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        items: items
+            .map(
+              (item) => DropdownMenuItem<String>(
+                value: item,
+                child: Text(item),
+              ),
+            )
+            .toList(),
+        onChanged: isLoading ? null : onChanged,
+      ),
+    );
+  }
 
+  Widget switchTile({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE4E1EA)),
+      ),
+      child: SwitchListTile(
+        value: value,
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        activeColor: primaryColor,
+        onChanged: isLoading ? null : onChanged,
+      ),
+    );
+  }
+
+  Widget formCard({required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 25,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  Future<void> _captureImage(ValueChanged<String?> onPicked) async {
+    final file = await _imagePicker.pickImage(source: ImageSource.camera);
+    if (file == null) return;
+    if (!mounted) return;
+    setState(() => onPicked(file.path));
+  }
+
+  Future<void> _pickImage(ValueChanged<String?> onPicked) async {
+    final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (file == null) return;
+    if (!mounted) return;
+    setState(() => onPicked(file.path));
+  }
+
+  Future<void> _pickDocs(List<String> target, {required bool imageOnly}) async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: imageOnly ? FileType.image : FileType.custom,
+      allowedExtensions: imageOnly ? null : ['pdf', 'doc', 'docx', 'jpg', 'png', 'jpeg'],
+    );
+    if (result == null) return;
+    final picked = result.paths.whereType<String>().toList();
+    if (!mounted) return;
+    setState(() {
+      target.addAll(picked);
+    });
+  }
+
+  Widget _singleImagePicker({
+    required String title,
+    required String? value,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final hasFile = value != null && value.isNotEmpty;
+    final isImage = hasFile && isImagePath(value);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFE4E1EA)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,88 +361,81 @@ class _LeadFormScreenState extends State<LeadFormScreen> {
           Text(
             title,
             style: const TextStyle(
-              color: textColor,
               fontWeight: FontWeight.bold,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 10),
-          InkWell(
-            onTap: hasFile ? () => _openFile(path!) : onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                height: 150,
-                width: double.infinity,
-                color: Colors.white,
-                child: !hasFile
-                    ? const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.cloud_upload_outlined,
-                            color: primaryColor,
-                            size: 42,
-                          ),
-                          SizedBox(height: 8),
-                          Text('Upload Image / PDF'),
-                        ],
-                      )
-                    : isPdf
-                        ? const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.picture_as_pdf,
-                                color: Colors.red,
-                                size: 52,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'PDF Selected - Tap to Open',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          )
-                        : Image.file(
-                            File(path!),
+          if (hasFile)
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: SizedBox(
+                    height: 160,
+                    width: double.infinity,
+                    child: isImage
+                        ? Image.file(
+                            File(value),
                             fit: BoxFit.cover,
-                            width: double.infinity,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Center(
-                                child: Text('Image not found'),
-                              );
-                            },
-                          ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onTap,
-                  icon: Icon(hasFile ? Icons.edit : Icons.add),
-                  label: Text(hasFile ? 'Change' : 'Add'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: primaryColor,
+                          )
+                        : _docPreview(value),
                   ),
                 ),
-              ),
-              if (hasFile) ...[
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onRemove,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Remove'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.black54,
+                    radius: 18,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                      onPressed: isLoading
+                          ? null
+                          : () => setState(() => onChanged(null)),
                     ),
                   ),
                 ),
               ],
+            )
+          else
+            Container(
+              height: 120,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE4E1EA)),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_photo_alternate_outlined,
+                      size: 40, color: primaryColor),
+                  SizedBox(height: 6),
+                  Text('No file selected', style: TextStyle(color: Colors.black45)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isLoading ? null : () => _captureImage(onChanged),
+                  icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                  label: const Text('Capture'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isLoading ? null : () => _pickImage(onChanged),
+                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                  label: const Text('Gallery'),
+                ),
+              ),
             ],
           ),
         ],
@@ -333,172 +443,143 @@ class _LeadFormScreenState extends State<LeadFormScreen> {
     );
   }
 
-  Widget multipleDocsBox() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (customerDocs.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.orange.withOpacity(0.35)),
-            ),
-            child: const Text(
-              'No extra checklist document uploaded yet',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
+  Widget _docPreview(String path) {
+    final pdf = isPdfPath(path);
+    return ColoredBox(
+      color: const Color(0xFFEEF0F8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            pdf ? Icons.picture_as_pdf : Icons.insert_drive_file,
+            size: 48,
+            color: pdf ? Colors.red : primaryColor,
           ),
-        if (customerDocs.isNotEmpty)
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: customerDocs.map((path) {
-              final pdf = _isPdf(path);
-
-              return SizedBox(
-                width: 155,
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFE4E1EA)),
-                  ),
-                  child: Column(
-                    children: [
-                      InkWell(
-                        onTap: () => _openFile(path),
-                        borderRadius: BorderRadius.circular(14),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            height: 110,
-                            width: double.infinity,
-                            color: bgColor,
-                            child: pdf
-                                ? const Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.picture_as_pdf,
-                                        color: Colors.red,
-                                        size: 42,
-                                      ),
-                                      SizedBox(height: 6),
-                                      Text('Open PDF'),
-                                    ],
-                                  )
-                                : Image.file(
-                                    File(path),
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    errorBuilder:
-                                        (context, error, stackTrace) {
-                                      return const Center(
-                                        child: Text('Image not found'),
-                                      );
-                                    },
-                                  ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        path.split('/').last,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            customerDocs.remove(path);
-                          });
-                        },
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        label: const Text('Remove'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: _pickMultipleDocs,
-          icon: const Icon(Icons.upload_file_rounded),
-          label: const Text('Upload Multiple Checklist Docs'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: primaryColor,
-            side: const BorderSide(color: primaryColor),
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              fileDisplayName(path),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  void _openImagePopup(String imagePath) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (_) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(14),
-          child: Stack(
+  Widget _multiFilePicker({
+    required String title,
+    required List<String> files,
+    required VoidCallback onAdd,
+    required void Function(int index) onRemove,
+    required void Function(int index) onReplace,
+    bool imagesOnly = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4E1EA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Center(
-                child: InteractiveViewer(
-                  minScale: 0.7,
-                  maxScale: 4,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: Image.file(
-                      File(imagePath),
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          height: 260,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: const Text('Image not found'),
-                        );
-                      },
-                    ),
+              Expanded(
+                child: Text(
+                  '$title (${files.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
                   ),
                 ),
               ),
-              Positioned(
-                top: 10,
-                right: 10,
-                child: CircleAvatar(
-                  backgroundColor: Colors.white,
-                  child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: Colors.black),
-                  ),
+              FilledButton.icon(
+                onPressed: isLoading ? null : onAdd,
+                style: FilledButton.styleFrom(
+                  backgroundColor: primaryColor,
                 ),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add'),
               ),
             ],
           ),
-        );
-      },
+          if (files.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: files.asMap().entries.map((entry) {
+                final path = entry.value;
+                final idx = entry.key;
+                final image = isImagePath(path);
+                return SizedBox(
+                  width: 110,
+                  child: Column(
+                    children: [
+                      Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: SizedBox(
+                              height: 90,
+                              width: 110,
+                              child: image
+                                  ? Image.file(File(path), fit: BoxFit.cover)
+                                  : _docPreview(path),
+                            ),
+                          ),
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: InkWell(
+                              onTap: isLoading ? null : () => onRemove(idx),
+                              child: const CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.black54,
+                                child: Icon(Icons.close,
+                                    size: 14, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      TextButton(
+                        onPressed: isLoading ? null : () => onReplace(idx),
+                        child: const Text('Replace', style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
     );
+  }
+
+  Future<void> _replaceFileAt(List<String> target, int index,
+      {required bool imageOnly}) async {
+    if (imageOnly) {
+      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (file == null) return;
+      setState(() => target[index] = file.path);
+      return;
+    }
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png', 'jpeg'],
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+    setState(() => target[index] = path);
   }
 
   @override
@@ -511,7 +592,7 @@ class _LeadFormScreenState extends State<LeadFormScreen> {
         elevation: 0,
         title: const Text(
           'Create Lead',
-          style: TextStyle(color: textColor),
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
         ),
         iconTheme: const IconThemeData(color: textColor),
       ),
@@ -519,142 +600,184 @@ class _LeadFormScreenState extends State<LeadFormScreen> {
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(18),
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 25,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                sectionTitle('Basic KYC'),
-                input('Name', name),
-                input('Mobile', mobile, keyboardType: TextInputType.phone),
-                input('Email', email, keyboardType: TextInputType.emailAddress),
-                input('CA No.', caNo),
-                input('K. No.', kNo),
-                input('Reff. No.', refNo),
-                input('Discom', discom),
+          child: formCard(
+            children: [
+              sectionTitle('Basic Details'),
+              input('Full Name *', fullName),
+              input('Mobile *', mobile, keyboardType: TextInputType.phone),
+              input('Email', email, keyboardType: TextInputType.emailAddress),
+              input('Address', address),
+              input('City', city),
+              input('State', state),
+              input('Pincode', pincode, keyboardType: TextInputType.number),
 
-                sectionTitle('Customer Documents'),
-                uploadBox(
-                  title: 'Aadhaar Card Front Image / PDF',
-                  path: aadhaarFrontPath,
-                  onTap: () => _pickDocFor('aadhaarFront'),
-                  onRemove: () => setState(() => aadhaarFrontPath = null),
-                ),
-                uploadBox(
-                  title: 'Aadhaar Card Back Image / PDF',
-                  path: aadhaarBackPath,
-                  onTap: () => _pickDocFor('aadhaarBack'),
-                  onRemove: () => setState(() => aadhaarBackPath = null),
-                ),
-                uploadBox(
-                  title: 'PAN Card Front Image / PDF',
-                  path: panFrontPath,
-                  onTap: () => _pickDocFor('panFront'),
-                  onRemove: () => setState(() => panFrontPath = null),
-                ),
-                uploadBox(
-                  title: 'PAN Card Back Image / PDF',
-                  path: panBackPath,
-                  onTap: () => _pickDocFor('panBack'),
-                  onRemove: () => setState(() => panBackPath = null),
-                ),
-                uploadBox(
-                  title: 'Electricity Bill Image / PDF',
-                  path: electricityBillPath,
-                  onTap: () => _pickDocFor('electricity'),
-                  onRemove: () {
-                    setState(() {
-                      electricityBillPath = null;
-                      electricityBillIsPdf = false;
-                    });
-                  },
-                ),
+              sectionTitle('Connection Details'),
+              input('CA Number', caNumber),
+              input('K Number', kNumber),
+              input('Reference Number', referenceNumber),
+              input('Discom', discom),
 
-                sectionTitle('Multiple Checklist Documents'),
-                multipleDocsBox(),
+              sectionTitle('Location'),
+              input('Geo Location', geoLocation),
+              input('Latitude', latitude, keyboardType: TextInputType.number),
+              input('Longitude', longitude, keyboardType: TextInputType.number),
 
-                sectionTitle('Location'),
-                input('Geo Location', geoLocation),
-                input(
-                  'Longitude',
-                  longitude,
-                  keyboardType: TextInputType.number,
-                ),
-                input(
-                  'Latitude',
-                  latitude,
-                  keyboardType: TextInputType.number,
-                ),
+              sectionTitle('Bank Details'),
+              input('Bank Account Name', bankAccountName),
+              input('Bank Name', bankName),
+              input('Account Number', accountNumber),
+              input('IFSC Code', ifscCode),
 
-                sectionTitle('Bank Details For Subsidy'),
-                input('National Bank Account Details', bankDetails),
-                uploadBox(
-                  title: 'Cheque / Passbook Image / PDF',
-                  path: bankImagePath,
-                  onTap: () => _pickDocFor('bank'),
-                  onRemove: () => setState(() => bankImagePath = null),
-                ),
+              sectionTitle('Project Details'),
+              dropdown(
+                label: 'Project Type',
+                value: projectType,
+                items: const ['Residential', 'Commercial', 'Industrial'],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => projectType = value);
+                },
+              ),
+              dropdown(
+                label: 'Source',
+                value: source,
+                items: const [
+                  'Website',
+                  'Referral',
+                  'Walk-in',
+                  'Call',
+                  'Other',
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => source = value);
+                },
+              ),
+              dropdown(
+                label: 'Priority',
+                value: priority,
+                items: const ['Low', 'Medium', 'High'],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => priority = value);
+                },
+              ),
 
-                sectionTitle('Roof Photo'),
-                uploadBox(
-                  title: 'Pre-Installation Site Image / PDF',
-                  path: roofImagePath,
-                  onTap: () => _pickDocFor('roof'),
-                  onRemove: () => setState(() => roofImagePath = null),
-                ),
+              sectionTitle('Site Checklist'),
+              input(
+                'Available Shadow Free Area',
+                availableShadowFreeArea,
+                keyboardType: TextInputType.number,
+              ),
+              input(
+                'Quotation Amount',
+                quotationAmount,
+                keyboardType: TextInputType.number,
+              ),
+              input('Visited Employee Name', visitedEmployeeName),
+              input(
+                'Visited Employee Contact',
+                visitedEmployeeContact,
+                keyboardType: TextInputType.phone,
+              ),
+              switchTile(
+                title: 'Roof Load Bearing Capacity',
+                value: roofLoadBearingCapacity,
+                onChanged: (value) {
+                  setState(() => roofLoadBearingCapacity = value);
+                },
+              ),
+              switchTile(
+                title: 'Shadow Free Roof',
+                value: shadowFreeRoof,
+                onChanged: (value) {
+                  setState(() => shadowFreeRoof = value);
+                },
+              ),
+              switchTile(
+                title: 'Vendor Visited Site',
+                value: vendorVisitedSite,
+                onChanged: (value) {
+                  setState(() => vendorVisitedSite = value);
+                },
+              ),
 
-                sectionTitle('Site Checklist'),
-                input('Shadow free roof area in sq. meter', roofArea),
-                input(
-                  'Quotation amount',
-                  quotationAmount,
-                  keyboardType: TextInputType.number,
-                ),
-                input('Name of KG Employee Visited the Site', employeeName),
-                input(
-                  'Contact number of visited staff',
-                  staffContact,
-                  keyboardType: TextInputType.phone,
-                ),
+              sectionTitle('Notes'),
+              input('Notes', notes, maxLines: 4),
 
-                const SizedBox(height: 24),
+              sectionTitle('Images & Documents'),
+              _singleImagePicker(
+                title: 'Roof Photo',
+                value: roofPhotoPath,
+                onChanged: (v) => setState(() => roofPhotoPath = v),
+              ),
+              _singleImagePicker(
+                title: 'Bank Clear Photo',
+                value: bankClearPhotoPath,
+                onChanged: (v) => setState(() => bankClearPhotoPath = v),
+              ),
+              _singleImagePicker(
+                title: 'Cheque/Passbook Copy',
+                value: chequePassbookPath,
+                onChanged: (v) => setState(() => chequePassbookPath = v),
+              ),
+              _multiFilePicker(
+                title: 'Additional Images',
+                files: additionalImages,
+                imagesOnly: true,
+                onAdd: () => _pickDocs(additionalImages, imageOnly: true),
+                onRemove: (i) => setState(() => additionalImages.removeAt(i)),
+                onReplace: (i) => _replaceFileAt(
+                  additionalImages,
+                  i,
+                  imageOnly: true,
+                ),
+              ),
+              _multiFilePicker(
+                title: 'Additional Documents',
+                files: additionalDocs,
+                onAdd: () => _pickDocs(additionalDocs, imageOnly: false),
+                onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
+                onReplace: (i) => _replaceFileAt(
+                  additionalDocs,
+                  i,
+                  imageOnly: false,
+                ),
+              ),
 
-                SizedBox(
-                  width: double.infinity,
-                  height: 60,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      saveLead();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
-                    child: const Text(
-                      'Save Lead',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+              const SizedBox(height: 24),
+
+              SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : saveLead,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
                     ),
                   ),
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 26,
+                          width: 26,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 3,
+                          ),
+                        )
+                      : const Text(
+                          'Save Lead',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

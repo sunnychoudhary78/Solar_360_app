@@ -1,334 +1,207 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/role_utils.dart';
 import '../../auth/auth_session.dart';
-import '../../leads/models/lead_model.dart';
+import '../../auth/models/auth_user.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../leads/providers/lead_provider.dart';
 import '../../leads/screens/all_leads_screen.dart';
 import '../../leads/screens/lead_form_screen.dart';
-import '../../notifications/screens/notifications_screen.dart';
-
-import '../../workflow/screens/support_team_screen.dart';
-import '../../workflow/screens/liaison_process_screen.dart';
 import '../../workflow/screens/finance_team_screen.dart';
-import '../../workflow/screens/installation_team_screen.dart';
+import '../../workflow/screens/workflow_team_screen.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  static const _leadsKey = 'savedLeads';
-  static final List<LeadModel> leads = [];
-
-  static Future<void> loadLeads() async {
-    final prefs = await SharedPreferences.getInstance();
-    final rawLeads = prefs.getString(_leadsKey);
-
-    if (rawLeads == null || rawLeads.trim().isEmpty) return;
-
-    try {
-      final decoded = jsonDecode(rawLeads);
-
-      if (decoded is! List) return;
-
-      leads
-        ..clear()
-        ..addAll(
-          decoded
-              .whereType<Map>()
-              .map(
-                (lead) => LeadModel.fromJson(
-                  Map<String, dynamic>.from(lead),
-                ),
-              )
-              .toList(),
-        );
-    } catch (_) {
-      await prefs.remove(_leadsKey);
-    }
-  }
-
-  static Future<void> saveLeads() async {
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = jsonEncode(
-      leads.map((lead) => lead.toJson()).toList(),
-    );
-
-    await prefs.setString(_leadsKey, encoded);
-  }
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
   static const bgColor = Color(0xFFF7F8FC);
   static const cardColor = Colors.white;
   static const primaryColor = Color(0xFF5663A0);
   static const textColor = Color(0xFF1F2028);
 
-  String userRole = 'sales';
-  bool isLoadingRole = true;
-
   @override
-  void initState() {
-    super.initState();
-    _loadUserRoleAndLeads();
-  }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final appRole = auth.appRole;
 
-  Future<void> _loadUserRoleAndLeads() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    await HomeScreen.loadLeads();
-
-    if (!mounted) return;
-
-    setState(() {
-      userRole = _normalizedRole(prefs.getString('userRole'));
-      isLoadingRole = false;
-    });
-  }
-
-  String _normalizedRole(String? savedRole) {
-    if (savedRole == 'leasing') return 'liaison';
-    return savedRole ?? 'sales';
-  }
-
-  String get appTitle {
-    switch (userRole) {
-      case 'support':
-        return 'Support Team';
-      case 'liaison':
-        return 'Liaison Officer';
-      case 'finance':
-        return 'Finance Team';
-      case 'installation':
-        return 'Installation Team';
-      default:
-        return 'Solar Sales';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hideParentChrome =
-        isLoadingRole ||
-        userRole == 'support' ||
-        userRole == 'liaison' ||
-        userRole == 'finance' ||
-        userRole == 'installation';
-
-    return Scaffold(
-      backgroundColor: bgColor,
-      drawer: hideParentChrome ? null : _drawer(),
-      appBar: hideParentChrome
-          ? null
-          : AppBar(
-              backgroundColor: bgColor,
-              elevation: 0,
-              centerTitle: true,
-              leading: Builder(
-                builder: (context) {
-                  return IconButton(
-                    icon: const Icon(
-                      Icons.menu_rounded,
-                      color: textColor,
-                      size: 34,
-                    ),
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                  );
-                },
-              ),
-              title: Text(
-                appTitle,
-                style: const TextStyle(
-                  color: textColor,
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              actions: [
-                IconButton(
-                  onPressed: _pushNotifications,
-                  icon: const Icon(
-                    Icons.notifications_none_rounded,
-                    size: 31,
-                    color: textColor,
-                  ),
-                ),
-              ],
-            ),
-      body: isLoadingRole
-          ? const Center(child: CircularProgressIndicator())
-          : _getRoleBasedBody(),
-    );
-  }
-
-  Widget _getRoleBasedBody() {
-    if (userRole == 'sales') {
-      return _newLeadTab();
+    if (appRole == 'support' ||
+        appRole == 'liaison' ||
+        appRole == 'installation') {
+      return WorkflowTeamScreen(
+        titleOverride: RoleUtils.displayTitle(appRole),
+      );
     }
 
-    if (userRole == 'support') {
-      return const SupportTeamScreen();
-    }
-
-    if (userRole == 'liaison') {
-      return const LiaisonProcessScreen();
-    }
-
-    if (userRole == 'finance') {
+    if (appRole == 'finance') {
       return const FinanceTeamScreen();
     }
 
-    if (userRole == 'installation') {
-      return const InstallationTeamScreen();
-    }
-
-    return const Center(
-      child: Text(
-        'Invalid user role',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-      ),
-    );
+    return _SalesAdminShell(auth: auth);
   }
+}
 
-  Widget _newLeadTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _welcomeCard(),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _statCard(
-                  title: 'Total Leads',
-                  value: HomeScreen.leads.length.toString(),
-                  icon: Icons.groups_rounded,
+class _SalesAdminShell extends ConsumerWidget {
+  final AuthState auth;
+
+  const _SalesAdminShell({required this.auth});
+
+  bool get _canReadLeads => auth.hasPermission('lead.read');
+  bool get _canCreateLead => auth.hasPermission('lead.create');
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final leadsAsync = ref.watch(allLeadsProvider);
+    final title = RoleUtils.displayTitle(auth.appRole);
+    final leadCount = leadsAsync.maybeWhen(
+      data: (leads) => leads.length,
+      orElse: () => 0,
+    );
+
+    return Scaffold(
+      backgroundColor: HomeScreen.bgColor,
+      drawer: _drawer(context, ref, title),
+      appBar: AppBar(
+        backgroundColor: HomeScreen.bgColor,
+        elevation: 0,
+        centerTitle: true,
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: HomeScreen.textColor,
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        iconTheme: const IconThemeData(color: HomeScreen.textColor),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _welcomeCard(auth, title),
+            const SizedBox(height: 20),
+            if (_canReadLeads)
+              Row(
+                children: [
+                  Expanded(
+                    child: _statCard(
+                      'Total Leads',
+                      leadCount.toString(),
+                      Icons.groups_rounded,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _statCard(
+                      'Role',
+                      auth.user?.roleName ?? '—',
+                      Icons.badge_outlined,
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 24),
+            if (!_canReadLeads)
+              const Text(
+                'Your account does not have lead permissions yet. Ask an admin to assign lead.read / lead.create.',
+                style: TextStyle(color: Colors.black54, height: 1.4),
+              ),
+            if (_canCreateLead) ...[
+              const Text(
+                'Lead Actions',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: HomeScreen.textColor,
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _statCard(
-                  title: 'New Leads',
-                  value: HomeScreen.leads.length.toString(),
-                  icon: Icons.fiber_new_rounded,
+              const SizedBox(height: 14),
+              _action(
+                context,
+                title: 'Create New Lead',
+                subtitle: 'Add customer, KYC and site details',
+                icon: Icons.add_circle_outline_rounded,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LeadFormScreen()),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Lead Actions',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _actionButton(
-            title: 'Create New Lead',
-            subtitle: 'Add customer details, KYC, roof details and documents',
-            icon: Icons.add_circle_outline_rounded,
-            onTap: () async {
-              await Navigator.push(
+            if (_canReadLeads) ...[
+              const SizedBox(height: 14),
+              _action(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const LeadFormScreen(),
+                title: 'All Leads',
+                subtitle: 'View pipeline and update status',
+                icon: Icons.list_alt_rounded,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AllLeadsScreen()),
                 ),
-              );
-
-              await HomeScreen.loadLeads();
-
-              if (mounted) setState(() {});
-            },
-          ),
-          const SizedBox(height: 16),
-          _actionButton(
-            title: 'All Leads',
-            subtitle: 'View all saved leads and workflow progress',
-            icon: Icons.list_alt_rounded,
-            onTap: () async {
-              await Navigator.push(
+              ),
+            ],
+            if (auth.appRole == 'admin' && _canReadLeads) ...[
+              const SizedBox(height: 14),
+              _action(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const AllLeadsScreen(),
+                title: 'Workflow Desk',
+                subtitle: 'Cross-team pipeline view',
+                icon: Icons.account_tree_rounded,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const WorkflowTeamScreen(
+                      titleOverride: 'Admin Pipeline',
+                    ),
+                  ),
                 ),
-              );
-
-              await HomeScreen.loadLeads();
-
-              if (mounted) setState(() {});
-            },
-          ),
-        ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _welcomeCard() {
+  Widget _welcomeCard(AuthState auth, String title) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFF5663A0),
-            Color(0xFF6C63FF),
-          ],
+          colors: [Color(0xFF5663A0), Color(0xFF6C63FF)],
         ),
         borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: primaryColor.withOpacity(0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.solar_power_rounded,
-            size: 70,
-            color: Colors.white,
-          ),
-          SizedBox(height: 18),
+          const Icon(Icons.solar_power_rounded, size: 64, color: Colors.white),
+          const SizedBox(height: 16),
           Text(
-            'Welcome Back',
-            style: TextStyle(
+            'Welcome, ${auth.user?.name ?? 'User'}',
+            style: const TextStyle(
               color: Colors.white,
-              fontSize: 28,
+              fontSize: 26,
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 6),
+          const SizedBox(height: 6),
           Text(
-            'Manage your solar leads easily',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 15,
-            ),
+            title,
+            style: const TextStyle(color: Colors.white70, fontSize: 15),
           ),
         ],
       ),
     );
   }
 
-  Widget _statCard({
-    required String title,
-    required String value,
-    required IconData icon,
-  }) {
+  Widget _statCard(String title, String value, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: cardColor,
+        color: HomeScreen.cardColor,
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
@@ -340,34 +213,28 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Column(
         children: [
-          Icon(
-            icon,
-            color: primaryColor,
-            size: 34,
-          ),
-          const SizedBox(height: 12),
+          Icon(icon, color: HomeScreen.primaryColor, size: 32),
+          const SizedBox(height: 10),
           Text(
             value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 26,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: textColor,
+              color: HomeScreen.textColor,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.black54,
-            ),
-          ),
+          Text(title, style: const TextStyle(color: Colors.black54)),
         ],
       ),
     );
   }
 
-  Widget _actionButton({
+  Widget _action(
+    BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,
@@ -379,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: cardColor,
+          color: HomeScreen.cardColor,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -392,15 +259,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           children: [
             CircleAvatar(
-              radius: 28,
-              backgroundColor: primaryColor.withOpacity(0.12),
-              child: Icon(
-                icon,
-                color: primaryColor,
-                size: 30,
-              ),
+              radius: 26,
+              backgroundColor: HomeScreen.primaryColor.withOpacity(0.12),
+              child: Icon(icon, color: HomeScreen.primaryColor, size: 28),
             ),
-            const SizedBox(width: 18),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,26 +271,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 19,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: textColor,
+                      color: HomeScreen.textColor,
                     ),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: Colors.black45,
-                      fontSize: 14,
-                    ),
+                    style: const TextStyle(color: Colors.black45, fontSize: 14),
                   ),
                 ],
               ),
             ),
             const Icon(
               Icons.arrow_forward_ios_rounded,
-              size: 18,
-              color: primaryColor,
+              size: 16,
+              color: HomeScreen.primaryColor,
             ),
           ],
         ),
@@ -435,130 +295,71 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _drawer() {
+  Widget _drawer(BuildContext context, WidgetRef ref, String title) {
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.78,
-      backgroundColor: bgColor,
       child: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 34),
-            const Icon(
-              Icons.solar_power_rounded,
-              size: 76,
-              color: primaryColor,
-            ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 30),
+            const Icon(Icons.solar_power_rounded,
+                size: 72, color: HomeScreen.primaryColor),
+            const SizedBox(height: 12),
             Text(
-              appTitle,
+              title,
               style: const TextStyle(
-                fontSize: 31,
+                fontSize: 26,
                 fontWeight: FontWeight.bold,
-                color: textColor,
               ),
             ),
-            const SizedBox(height: 36),
-            _drawerItem(
-              Icons.dashboard_outlined,
-              'Dashboard',
-              () {
-                Navigator.pop(context);
-              },
+            Text(
+              auth.user?.email ?? '',
+              style: const TextStyle(color: Colors.black54),
             ),
-            if (userRole == 'sales')
-              _drawerItem(
-                Icons.add_circle_outline_rounded,
-                'Create Lead',
-                () async {
+            const SizedBox(height: 30),
+            if (_canCreateLead)
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline,
+                    color: HomeScreen.primaryColor),
+                title: const Text('Create Lead',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                onTap: () {
                   Navigator.pop(context);
-
-                  await Navigator.push(
+                  Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const LeadFormScreen(),
                     ),
                   );
-
-                  await HomeScreen.loadLeads();
-
-                  if (mounted) setState(() {});
                 },
               ),
-            if (userRole == 'sales')
-              _drawerItem(
-                Icons.list_alt_outlined,
-                'All Leads',
-                () async {
+            if (_canReadLeads)
+              ListTile(
+                leading: const Icon(Icons.list_alt_outlined,
+                    color: HomeScreen.primaryColor),
+                title: const Text('All Leads',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                onTap: () {
                   Navigator.pop(context);
-
-                  await Navigator.push(
+                  Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const AllLeadsScreen(),
                     ),
                   );
-
-                  await HomeScreen.loadLeads();
-
-                  if (mounted) setState(() {});
                 },
               ),
-            _drawerItem(
-              Icons.notifications_none_rounded,
-              'Notifications',
-              () {
-                Navigator.pop(context);
-                _pushNotifications();
-              },
-            ),
             const Spacer(),
-            _drawerItem(
-              Icons.logout_rounded,
-              'Logout',
-              () async {
-                if (!mounted) return;
-                await AuthSession.logout(context);
-              },
+            ListTile(
+              leading: const Icon(Icons.logout_rounded,
+                  color: HomeScreen.primaryColor),
+              title: const Text('Logout',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              onTap: () => AuthSession.logout(context, ref),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
           ],
         ),
-      ),
-    );
-  }
-
-  void _pushNotifications() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const NotificationsScreen(showAppBar: true),
-      ),
-    );
-  }
-
-  Widget _drawerItem(
-    IconData icon,
-    String title,
-    VoidCallback onTap,
-  ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-        leading: Icon(
-          icon,
-          color: primaryColor,
-          size: 33,
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: textColor,
-          ),
-        ),
-        onTap: onTap,
       ),
     );
   }

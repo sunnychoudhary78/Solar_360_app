@@ -1,49 +1,89 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../home/screens/home_screen.dart';
+import '../providers/auth_provider.dart';
 import 'forgot_password_screen.dart';
 import 'otp_login_screen.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
   bool isPasswordHidden = true;
-
-  String selectedRole = 'sales';
+  bool _isSubmitting = false;
+  String? _loginError;
 
   static const bgColor = Color(0xFFFAF8FF);
   static const cardColor = Color(0xFFFEFBFF);
   static const primaryColor = Color(0xFF5663A0);
 
-  Future<void> loginUser() async {
-    if (emailController.text.trim().isEmpty ||
-        passwordController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter login credentials')),
+  String? _validateEmailOrId(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Email is required';
+    }
+    final v = value.trim();
+    if (v.contains('@')) {
+      final gmailRegex = RegExp(
+        r'^[a-zA-Z0-9._%+-]+@gmail\.com$',
+        caseSensitive: false,
       );
+      if (!gmailRegex.hasMatch(v)) {
+        return 'Please enter a valid @gmail.com email';
+      }
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Password is required';
+    }
+    return null;
+  }
+
+  Future<void> loginUser() async {
+    if (_isSubmitting) return;
+
+    setState(() => _loginError = null);
+
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLoggedIn', true);
-    await prefs.setString('userRole', selectedRole);
-    await prefs.setString('lastLoggedInUser', emailController.text.trim());
+    setState(() => _isSubmitting = true);
 
-    if (!mounted) return;
+    try {
+      await ref.read(authProvider.notifier).login(
+            email: emailController.text.trim(),
+            password: passwordController.text,
+          );
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-    );
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/home');
+    } catch (e) {
+      if (!mounted) return;
+
+      final raw = e.toString().replaceFirst('Exception: ', '');
+      final message = raw.toLowerCase().contains('invalid') ||
+              raw.contains('401') ||
+              raw.contains('credentials')
+          ? 'Invalid Email or Password'
+          : raw;
+
+      setState(() => _loginError = message);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -53,45 +93,39 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  InputDecoration inputDecoration({
+  InputDecoration _inputDecoration({
     required String hint,
     required IconData icon,
     Widget? suffixIcon,
+    String? errorText,
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Colors.black45, fontSize: 17),
+      errorText: errorText,
+      hintStyle: const TextStyle(color: Colors.black45, fontSize: 16),
       prefixIcon: Icon(icon, color: Colors.black54),
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: bgColor,
-      contentPadding: const EdgeInsets.symmetric(vertical: 20),
+      contentPadding: const EdgeInsets.symmetric(vertical: 18),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: Color(0xFFE4E1EA)),
+        borderSide: BorderSide(
+          color: errorText != null ? Colors.red : const Color(0xFFE4E1EA),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: primaryColor, width: 1.4),
+        borderSide: BorderSide(
+          color: errorText != null ? Colors.red : primaryColor,
+          width: 1.4,
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: Colors.red),
       ),
     );
-  }
-
-  String roleName(String role) {
-    switch (role) {
-      case 'sales':
-        return 'Sales Person';
-      case 'support':
-        return 'Support Team';
-      case 'liaison':
-        return 'Liaison Officer';
-      case 'finance':
-        return 'Finance Team';
-      case 'installation':
-        return 'Installation Team';
-      default:
-        return 'Sales Person';
-    }
   }
 
   @override
@@ -102,211 +136,211 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(22),
-            child: Container(
-              padding: const EdgeInsets.all(26),
-              decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 30,
-                    offset: const Offset(0, 18),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.solar_power, size: 78, color: primaryColor),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Welcome Back',
-                    style: TextStyle(
-                      color: Color(0xFF1F2028),
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
+            child: Form(
+              key: _formKey,
+              child: Container(
+                padding: const EdgeInsets.all(26),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 30,
+                      offset: const Offset(0, 18),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Sign in to continue',
-                    style: TextStyle(color: Colors.black45, fontSize: 18),
-                  ),
-                  const SizedBox(height: 34),
-
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'EMAIL OR EMPLOYEE ID',
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.solar_power, size: 78, color: primaryColor),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'CSPL Solar Sales',
                       style: TextStyle(
-                        color: Colors.black45,
+                        color: Color(0xFF1F2028),
+                        fontSize: 28,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: inputDecoration(
-                      hint: 'Enter email or employee ID',
-                      icon: Icons.person_outline,
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Sign in with your CSPL account',
+                      style: TextStyle(color: Colors.black45, fontSize: 16),
                     ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'PASSWORD',
-                      style: TextStyle(
-                        color: Colors.black45,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: isPasswordHidden,
-                    decoration: inputDecoration(
-                      hint: 'Enter password',
-                      icon: Icons.lock_outline,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          isPasswordHidden
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                          color: Colors.black54,
+                    const SizedBox(height: 28),
+                    if (_loginError != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.shade200),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            isPasswordHidden = !isPasswordHidden;
-                          });
-                        },
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.red.shade700),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _loginError!,
+                                style: TextStyle(
+                                  color: Colors.red.shade800,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'LOGIN AS',
-                      style: TextStyle(
-                        color: Colors.black45,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  DropdownButtonFormField<String>(
-                    value: selectedRole,
-                    decoration: inputDecoration(
-                      hint: 'Select role',
-                      icon: Icons.badge_outlined,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'sales',
-                        child: Text('Sales Person'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'support',
-                        child: Text('Support Team'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'liaison',
-                        child: Text('Liaison Officer'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'finance',
-                        child: Text('Finance Team'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'installation',
-                        child: Text('Installation Team'),
-                      ),
+                      const SizedBox(height: 16),
                     ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() {
-                        selectedRole = value;
-                      });
-                    },
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 58,
-                    child: ElevatedButton(
-                      onPressed: loginUser,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
-                        elevation: 8,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      child: const Text(
-                        'Sign in',
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'EMAIL OR EMPLOYEE ID',
                         style: TextStyle(
-                          fontSize: 20,
+                          color: Colors.black45,
                           fontWeight: FontWeight.bold,
+                          fontSize: 12,
                         ),
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 26),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const OtpLoginScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Login with OTP',
-                          style: TextStyle(
-                            color: primaryColor,
-                            fontWeight: FontWeight.bold,
-                          ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: emailController,
+                      enabled: !_isSubmitting,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: _validateEmailOrId,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      decoration: _inputDecoration(
+                        hint: 'Email or payroll code',
+                        icon: Icons.person_outline,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'PASSWORD',
+                        style: TextStyle(
+                          color: Colors.black45,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
                         ),
                       ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const ForgotPasswordScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Forgot Password?',
-                          style: TextStyle(
-                            color: primaryColor,
-                            fontWeight: FontWeight.bold,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: passwordController,
+                      enabled: !_isSubmitting,
+                      obscureText: isPasswordHidden,
+                      validator: _validatePassword,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      decoration: _inputDecoration(
+                        hint: 'Enter password',
+                        icon: Icons.lock_outline,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            isPasswordHidden
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: Colors.black54,
                           ),
+                          onPressed: _isSubmitting
+                              ? null
+                              : () {
+                                  setState(() {
+                                    isPasswordHidden = !isPasswordHidden;
+                                  });
+                                },
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(height: 28),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 58,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : loginUser,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          disabledBackgroundColor:
+                              primaryColor.withValues(alpha: 0.6),
+                          foregroundColor: Colors.white,
+                          disabledForegroundColor: Colors.white70,
+                          elevation: 8,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                height: 26,
+                                width: 26,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Sign in',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: _isSubmitting
+                              ? null
+                              : () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const OtpLoginScreen(),
+                                    ),
+                                  );
+                                },
+                          child: const Text(
+                            'Login with OTP',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _isSubmitting
+                              ? null
+                              : () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ForgotPasswordScreen(),
+                                    ),
+                                  );
+                                },
+                          child: const Text(
+                            'Forgot Password?',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

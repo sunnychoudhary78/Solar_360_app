@@ -1,221 +1,442 @@
+import 'dart:convert';
+
 class LeadModel {
-  final String name;
+  final String id;
+  final String leadCode;
+
+  final String fullName;
   final String mobile;
   final String email;
-  final String caNo;
-  final String kNo;
-  final String refNo;
+  final String address;
+  final String city;
+  final String state;
+  final String pincode;
+
+  final String caNumber;
+  final String kNumber;
+  final String referenceNumber;
   final String discom;
 
   final String geoLocation;
-  final String longitude;
   final String latitude;
+  final String longitude;
 
-  final String bankDetails;
-  final String roofArea;
+  final String bankAccountName;
+  final String bankName;
+  final String accountNumber;
+  final String ifscCode;
+
+  final String projectType;
+  final String source;
+  final String status;
+  final String currentDepartment;
+  final String workflowStep;
+  final String leadStage;
+
+  final String assignedTo;
+  final String assignedBy;
+  final String createdBy;
+  final String updatedBy;
+
+  final String priority;
+  final String notes;
+
+  final String roofPhotoStatus;
+  final String availableShadowFreeArea;
   final String quotationAmount;
-  final String employeeName;
-  final String staffContact;
+  final String visitedEmployeeName;
+  final String visitedEmployeeContact;
+  final String followUpDate;
+  final String lastContactedAt;
 
-  final String? aadhaarFrontPath;
-  final String? aadhaarBackPath;
-  final String? panFrontPath;
-  final String? panBackPath;
-  final String? electricityBillPath;
-  final String? bankImagePath;
-  final String? roofImagePath;
+  final bool roofLoadBearingCapacity;
+  final bool shadowFreeRoof;
+  final bool vendorVisitedSite;
+  final bool isActive;
 
-  final bool electricityBillIsPdf;
+  final String additionalDocuments;
+  final String additionalImages;
 
-  final String? customerDocuments;
+  final String chequePassbookCopy;
+  final String bankClearPhoto;
+  final String roofPhoto;
+  final String preInstallationPhoto;
+  final String quotationDocument;
+  final String installationReport;
+  final String installationImages;
+  final String statusRemarks;
 
-  final String supportNotes;
-  final String? supportDocumentPath;
+  final String registrationId;
+  final String registrationDate;
+  final String registrationTime;
 
-  String status;
-  String liaisonNote;
+  final Map<String, dynamic>? installationDetails;
 
-  final String liaisonDocumentPath;
+  final String createdAt;
+  final String updatedAt;
 
-  // Installation Team fields
-  final String installationNote;
-  final String installationDocumentPath;
-
-  LeadModel({
-    required this.name,
+  const LeadModel({
+    required this.id,
+    required this.leadCode,
+    required this.fullName,
     required this.mobile,
     required this.email,
-    required this.caNo,
-    required this.kNo,
-    required this.refNo,
+    required this.address,
+    required this.city,
+    required this.state,
+    required this.pincode,
+    required this.caNumber,
+    required this.kNumber,
+    required this.referenceNumber,
     required this.discom,
     required this.geoLocation,
-    required this.longitude,
     required this.latitude,
-    required this.bankDetails,
-    required this.roofArea,
+    required this.longitude,
+    required this.bankAccountName,
+    required this.bankName,
+    required this.accountNumber,
+    required this.ifscCode,
+    required this.projectType,
+    required this.source,
+    required this.status,
+    required this.currentDepartment,
+    required this.workflowStep,
+    required this.leadStage,
+    required this.assignedTo,
+    required this.assignedBy,
+    required this.createdBy,
+    required this.updatedBy,
+    required this.priority,
+    required this.notes,
+    required this.roofPhotoStatus,
+    required this.availableShadowFreeArea,
     required this.quotationAmount,
-    required this.employeeName,
-    required this.staffContact,
-    this.aadhaarFrontPath,
-    this.aadhaarBackPath,
-    this.panFrontPath,
-    this.panBackPath,
-    this.electricityBillPath,
-    this.bankImagePath,
-    this.roofImagePath,
-    this.electricityBillIsPdf = false,
-    this.customerDocuments,
-    this.supportNotes = '',
-    this.supportDocumentPath,
-    this.status = 'New Lead',
-    this.liaisonNote = '',
-    this.liaisonDocumentPath = '',
-    this.installationNote = '',
-    this.installationDocumentPath = '',
+    required this.visitedEmployeeName,
+    required this.visitedEmployeeContact,
+    required this.followUpDate,
+    required this.lastContactedAt,
+    required this.roofLoadBearingCapacity,
+    required this.shadowFreeRoof,
+    required this.vendorVisitedSite,
+    required this.isActive,
+    required this.additionalDocuments,
+    required this.additionalImages,
+    required this.chequePassbookCopy,
+    required this.bankClearPhoto,
+    required this.roofPhoto,
+    required this.preInstallationPhoto,
+    required this.quotationDocument,
+    required this.installationReport,
+    required this.installationImages,
+    required this.statusRemarks,
+    required this.registrationId,
+    required this.registrationDate,
+    required this.registrationTime,
+    this.installationDetails,
+    required this.createdAt,
+    required this.updatedAt,
   });
 
-  LeadModel copyWith({
-    String? name,
-    String? mobile,
-    String? email,
-    String? caNo,
-    String? kNo,
-    String? refNo,
-    String? discom,
-    String? geoLocation,
-    String? longitude,
-    String? latitude,
-    String? bankDetails,
-    String? roofArea,
-    String? quotationAmount,
-    String? employeeName,
-    String? staffContact,
-    String? aadhaarFrontPath,
-    String? aadhaarBackPath,
-    String? panFrontPath,
-    String? panBackPath,
-    String? electricityBillPath,
-    String? bankImagePath,
-    String? roofImagePath,
-    bool? electricityBillIsPdf,
-    String? customerDocuments,
-    String? supportNotes,
-    String? supportDocumentPath,
-    String? status,
-    String? liaisonNote,
-    String? liaisonDocumentPath,
-    String? installationNote,
-    String? installationDocumentPath,
-  }) {
+  factory LeadModel.fromJson(Map<String, dynamic> json) {
     return LeadModel(
-      name: name ?? this.name,
-      mobile: mobile ?? this.mobile,
-      email: email ?? this.email,
-      caNo: caNo ?? this.caNo,
-      kNo: kNo ?? this.kNo,
-      refNo: refNo ?? this.refNo,
-      discom: discom ?? this.discom,
-      geoLocation: geoLocation ?? this.geoLocation,
-      longitude: longitude ?? this.longitude,
-      latitude: latitude ?? this.latitude,
-      bankDetails: bankDetails ?? this.bankDetails,
-      roofArea: roofArea ?? this.roofArea,
-      quotationAmount: quotationAmount ?? this.quotationAmount,
-      employeeName: employeeName ?? this.employeeName,
-      staffContact: staffContact ?? this.staffContact,
-      aadhaarFrontPath: aadhaarFrontPath ?? this.aadhaarFrontPath,
-      aadhaarBackPath: aadhaarBackPath ?? this.aadhaarBackPath,
-      panFrontPath: panFrontPath ?? this.panFrontPath,
-      panBackPath: panBackPath ?? this.panBackPath,
-      electricityBillPath: electricityBillPath ?? this.electricityBillPath,
-      bankImagePath: bankImagePath ?? this.bankImagePath,
-      roofImagePath: roofImagePath ?? this.roofImagePath,
-      electricityBillIsPdf:
-          electricityBillIsPdf ?? this.electricityBillIsPdf,
-      customerDocuments: customerDocuments ?? this.customerDocuments,
-      supportNotes: supportNotes ?? this.supportNotes,
-      supportDocumentPath: supportDocumentPath ?? this.supportDocumentPath,
-      status: status ?? this.status,
-      liaisonNote: liaisonNote ?? this.liaisonNote,
-      liaisonDocumentPath:
-          liaisonDocumentPath ?? this.liaisonDocumentPath,
-      installationNote: installationNote ?? this.installationNote,
-      installationDocumentPath:
-          installationDocumentPath ?? this.installationDocumentPath,
+      id: _str(json['id']),
+      leadCode: _str(json['lead_code']),
+      fullName: _str(json['full_name']),
+      mobile: _str(json['mobile']),
+      email: _str(json['email']),
+      address: _str(json['address']),
+      city: _str(json['city']),
+      state: _str(json['state']),
+      pincode: _str(json['pincode']),
+      caNumber: _str(json['ca_number']),
+      kNumber: _str(json['k_number']),
+      referenceNumber: _str(json['reference_number']),
+      discom: _str(json['discom']),
+      geoLocation: _str(json['geo_location']),
+      latitude: _str(json['latitude']),
+      longitude: _str(json['longitude']),
+      bankAccountName: _str(json['bank_account_name']),
+      bankName: _str(json['bank_name']),
+      accountNumber: _str(json['account_number']),
+      ifscCode: _str(json['ifsc_code']),
+      projectType: _str(json['project_type']),
+      source: _str(json['source']),
+      status: _str(json['status']),
+      currentDepartment: _str(json['current_department']),
+      workflowStep: _str(json['workflow_step']),
+      leadStage: _str(json['lead_stage']),
+      assignedTo: _str(json['assigned_to']),
+      assignedBy: _str(json['assigned_by']),
+      createdBy: _str(json['created_by']),
+      updatedBy: _str(json['updated_by']),
+      priority: _str(json['priority']),
+      notes: _str(json['notes']),
+      roofPhotoStatus: _str(json['roof_photo_status']),
+      availableShadowFreeArea: _str(json['available_shadow_free_area']),
+      quotationAmount: _str(json['quotation_amount']),
+      visitedEmployeeName: _str(json['visited_employee_name']),
+      visitedEmployeeContact: _str(json['visited_employee_contact']),
+      followUpDate: _str(json['follow_up_date']),
+      lastContactedAt: _str(json['last_contacted_at']),
+      roofLoadBearingCapacity: _bool(json['roof_load_bearing_capacity']),
+      shadowFreeRoof: _bool(json['shadow_free_roof']),
+      vendorVisitedSite: _bool(json['vendor_visited_site']),
+      isActive: _bool(json['is_active']),
+      additionalDocuments: _str(json['additional_documents']),
+      additionalImages: _str(json['additional_images']),
+      chequePassbookCopy: _str(json['cheque_passbook_copy']),
+      bankClearPhoto: _str(json['bank_clear_photo']),
+      roofPhoto: _str(json['roof_photo']),
+      preInstallationPhoto: _str(json['pre_installation_photo']),
+      quotationDocument: _str(json['quotation_document']),
+      installationReport: _str(json['installation_report']),
+      installationImages: _str(json['installation_images']),
+      statusRemarks: _str(json['status_remarks']),
+      registrationId: _str(json['registration_id']),
+      registrationDate: _str(json['registration_date']),
+      registrationTime: _str(json['registration_time']),
+      installationDetails: json['installationDetails'] is Map
+          ? Map<String, dynamic>.from(json['installationDetails'] as Map)
+          : null,
+      createdAt: _str(json['created_at'] ?? json['createdAt']),
+      updatedAt: _str(json['updated_at'] ?? json['updatedAt']),
     );
+  }
+
+  bool get hasInstallationDetails {
+    final d = installationDetails;
+    if (d == null) return false;
+    const required = [
+      'file_no',
+      'capacity',
+      'solar_panel_brand',
+      'number_of_solar_panel',
+      'invoice_no',
+    ];
+    return required.every((key) {
+      final v = d[key];
+      if (v == null) return false;
+      return v.toString().trim().isNotEmpty;
+    });
+  }
+
+  bool get hasRegistrationDetails {
+    return registrationId.trim().isNotEmpty &&
+        registrationDate.trim().isNotEmpty &&
+        registrationTime.trim().isNotEmpty;
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'name': name,
+      'id': id,
+      'lead_code': leadCode,
+      'full_name': fullName,
       'mobile': mobile,
       'email': email,
-      'caNo': caNo,
-      'kNo': kNo,
-      'refNo': refNo,
+      'address': address,
+      'city': city,
+      'state': state,
+      'pincode': pincode,
+      'ca_number': caNumber,
+      'k_number': kNumber,
+      'reference_number': referenceNumber,
       'discom': discom,
-      'geoLocation': geoLocation,
-      'longitude': longitude,
+      'geo_location': geoLocation,
       'latitude': latitude,
-      'bankDetails': bankDetails,
-      'roofArea': roofArea,
-      'quotationAmount': quotationAmount,
-      'employeeName': employeeName,
-      'staffContact': staffContact,
-      'aadhaarFrontPath': aadhaarFrontPath,
-      'aadhaarBackPath': aadhaarBackPath,
-      'panFrontPath': panFrontPath,
-      'panBackPath': panBackPath,
-      'electricityBillPath': electricityBillPath,
-      'bankImagePath': bankImagePath,
-      'roofImagePath': roofImagePath,
-      'electricityBillIsPdf': electricityBillIsPdf,
-      'customerDocuments': customerDocuments,
-      'supportNotes': supportNotes,
-      'supportDocumentPath': supportDocumentPath,
+      'longitude': longitude,
+      'bank_account_name': bankAccountName,
+      'bank_name': bankName,
+      'account_number': accountNumber,
+      'ifsc_code': ifscCode,
+      'project_type': projectType,
+      'source': source,
       'status': status,
-      'liaisonNote': liaisonNote,
-      'liaisonDocumentPath': liaisonDocumentPath,
-      'installationNote': installationNote,
-      'installationDocumentPath': installationDocumentPath,
+      'current_department': currentDepartment,
+      'workflow_step': workflowStep,
+      'lead_stage': leadStage,
+      'assigned_to': assignedTo,
+      'assigned_by': assignedBy,
+      'created_by': createdBy,
+      'updated_by': updatedBy,
+      'priority': priority,
+      'notes': notes,
+      'roof_photo_status': roofPhotoStatus,
+      'available_shadow_free_area': availableShadowFreeArea,
+      'quotation_amount': quotationAmount,
+      'visited_employee_name': visitedEmployeeName,
+      'visited_employee_contact': visitedEmployeeContact,
+      'follow_up_date': followUpDate,
+      'last_contacted_at': lastContactedAt,
+      'roof_load_bearing_capacity': roofLoadBearingCapacity,
+      'shadow_free_roof': shadowFreeRoof,
+      'vendor_visited_site': vendorVisitedSite,
+      'is_active': isActive,
+      'additional_documents': additionalDocuments,
+      'additional_images': additionalImages,
+      'cheque_passbook_copy': chequePassbookCopy,
+      'bank_clear_photo': bankClearPhoto,
+      'roof_photo': roofPhoto,
+      'pre_installation_photo': preInstallationPhoto,
+      'quotation_document': quotationDocument,
+      'installation_report': installationReport,
+      'installation_images': installationImages,
+      'status_remarks': statusRemarks,
+      'registration_id': registrationId,
+      'registration_date': registrationDate,
+      'registration_time': registrationTime,
+      'created_at': createdAt,
+      'updated_at': updatedAt,
     };
   }
 
-  factory LeadModel.fromJson(Map<String, dynamic> json) {
+  LeadModel copyWith({
+    String? id,
+    String? leadCode,
+    String? fullName,
+    String? mobile,
+    String? email,
+    String? address,
+    String? city,
+    String? state,
+    String? pincode,
+    String? caNumber,
+    String? kNumber,
+    String? referenceNumber,
+    String? discom,
+    String? geoLocation,
+    String? latitude,
+    String? longitude,
+    String? bankAccountName,
+    String? bankName,
+    String? accountNumber,
+    String? ifscCode,
+    String? projectType,
+    String? source,
+    String? status,
+    String? currentDepartment,
+    String? workflowStep,
+    String? leadStage,
+    String? assignedTo,
+    String? assignedBy,
+    String? createdBy,
+    String? updatedBy,
+    String? priority,
+    String? notes,
+    String? roofPhotoStatus,
+    String? availableShadowFreeArea,
+    String? quotationAmount,
+    String? visitedEmployeeName,
+    String? visitedEmployeeContact,
+    String? followUpDate,
+    String? lastContactedAt,
+    bool? roofLoadBearingCapacity,
+    bool? shadowFreeRoof,
+    bool? vendorVisitedSite,
+    bool? isActive,
+    String? additionalDocuments,
+    String? additionalImages,
+    String? chequePassbookCopy,
+    String? bankClearPhoto,
+    String? roofPhoto,
+    String? preInstallationPhoto,
+    String? quotationDocument,
+    String? installationReport,
+    String? installationImages,
+    String? statusRemarks,
+    String? registrationId,
+    String? registrationDate,
+    String? registrationTime,
+    Map<String, dynamic>? installationDetails,
+    String? createdAt,
+    String? updatedAt,
+  }) {
     return LeadModel(
-      name: json['name'] as String? ?? '',
-      mobile: json['mobile'] as String? ?? '',
-      email: json['email'] as String? ?? '',
-      caNo: json['caNo'] as String? ?? '',
-      kNo: json['kNo'] as String? ?? '',
-      refNo: json['refNo'] as String? ?? '',
-      discom: json['discom'] as String? ?? '',
-      geoLocation: json['geoLocation'] as String? ?? '',
-      longitude: json['longitude'] as String? ?? '',
-      latitude: json['latitude'] as String? ?? '',
-      bankDetails: json['bankDetails'] as String? ?? '',
-      roofArea: json['roofArea'] as String? ?? '',
-      quotationAmount: json['quotationAmount'] as String? ?? '',
-      employeeName: json['employeeName'] as String? ?? '',
-      staffContact: json['staffContact'] as String? ?? '',
-      aadhaarFrontPath: json['aadhaarFrontPath'] as String?,
-      aadhaarBackPath: json['aadhaarBackPath'] as String?,
-      panFrontPath: json['panFrontPath'] as String?,
-      panBackPath: json['panBackPath'] as String?,
-      electricityBillPath: json['electricityBillPath'] as String?,
-      bankImagePath: json['bankImagePath'] as String?,
-      roofImagePath: json['roofImagePath'] as String?,
-      electricityBillIsPdf: json['electricityBillIsPdf'] as bool? ?? false,
-      customerDocuments: json['customerDocuments'] as String?,
-      supportNotes: json['supportNotes'] as String? ?? '',
-      supportDocumentPath: json['supportDocumentPath'] as String?,
-      status: json['status'] as String? ?? 'New Lead',
-      liaisonNote: json['liaisonNote'] as String? ?? '',
-      liaisonDocumentPath: json['liaisonDocumentPath'] as String? ?? '',
-      installationNote: json['installationNote'] as String? ?? '',
-      installationDocumentPath:
-          json['installationDocumentPath'] as String? ?? '',
+      id: id ?? this.id,
+      leadCode: leadCode ?? this.leadCode,
+      fullName: fullName ?? this.fullName,
+      mobile: mobile ?? this.mobile,
+      email: email ?? this.email,
+      address: address ?? this.address,
+      city: city ?? this.city,
+      state: state ?? this.state,
+      pincode: pincode ?? this.pincode,
+      caNumber: caNumber ?? this.caNumber,
+      kNumber: kNumber ?? this.kNumber,
+      referenceNumber: referenceNumber ?? this.referenceNumber,
+      discom: discom ?? this.discom,
+      geoLocation: geoLocation ?? this.geoLocation,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      bankAccountName: bankAccountName ?? this.bankAccountName,
+      bankName: bankName ?? this.bankName,
+      accountNumber: accountNumber ?? this.accountNumber,
+      ifscCode: ifscCode ?? this.ifscCode,
+      projectType: projectType ?? this.projectType,
+      source: source ?? this.source,
+      status: status ?? this.status,
+      currentDepartment: currentDepartment ?? this.currentDepartment,
+      workflowStep: workflowStep ?? this.workflowStep,
+      leadStage: leadStage ?? this.leadStage,
+      assignedTo: assignedTo ?? this.assignedTo,
+      assignedBy: assignedBy ?? this.assignedBy,
+      createdBy: createdBy ?? this.createdBy,
+      updatedBy: updatedBy ?? this.updatedBy,
+      priority: priority ?? this.priority,
+      notes: notes ?? this.notes,
+      roofPhotoStatus: roofPhotoStatus ?? this.roofPhotoStatus,
+      availableShadowFreeArea:
+          availableShadowFreeArea ?? this.availableShadowFreeArea,
+      quotationAmount: quotationAmount ?? this.quotationAmount,
+      visitedEmployeeName: visitedEmployeeName ?? this.visitedEmployeeName,
+      visitedEmployeeContact:
+          visitedEmployeeContact ?? this.visitedEmployeeContact,
+      followUpDate: followUpDate ?? this.followUpDate,
+      lastContactedAt: lastContactedAt ?? this.lastContactedAt,
+      roofLoadBearingCapacity:
+          roofLoadBearingCapacity ?? this.roofLoadBearingCapacity,
+      shadowFreeRoof: shadowFreeRoof ?? this.shadowFreeRoof,
+      vendorVisitedSite: vendorVisitedSite ?? this.vendorVisitedSite,
+      isActive: isActive ?? this.isActive,
+      additionalDocuments: additionalDocuments ?? this.additionalDocuments,
+      additionalImages: additionalImages ?? this.additionalImages,
+      chequePassbookCopy: chequePassbookCopy ?? this.chequePassbookCopy,
+      bankClearPhoto: bankClearPhoto ?? this.bankClearPhoto,
+      roofPhoto: roofPhoto ?? this.roofPhoto,
+      preInstallationPhoto:
+          preInstallationPhoto ?? this.preInstallationPhoto,
+      quotationDocument: quotationDocument ?? this.quotationDocument,
+      installationReport: installationReport ?? this.installationReport,
+      installationImages: installationImages ?? this.installationImages,
+      statusRemarks: statusRemarks ?? this.statusRemarks,
+      registrationId: registrationId ?? this.registrationId,
+      registrationDate: registrationDate ?? this.registrationDate,
+      registrationTime: registrationTime ?? this.registrationTime,
+      installationDetails: installationDetails ?? this.installationDetails,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  static String _str(dynamic value) {
+    if (value == null) return '';
+    if (value is List || value is Map) {
+      try {
+        return jsonEncode(value);
+      } catch (_) {
+        return value.toString();
+      }
+    }
+    return value.toString();
+  }
+
+  static bool _bool(dynamic value) {
+    if (value == true) return true;
+    if (value == false) return false;
+    if (value == 1) return true;
+    if (value == 0) return false;
+    if (value is String) {
+      return value.toLowerCase() == 'true' || value == '1';
+    }
+    return false;
   }
 }
