@@ -1,25 +1,22 @@
 import '../config/app_config.dart';
 
-/// Resolves backend file paths to full URLs (matches web leadFileUtils.js).
 String resolveUploadUrl(String? value) {
   if (value == null) return '';
+
   final s = value.toString().trim();
   if (s.isEmpty) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+
+  if (s.startsWith('http://') || s.startsWith('https://')) {
+    return s;
+  }
 
   final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api$'), '');
+
   var normalized = s.replaceAll('\\', '/');
-  normalized = normalized
-      .replaceFirst(RegExp(r'^uploads/leads/'), '')
-      .replaceFirst(RegExp(r'^uploads/'), '')
-      .replaceFirst(RegExp(r'^leads/'), '');
+  normalized = normalized.replaceFirst(RegExp(r'^/'), '');
+  normalized = normalized.replaceFirst(RegExp(r'^uploads/'), '');
 
-  final filename = normalized.contains('/')
-      ? normalized.split('/').last
-      : normalized;
-  if (filename.isEmpty) return '';
-
-  return '$base/uploads/leads/$filename';
+  return '$base/uploads/$normalized';
 }
 
 bool isImagePath(String? path) {

@@ -29,16 +29,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (value == null || value.trim().isEmpty) {
       return 'Email is required';
     }
+
     final v = value.trim();
+
     if (v.contains('@')) {
-      final gmailRegex = RegExp(
-        r'^[a-zA-Z0-9._%+-]+@gmail\.com$',
+      final emailRegex = RegExp(
+        r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
         caseSensitive: false,
       );
-      if (!gmailRegex.hasMatch(v)) {
-        return 'Please enter a valid @gmail.com email';
+
+      if (!emailRegex.hasMatch(v)) {
+        return 'Please enter a valid email';
       }
     }
+
     return null;
   }
 
@@ -46,6 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (value == null || value.trim().isEmpty) {
       return 'Password is required';
     }
+
     return null;
   }
 
@@ -67,16 +72,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           );
 
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/home');
+
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
 
-      final raw = e.toString().replaceFirst('Exception: ', '');
-      final message = raw.toLowerCase().contains('invalid') ||
-              raw.contains('401') ||
-              raw.contains('credentials')
-          ? 'Invalid Email or Password'
-          : raw;
+      final raw = e.toString().replaceFirst('Exception: ', '').toLowerCase();
+
+      String message = 'Invalid Email or Password';
+
+      if (raw.contains('timeout') ||
+          raw.contains('connection') ||
+          raw.contains('network') ||
+          raw.contains('socket')) {
+        message = 'Server connection failed. Please try again.';
+      }
 
       setState(() => _loginError = message);
     } finally {
@@ -97,11 +110,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     required String hint,
     required IconData icon,
     Widget? suffixIcon,
-    String? errorText,
   }) {
     return InputDecoration(
       hintText: hint,
-      errorText: errorText,
       hintStyle: const TextStyle(color: Colors.black45, fontSize: 16),
       prefixIcon: Icon(icon, color: Colors.black54),
       suffixIcon: suffixIcon,
@@ -110,20 +121,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       contentPadding: const EdgeInsets.symmetric(vertical: 18),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(
-          color: errorText != null ? Colors.red : const Color(0xFFE4E1EA),
-        ),
+        borderSide: const BorderSide(color: Color(0xFFE4E1EA)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(
-          color: errorText != null ? Colors.red : primaryColor,
-          width: 1.4,
-        ),
+        borderSide: const BorderSide(color: primaryColor, width: 1.4),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
         borderSide: const BorderSide(color: Colors.red),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: Colors.red, width: 1.4),
+      ),
+    );
+  }
+
+  Widget _errorBox(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: Colors.red.shade700),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: Colors.red.shade800,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -154,10 +191,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.solar_power, size: 78, color: primaryColor),
+                    const Icon(
+                      Icons.solar_power,
+                      size: 78,
+                      color: primaryColor,
+                    ),
                     const SizedBox(height: 24),
                     const Text(
-                      'CSPL Solar Sales',
+                      'IMT Green Energy',
                       style: TextStyle(
                         color: Color(0xFF1F2028),
                         fontSize: 28,
@@ -167,37 +208,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 8),
                     const Text(
                       'Sign in with your CSPL account',
-                      style: TextStyle(color: Colors.black45, fontSize: 16),
+                      style: TextStyle(
+                        color: Colors.black45,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 28),
+
                     if (_loginError != null) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.error_outline, color: Colors.red.shade700),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _loginError!,
-                                style: TextStyle(
-                                  color: Colors.red.shade800,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      _errorBox(_loginError!),
                       const SizedBox(height: 16),
                     ],
-                    Align(
+
+                    const Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'EMAIL OR EMPLOYEE ID',
@@ -209,6 +232,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
+
                     TextFormField(
                       controller: emailController,
                       enabled: !_isSubmitting,
@@ -216,11 +240,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       validator: _validateEmailOrId,
                       autovalidateMode: AutovalidateMode.onUserInteraction,
                       decoration: _inputDecoration(
-                        hint: 'Email or payroll code',
+                        hint: 'Email or employee ID',
                         icon: Icons.person_outline,
                       ),
                     ),
+
                     const SizedBox(height: 20),
+
                     const Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -233,6 +259,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
+
                     TextFormField(
                       controller: passwordController,
                       enabled: !_isSubmitting,
@@ -259,7 +286,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 28),
+
                     SizedBox(
                       width: double.infinity,
                       height: 58,
@@ -294,7 +323,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                       ),
                     ),
+
                     const SizedBox(height: 16),
+
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [

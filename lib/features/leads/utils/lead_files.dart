@@ -17,6 +17,11 @@ class LeadFileItem {
     required this.isImage,
     required this.isPdf,
   });
+
+  String get displayName {
+    final clean = path.split('/').last.split('\\').last;
+    return clean.isEmpty ? label : clean;
+  }
 }
 
 List<LeadFileItem> collectLeadFiles(LeadModel lead) {
@@ -24,12 +29,17 @@ List<LeadFileItem> collectLeadFiles(LeadModel lead) {
 
   void addSingle(String label, String? path) {
     if (path == null || path.trim().isEmpty) return;
+
     final p = path.trim();
+    final url = resolveUploadUrl(p);
+
+    if (url.trim().isEmpty) return;
+
     items.add(
       LeadFileItem(
         label: label,
         path: p,
-        url: resolveUploadUrl(p),
+        url: url,
         isImage: isImagePath(p),
         isPdf: isPdfPath(p),
       ),
@@ -44,29 +54,38 @@ List<LeadFileItem> collectLeadFiles(LeadModel lead) {
   addSingle('Installation Report', lead.installationReport);
   addSingle('Installation Images', lead.installationImages);
 
-  items.addAll(_parseExtraField('Additional Documents', lead.additionalDocuments));
-  items.addAll(_parseExtraField('Additional Images', lead.additionalImages));
+  items.addAll(
+    _parseExtraField('Additional Document', lead.additionalDocuments),
+  );
 
-  return items.where((e) => e.url.isNotEmpty).toList();
+  items.addAll(
+    _parseExtraField('Additional Image', lead.additionalImages),
+  );
+
+  return items;
 }
 
 List<LeadFileItem> _parseExtraField(String prefix, dynamic raw) {
   if (raw == null) return [];
 
   dynamic decoded = raw;
+
   if (raw is String && raw.trim().isNotEmpty) {
     try {
       decoded = jsonDecode(raw);
     } catch (_) {
+      final url = resolveUploadUrl(raw);
+
+      if (url.trim().isEmpty) return [];
+
       return [
-        if (resolveUploadUrl(raw).isNotEmpty)
-          LeadFileItem(
-            label: prefix,
-            path: raw,
-            url: resolveUploadUrl(raw),
-            isImage: isImagePath(raw),
-            isPdf: isPdfPath(raw),
-          ),
+        LeadFileItem(
+          label: prefix,
+          path: raw,
+          url: url,
+          isImage: isImagePath(raw),
+          isPdf: isPdfPath(raw),
+        ),
       ];
     }
   }
@@ -74,21 +93,33 @@ List<LeadFileItem> _parseExtraField(String prefix, dynamic raw) {
   if (decoded is! List) return [];
 
   final out = <LeadFileItem>[];
+
   for (var i = 0; i < decoded.length; i++) {
     final entry = decoded[i];
+
     if (entry is! Map) continue;
-    final title = entry['title']?.toString() ?? '$prefix ${i + 1}';
-    final file = entry['file']?.toString() ?? entry['path']?.toString() ?? '';
+
+    final title = entry['title']?.toString().trim();
+    final file = entry['file']?.toString().trim() ??
+        entry['path']?.toString().trim() ??
+        '';
+
     if (file.isEmpty) continue;
+
+    final url = resolveUploadUrl(file);
+
+    if (url.trim().isEmpty) continue;
+
     out.add(
       LeadFileItem(
-        label: title,
+        label: title == null || title.isEmpty ? '$prefix ${i + 1}' : title,
         path: file,
-        url: resolveUploadUrl(file),
+        url: url,
         isImage: isImagePath(file),
         isPdf: isPdfPath(file),
       ),
     );
   }
+
   return out;
 }

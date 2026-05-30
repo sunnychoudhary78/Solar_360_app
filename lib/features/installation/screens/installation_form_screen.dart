@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../leads/models/lead_model.dart';
-import '../../leads/providers/lead_provider.dart';
 import '../providers/installation_provider.dart';
 
 class InstallationFormScreen extends ConsumerStatefulWidget {
@@ -37,6 +37,7 @@ class _InstallationFormScreenState
   void _prefill() {
     final d = widget.lead.installationDetails;
     if (d == null) return;
+
     existingId = d['id']?.toString();
     fileNo.text = d['file_no']?.toString() ?? '';
     capacity.text = d['capacity']?.toString() ?? '';
@@ -56,6 +57,8 @@ class _InstallationFormScreenState
   }
 
   Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+
     if ([fileNo, capacity, panelBrand, panelCount, invoiceNo]
         .any((c) => c.text.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -73,29 +76,38 @@ class _InstallationFormScreenState
     };
 
     setState(() => loading = true);
+
     try {
       final repo = ref.read(installationRepositoryProvider);
+
       if (existingId != null && existingId!.isNotEmpty) {
         await repo.update(existingId!, body);
       } else {
         await repo.createForLead(widget.lead.id, body);
       }
-      ref.invalidate(allLeadsProvider);
+
       if (!mounted) return;
-      Navigator.pop(context, true);
+
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
-    } finally {
-      if (mounted) setState(() => loading = false);
+
+      setState(() => loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.lead.fullName.trim().isEmpty
+        ? 'Lead ${widget.lead.leadCode}'
+        : widget.lead.fullName;
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FC),
       appBar: AppBar(
         title: const Text('Installation Details'),
         backgroundColor: const Color(0xFFF7F8FC),
@@ -106,9 +118,7 @@ class _InstallationFormScreenState
         padding: const EdgeInsets.all(20),
         children: [
           Text(
-            widget.lead.fullName.isEmpty
-                ? 'Lead ${widget.lead.leadCode}'
-                : widget.lead.fullName,
+            title,
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -118,7 +128,12 @@ class _InstallationFormScreenState
           _field('File No *', fileNo),
           _field('Capacity *', capacity),
           _field('Solar Panel Brand *', panelBrand),
-          _field('Number of Panels *', panelCount, keyboard: TextInputType.number),
+          _field(
+            'Number of Panels *',
+            panelCount,
+            keyboard: TextInputType.number,
+            digitsOnly: true,
+          ),
           _field('Invoice No *', invoiceNo),
           const SizedBox(height: 24),
           SizedBox(
@@ -134,7 +149,14 @@ class _InstallationFormScreenState
                 ),
               ),
               child: loading
-                  ? const CircularProgressIndicator(color: Colors.white)
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
+                    )
                   : const Text(
                       'Save Installation Details',
                       style: TextStyle(fontWeight: FontWeight.bold),
@@ -150,6 +172,7 @@ class _InstallationFormScreenState
     String label,
     TextEditingController controller, {
     TextInputType keyboard = TextInputType.text,
+    bool digitsOnly = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -157,11 +180,15 @@ class _InstallationFormScreenState
         controller: controller,
         enabled: !loading,
         keyboardType: keyboard,
+        inputFormatters:
+            digitsOnly ? [FilteringTextInputFormatter.digitsOnly] : null,
         decoration: InputDecoration(
           labelText: label,
           filled: true,
           fillColor: const Color(0xFFFAF8FF),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );

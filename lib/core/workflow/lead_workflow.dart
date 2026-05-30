@@ -1,10 +1,13 @@
-// Mirrors csplsolar-backend/config/leadWorkflow.js and frontend leadWorkflow.js
-
 class LeadWorkflow {
   LeadWorkflow._();
 
   static const statusFlow = <String, List<String>>{
-    'Sales': ['New Lead', 'KYC Collected', 'Sent To Support'],
+    'Sales': [
+      'New Lead',
+      'KYC Collected',
+      'Sent To Support',
+    ],
+
     'Support': [
       'Documents Verification Started',
       'Portal Processing Started',
@@ -13,45 +16,76 @@ class LeadWorkflow {
       'Final Verification Started',
       'Sent For Final Liaison',
       'Lead Completed',
+      'Lead Closed',
     ],
-    'Liaison Officer': [
+
+    'Liaising': [
       'Liaison Process Started',
       'Bank Coordination In Progress',
       'Liaison Completed',
       'Meter Process Started',
       'Government Approval Completed',
     ],
-    'Finance': ['Finance Verification Started', 'Loan Approved'],
-    'Installation Team': ['Installation In Progress', 'Installation Done'],
+
+    'Finance': [
+      'Finance Verification Started',
+      'Loan Approved',
+    ],
+
+    'Installation': [
+      'Installation In Progress',
+      'Installation Done',
+    ],
   };
 
   static const nextStatus = <String, List<String>>{
     'New Lead': ['KYC Collected'],
     'KYC Collected': ['Sent To Support'],
     'Sent To Support': ['Documents Verification Started'],
+
     'Documents Verification Started': ['Portal Processing Started'],
     'Portal Processing Started': ['Loan Application Initiated'],
     'Loan Application Initiated': ['Documents Submitted'],
+
     'Documents Submitted': ['Liaison Process Started'],
     'Liaison Process Started': ['Bank Coordination In Progress'],
     'Bank Coordination In Progress': ['Liaison Completed'],
+
     'Liaison Completed': ['Finance Verification Started'],
     'Finance Verification Started': ['Loan Approved'],
+
     'Loan Approved': ['Installation In Progress'],
     'Installation In Progress': ['Installation Done'],
+
     'Installation Done': ['Final Verification Started'],
     'Final Verification Started': ['Sent For Final Liaison'],
+
     'Sent For Final Liaison': ['Meter Process Started'],
     'Meter Process Started': ['Government Approval Completed'],
+
     'Government Approval Completed': ['Lead Completed'],
     'Lead Completed': ['Lead Closed'],
   };
 
   static String resolveRoleKey(String? role) {
     final r = (role ?? '').trim();
-    if (r == 'Liaising' || r.toLowerCase() == 'leasing') {
-      return 'Liaison Officer';
+    final lower = r.toLowerCase();
+
+    if (lower == 'liaison officer' ||
+        lower == 'liaison' ||
+        lower == 'liaising' ||
+        lower == 'leasing') {
+      return 'Liaising';
     }
+
+    if (lower == 'installation team' || lower == 'installation') {
+      return 'Installation';
+    }
+
+    if (lower == 'sales') return 'Sales';
+    if (lower == 'support') return 'Support';
+    if (lower == 'finance') return 'Finance';
+
     return r;
   }
 
@@ -67,13 +101,15 @@ class LeadWorkflow {
     if (isAdminRole(userRole)) {
       return nextStatus[currentStatus] ?? [];
     }
+
     final roleKey = resolveRoleKey(userRole);
     final roleStatuses = statusFlow[roleKey] ?? [];
     final sequential = nextStatus[currentStatus] ?? [];
+
     return sequential.where(roleStatuses.contains).toList();
   }
 
-  static String nextActionLabel(String status) {
+  static String nextActionLabel(String currentStatus) {
     const labels = {
       'New Lead': 'Mark KYC Collected',
       'KYC Collected': 'Send to Support',
@@ -95,6 +131,7 @@ class LeadWorkflow {
       'Government Approval Completed': 'Complete Lead',
       'Lead Completed': 'Close Lead',
     };
-    return labels[status] ?? 'Advance status';
+
+    return labels[currentStatus] ?? 'Advance status';
   }
 }

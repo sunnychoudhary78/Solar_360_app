@@ -21,6 +21,7 @@ class LeadDetailScreen extends ConsumerStatefulWidget {
 
 class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   static const primaryColor = Color(0xFF5663A0);
+
   late LeadModel _lead;
   bool loading = false;
   String? loadError;
@@ -35,61 +36,90 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
+
     setState(() {
       loading = true;
       loadError = null;
     });
+
     try {
       final repo = ref.read(leadRepositoryProvider);
       final fresh = await repo.getLeadById(_lead.id);
       final hist = await repo.getLeadHistory(_lead.id);
       final next = await repo.getAllowedNextStatuses(_lead.id);
-      if (mounted) {
-        setState(() {
-          _lead = fresh;
-          history = hist;
-          allowedNext = next;
-        });
-      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _lead = fresh;
+        history = hist;
+        allowedNext = next;
+        loading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() => loadError = e.toString());
-      }
-    } finally {
-      if (mounted) setState(() => loading = false);
+      if (!mounted) return;
+
+      setState(() {
+        loadError = e.toString();
+        loading = false;
+      });
     }
   }
 
+  Future<void> _reloadSilently() async {
+    final repo = ref.read(leadRepositoryProvider);
+    final fresh = await repo.getLeadById(_lead.id);
+    final hist = await repo.getLeadHistory(_lead.id);
+    final next = await repo.getAllowedNextStatuses(_lead.id);
+
+    if (!mounted) return;
+
+    setState(() {
+      _lead = fresh;
+      history = hist;
+      allowedNext = next;
+      loading = false;
+    });
+  }
+
   List<String> _resolveNextStatuses(String roleName) {
-    if (allowedNext.isNotEmpty) return allowedNext;
-    return LeadWorkflow.getAllowedNextStatuses(_lead.status, roleName);
+    final localAllowed =
+        LeadWorkflow.getAllowedNextStatuses(_lead.status, roleName);
+
+    if (allowedNext.isEmpty) return localAllowed;
+
+    return allowedNext.where(localAllowed.contains).toList();
   }
 
   Future<void> _advanceStatus(String nextStatus) async {
     final remarksController = TextEditingController();
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Update to "$nextStatus"?'),
-        content: TextField(
-          controller: remarksController,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Remarks (optional)',
-            border: OutlineInputBorder(),
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Update to "$nextStatus"?'),
+          content: TextField(
+            controller: remarksController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Remarks (optional)',
+              border: OutlineInputBorder(),
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed != true) {
@@ -97,93 +127,248 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       return;
     }
 
+    final remarks = remarksController.text.trim();
+    remarksController.dispose();
+
+    if (!mounted) return;
     setState(() => loading = true);
+
     try {
       await ref.read(leadRepositoryProvider).updateLeadStatus(
             leadId: _lead.id,
             status: nextStatus,
-            remarks: remarksController.text.trim(),
+            remarks: remarks,
           );
-      ref.invalidate(allLeadsProvider);
-      remarksController.dispose();
-      await _load();
+
+      await _reloadSilently();
+
       if (!mounted) return;
+
+      ref.invalidate(allLeadsProvider);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Status updated to $nextStatus')),
       );
     } catch (e) {
-      remarksController.dispose();
       if (!mounted) return;
+
+      setState(() => loading = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
-    } finally {
-      if (mounted) setState(() => loading = false);
     }
   }
 
   Future<void> _saveRegistration() async {
-    final regId = TextEditingController(text: _lead.registrationId);
-    final regDate = TextEditingController(text: _lead.registrationDate);
-    final regTime = TextEditingController(text: _lead.registrationTime);
+    String regId = _lead.registrationId;
+    String regDate = _lead.registrationDate;
+    String selectedHour = '1';
+    String selectedMinute = '00';
+    String selectedPeriod = 'AM';
+
+    final oldTime = _lead.registrationTime.trim();
+    final match = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
+            caseSensitive: false)
+        .firstMatch(oldTime);
+
+    if (match != null) {
+      selectedHour = match.group(1)!;
+      selectedMinute = match.group(2)!;
+      selectedPeriod = match.group(3)!.toUpperCase();
+    }
+
+    final regIdController = TextEditingController(text: regId);
+    final regDateController = TextEditingController(text: regDate);
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Registration details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: regId,
-              decoration: const InputDecoration(labelText: 'Registration ID'),
-            ),
-            TextField(
-              controller: regDate,
-              decoration: const InputDecoration(labelText: 'Registration Date'),
-            ),
-            TextField(
-              controller: regTime,
-              decoration: const InputDecoration(labelText: 'Registration Time'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            Future<void> pickDate() async {
+              final now = DateTime.now();
+
+              final picked = await showDatePicker(
+                context: ctx,
+                initialDate: now,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+              );
+
+              if (picked == null) return;
+
+              final formatted =
+                  '${picked.year.toString().padLeft(4, '0')}-'
+                  '${picked.month.toString().padLeft(2, '0')}-'
+                  '${picked.day.toString().padLeft(2, '0')}';
+
+              setDialogState(() {
+                regDateController.text = formatted;
+              });
+            }
+
+            return AlertDialog(
+              title: const Text('Registration details'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: regIdController,
+                      decoration: const InputDecoration(
+                        labelText: 'Registration ID',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: regDateController,
+                      readOnly: true,
+                      onTap: pickDate,
+                      decoration: InputDecoration(
+                        labelText: 'Registration Date',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_month),
+                          onPressed: pickDate,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedHour,
+                            decoration: const InputDecoration(
+                              labelText: 'Hour',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: List.generate(12, (i) {
+                              final v = '${i + 1}';
+                              return DropdownMenuItem(
+                                value: v,
+                                child: Text(v),
+                              );
+                            }),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setDialogState(() => selectedHour = v);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedMinute,
+                            decoration: const InputDecoration(
+                              labelText: 'Min',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: List.generate(60, (i) {
+                              final v = i.toString().padLeft(2, '0');
+                              return DropdownMenuItem(
+                                value: v,
+                                child: Text(v),
+                              );
+                            }),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setDialogState(() => selectedMinute = v);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: selectedPeriod,
+                            decoration: const InputDecoration(
+                              labelText: 'AM/PM',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'AM',
+                                child: Text('AM'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'PM',
+                                child: Text('PM'),
+                              ),
+                            ],
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setDialogState(() => selectedPeriod = v);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
-    final idVal = regId.text.trim();
-    final dateVal = regDate.text.trim();
-    final timeVal = regTime.text.trim();
-    regId.dispose();
-    regDate.dispose();
-    regTime.dispose();
+    regId = regIdController.text.trim();
+    regDate = regDateController.text.trim();
+    final regTime = '$selectedHour:$selectedMinute $selectedPeriod';
+
+    regIdController.dispose();
+    regDateController.dispose();
 
     if (saved != true) return;
 
+    if (regDate.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select registration date')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => loading = true);
+
     try {
       await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
-        'registration_id': idVal,
-        'registration_date': dateVal,
-        'registration_time': timeVal,
+        'registration_id': regId,
+        'registration_date': regDate,
+        'registration_time': regTime,
       });
+
+      await _reloadSilently();
+
+      if (!mounted) return;
+
       ref.invalidate(allLeadsProvider);
-      await _load();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registration details saved')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
+      if (!mounted) return;
+
+      setState(() => loading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
@@ -193,6 +378,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     final roleName = auth.user?.roleName ?? '';
     final nextStatuses = _resolveNextStatuses(roleName);
     final files = collectLeadFiles(_lead);
+
     final customerName =
         _lead.fullName.trim().isEmpty ? 'Customer' : _lead.fullName;
 
@@ -232,6 +418,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                 const SizedBox(height: 14),
                 WorkflowStepper(currentStatus: _lead.status),
                 const SizedBox(height: 14),
+
                 if (auth.appRole == 'installation') ...[
                   OutlinedButton.icon(
                     onPressed: loading
@@ -244,7 +431,12 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                                     InstallationFormScreen(lead: _lead),
                               ),
                             );
-                            if (ok == true) _load();
+
+                            if (ok == true && mounted) {
+                              setState(() => loading = true);
+                              await _reloadSilently();
+                              if (mounted) ref.invalidate(allLeadsProvider);
+                            }
                           },
                     icon: const Icon(Icons.build_circle_outlined),
                     label: Text(
@@ -255,14 +447,16 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
+
                 if (auth.appRole == 'support' &&
                     !_lead.hasRegistrationDetails) ...[
                   OutlinedButton(
-                    onPressed: _saveRegistration,
+                    onPressed: loading ? null : _saveRegistration,
                     child: const Text('Add registration details'),
                   ),
                   const SizedBox(height: 12),
                 ],
+
                 _section('Customer Details', [
                   _row('Full Name', _lead.fullName),
                   _row('Lead Code', _lead.leadCode),
@@ -273,6 +467,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                   _row('State', _lead.state),
                   _row('Pincode', _lead.pincode),
                 ]),
+
                 _section('Workflow', [
                   _row('Status', _lead.status),
                   _row('Department', _lead.currentDepartment),
@@ -280,6 +475,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                   _row('Priority', _lead.priority),
                   _row('Workflow Step', _lead.workflowStep),
                 ]),
+
                 _section('Connection & Bank', [
                   _row('CA Number', _lead.caNumber),
                   _row('K Number', _lead.kNumber),
@@ -288,19 +484,26 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                   _row('Account', _lead.accountNumber),
                   _row('IFSC', _lead.ifscCode),
                 ]),
+
+                if (_lead.hasRegistrationDetails)
+                  _section('Registration', [
+                    _row('Registration ID', _lead.registrationId),
+                    _row('Registration Date', _lead.registrationDate),
+                    _row('Registration Time', _lead.registrationTime),
+                  ]),
+
                 _section('Uploaded Files & Images', [
                   LeadAttachmentsView(files: files),
                 ]),
-                if (_lead.notes.isNotEmpty)
+
+                if (_lead.notes.trim().isNotEmpty)
                   _section('Notes', [_row('Notes', _lead.notes)]),
+
                 if (nextStatuses.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   const Text(
                     'Status actions',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),
                   ...nextStatuses.map((status) {
@@ -309,9 +512,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: loading
-                              ? null
-                              : () => _advanceStatus(status),
+                          onPressed:
+                              loading ? null : () => _advanceStatus(status),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primaryColor,
                             foregroundColor: Colors.white,
@@ -321,7 +523,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                             ),
                           ),
                           child: Text(
-                            LeadWorkflow.nextActionLabel(status),
+                            LeadWorkflow.nextActionLabel(_lead.status),
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -329,15 +531,14 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     );
                   }),
                 ],
+
                 const SizedBox(height: 16),
                 const Text(
                   'Status history',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
+
                 if (history.isEmpty)
                   const Text(
                     'No history yet',
@@ -393,12 +594,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   }
 
   Widget _historyTile(Map<String, dynamic> h) {
-    final status = h['new_status']?.toString() ??
-        h['status']?.toString() ??
-        'Update';
+    final status =
+        h['new_status']?.toString() ?? h['status']?.toString() ?? 'Update';
     final old = h['old_status']?.toString();
-    final remarks =
-        h['remarks']?.toString() ?? h['notes']?.toString() ?? '';
+    final remarks = h['remarks']?.toString() ?? h['notes']?.toString() ?? '';
     final when = h['created_at']?.toString() ?? '';
     final user = h['user'] is Map
         ? (h['user'] as Map)['name']?.toString()
@@ -421,7 +620,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
             if (user != null && user.isNotEmpty)
               Text('By: $user', style: const TextStyle(fontSize: 11)),
             if (when.isNotEmpty)
-              Text(when, style: const TextStyle(fontSize: 11, color: Colors.black45)),
+              Text(
+                when,
+                style: const TextStyle(fontSize: 11, color: Colors.black45),
+              ),
           ],
         ),
       ),
@@ -458,13 +660,14 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
   Widget _row(String label, String value) {
     if (value.trim().isEmpty) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 125,
             child: Text(
               '$label:',
               style: const TextStyle(fontWeight: FontWeight.bold),

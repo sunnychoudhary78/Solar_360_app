@@ -1,24 +1,32 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/utils/upload_url.dart';
 import '../utils/lead_files.dart';
 
 class LeadAttachmentsView extends StatelessWidget {
   final List<LeadFileItem> files;
 
-  const LeadAttachmentsView({super.key, required this.files});
+  const LeadAttachmentsView({
+    super.key,
+    required this.files,
+  });
 
   Future<void> _openFile(BuildContext context, LeadFileItem item) async {
-    if (item.url.startsWith('http')) {
-      await OpenFilex.open(item.url);
+    final uri = Uri.tryParse(item.url);
+
+    if (uri == null || item.url.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('File URL not found')),
+      );
       return;
     }
-    if (File(item.path).existsSync()) {
-      await OpenFilex.open(item.path);
-    } else if (context.mounted) {
+
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!opened && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open file')),
       );
@@ -84,7 +92,7 @@ class LeadAttachmentsView extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        fileDisplayName(item.path),
+                        item.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

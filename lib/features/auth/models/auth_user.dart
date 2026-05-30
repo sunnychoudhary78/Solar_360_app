@@ -57,22 +57,41 @@ class AuthState {
 
   bool hasPermission(String permission) => permissions.contains(permission);
 
-  bool hasAnyPermission(List<String> perms) =>
-      perms.any((p) => permissions.contains(p));
+  bool hasAnyPermission(List<String> perms) {
+    return perms.any((p) => permissions.contains(p));
+  }
 
   String get appRole {
     final name = user?.roleName ?? '';
-    final lower = name.toLowerCase();
-    if (lower.contains('admin') || lower.contains('super')) return 'admin';
-    if (lower == 'sales') return 'sales';
-    if (lower == 'support') return 'support';
-    if (lower == 'liaison officer' || lower == 'liaising' || lower == 'leasing') {
+    final lower = name.trim().toLowerCase();
+
+    if (lower.contains('admin') || lower.contains('super')) {
+      return 'admin';
+    }
+
+    if (lower == 'sales') {
+      return 'sales';
+    }
+
+    if (lower == 'support') {
+      return 'support';
+    }
+
+    if (lower == 'liaising' ||
+        lower == 'liaison officer' ||
+        lower == 'liaison' ||
+        lower == 'leasing') {
       return 'liaison';
     }
-    if (lower == 'finance') return 'finance';
+
+    if (lower == 'finance') {
+      return 'finance';
+    }
+
     if (lower == 'installation team' || lower == 'installation') {
       return 'installation';
     }
+
     return 'sales';
   }
 

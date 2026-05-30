@@ -11,7 +11,6 @@ import '../../leads/providers/lead_provider.dart';
 import '../../leads/widgets/leads_table.dart';
 import '../../notifications/screens/notifications_screen.dart';
 
-/// Dynamic workflow desk — loads leads from API (scoped by backend role).
 class WorkflowTeamScreen extends ConsumerStatefulWidget {
   final String? titleOverride;
 
@@ -31,9 +30,8 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
   int selectedPage = 0;
 
   String get _title {
-    if (widget.titleOverride != null) return widget.titleOverride!;
     final auth = ref.read(authProvider);
-    return RoleUtils.displayTitle(auth.appRole);
+    return widget.titleOverride ?? RoleUtils.displayTitle(auth.appRole);
   }
 
   @override
@@ -96,18 +94,56 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                     ),
                   ),
                 ),
-                data: (leads) => _dashboard(leads, auth.user?.roleName ?? ''),
+                data: (leads) {
+                  final roleName = auth.user?.roleName ?? '';
+                  final filteredLeads = _filterLeadsForRole(leads, roleName);
+
+                  return _dashboard(filteredLeads, roleName);
+                },
               ),
       ),
     );
   }
 
+  List<LeadModel> _filterLeadsForRole(List<LeadModel> leads, String roleName) {
+    if (LeadWorkflow.isAdminRole(roleName)) {
+      return leads;
+    }
+
+    final roleKey = LeadWorkflow.resolveRoleKey(roleName);
+    final department = _departmentForRole(roleKey);
+
+    if (department == null) return [];
+
+    return leads.where((lead) {
+      final leadDepartment = lead.currentDepartment.trim().toLowerCase();
+      return leadDepartment == department.toLowerCase();
+    }).toList();
+  }
+
+  String? _departmentForRole(String roleKey) {
+    switch (roleKey) {
+      case 'Sales':
+        return 'Sales';
+      case 'Support':
+        return 'Support';
+      case 'Liaising':
+        return 'Liaising';
+      case 'Finance':
+        return 'Finance';
+      case 'Installation':
+        return 'Installation';
+      default:
+        return null;
+    }
+  }
+
   Widget _dashboard(List<LeadModel> leads, String roleName) {
     final active = leads.where((l) => l.isActive).length;
-    final completed = leads
-        .where((l) =>
-            l.status == 'Lead Completed' || l.status == 'Lead Closed')
-        .length;
+
+    final completed = leads.where((l) {
+      return l.status == 'Lead Completed' || l.status == 'Lead Closed';
+    }).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -169,6 +205,8 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
     required int completed,
     required String roleName,
   }) {
+    final resolvedRole = LeadWorkflow.resolveRoleKey(roleName);
+
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -195,7 +233,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Role: ${LeadWorkflow.resolveRoleKey(roleName)}',
+            'Role: $resolvedRole',
             style: const TextStyle(color: Colors.white60, fontSize: 13),
           ),
         ],
@@ -242,8 +280,11 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
         child: Column(
           children: [
             const SizedBox(height: 28),
-            const Icon(Icons.solar_power_rounded,
-                size: 72, color: primaryColor),
+            const Icon(
+              Icons.solar_power_rounded,
+              size: 72,
+              color: primaryColor,
+            ),
             const SizedBox(height: 12),
             Text(
               auth.user?.name ?? _title,
@@ -258,15 +299,24 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
             ),
             const SizedBox(height: 32),
             ListTile(
-              leading: const Icon(Icons.dashboard_outlined, color: primaryColor),
-              title: const Text('Pipeline', style: TextStyle(fontWeight: FontWeight.bold)),
+              leading: const Icon(
+                Icons.dashboard_outlined,
+                color: primaryColor,
+              ),
+              title: const Text(
+                'Pipeline',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 setState(() => selectedPage = 0);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.notifications_none, color: primaryColor),
+              leading: const Icon(
+                Icons.notifications_none,
+                color: primaryColor,
+              ),
               title: const Text('Notifications'),
               onTap: () {
                 Navigator.pop(context);
@@ -276,7 +326,10 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
             const Spacer(),
             ListTile(
               leading: const Icon(Icons.logout_rounded, color: primaryColor),
-              title: const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text(
+                'Logout',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               onTap: () async {
                 Navigator.pop(context);
                 await AuthSession.logout(context, ref);

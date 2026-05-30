@@ -1,6 +1,5 @@
 import '../workflow/lead_workflow.dart';
 
-/// Maps backend role names to app navigation keys.
 class RoleUtils {
   RoleUtils._();
 
@@ -11,11 +10,19 @@ class RoleUtils {
     if (LeadWorkflow.isAdminRole(key)) return 'admin';
     if (lower == 'sales') return 'sales';
     if (lower == 'support') return 'support';
-    if (lower == 'liaison officer' || lower == 'liaising') return 'liaison';
+
+    if (lower == 'liaising' ||
+        lower == 'liaison officer' ||
+        lower == 'liaison') {
+      return 'liaison';
+    }
+
     if (lower == 'finance') return 'finance';
+
     if (lower == 'installation team' || lower == 'installation') {
       return 'installation';
     }
+
     return lower.isEmpty ? 'sales' : lower;
   }
 
@@ -26,7 +33,7 @@ class RoleUtils {
       case 'support':
         return 'Support Team';
       case 'liaison':
-        return 'Liaison Officer';
+        return 'Liaising Team';
       case 'finance':
         return 'Finance Team';
       case 'installation':

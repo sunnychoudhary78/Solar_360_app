@@ -2,30 +2,49 @@ import 'package:flutter/material.dart';
 
 import '../../../core/workflow/lead_workflow.dart';
 
-/// Visual pipeline matching the CSPL workflow table.
 class WorkflowStepper extends StatelessWidget {
   final String currentStatus;
 
-  const WorkflowStepper({super.key, required this.currentStatus});
+  const WorkflowStepper({
+    super.key,
+    required this.currentStatus,
+  });
 
   static const _milestones = [
     'New Lead',
+    'KYC Collected',
     'Sent To Support',
     'Documents Submitted',
     'Liaison Completed',
     'Loan Approved',
     'Installation Done',
     'Government Approval Completed',
+    'Lead Completed',
     'Lead Closed',
   ];
 
   int _currentIndex() {
-    final idx = _milestones.indexOf(currentStatus);
-    if (idx >= 0) return idx;
-    final all = LeadWorkflow.nextStatus.keys.toList();
-    final pos = all.indexOf(currentStatus);
-    if (pos < 0) return 0;
-    return (pos * (_milestones.length - 1) / (all.length - 1)).round();
+    final milestoneIndex = _milestones.indexOf(currentStatus);
+
+    if (milestoneIndex >= 0) {
+      return milestoneIndex;
+    }
+
+    final allStatuses = [
+      ...LeadWorkflow.nextStatus.keys,
+      'Lead Closed',
+    ];
+
+    final statusIndex = allStatuses.indexOf(currentStatus);
+
+    if (statusIndex < 0) {
+      return 0;
+    }
+
+    return (statusIndex *
+            (_milestones.length - 1) /
+            (allStatuses.length - 1))
+        .round();
   }
 
   @override
@@ -56,6 +75,7 @@ class WorkflowStepper extends StatelessWidget {
               children: List.generate(_milestones.length, (i) {
                 final done = i <= current;
                 final active = i == current;
+
                 return Row(
                   children: [
                     Column(
