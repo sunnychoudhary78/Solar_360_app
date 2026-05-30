@@ -7,22 +7,27 @@ String resolveUploadUrl(String? value) {
   if (s.isEmpty) return '';
 
   if (s.startsWith('http://') || s.startsWith('https://')) {
-    return s;
+    return s.replaceAll('/uploads/', '/api/uploads/');
   }
 
   final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api$'), '');
 
-  var normalized = s.replaceAll('\\', '/');
+  var normalized = s.replaceAll('\\', '/').trim();
+
   normalized = normalized.replaceFirst(RegExp(r'^/'), '');
+  normalized = normalized.replaceFirst(RegExp(r'^api/uploads/'), '');
   normalized = normalized.replaceFirst(RegExp(r'^uploads/'), '');
 
-  return '$base/uploads/$normalized';
+  return '$base/api/uploads/$normalized';
 }
 
 bool isImagePath(String? path) {
   if (path == null || path.isEmpty) return false;
-  return RegExp(r'\.(jpg|jpeg|png|gif|webp)$', caseSensitive: false)
-      .hasMatch(path);
+
+  return RegExp(
+    r'\.(jpg|jpeg|png|gif|webp)$',
+    caseSensitive: false,
+  ).hasMatch(path);
 }
 
 bool isPdfPath(String? path) {
@@ -32,6 +37,7 @@ bool isPdfPath(String? path) {
 
 String fileDisplayName(String? path) {
   if (path == null || path.isEmpty) return 'File';
+
   final s = path.replaceAll('\\', '/');
   return s.split('/').last;
 }

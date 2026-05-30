@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/workflow/lead_workflow.dart';
-
 class WorkflowStepper extends StatelessWidget {
   final String currentStatus;
 
@@ -10,41 +8,43 @@ class WorkflowStepper extends StatelessWidget {
     required this.currentStatus,
   });
 
-  static const _milestones = [
+  static const Color primaryColor = Color(0xFF5663A0);
+
+  static const List<String> _steps = [
     'New Lead',
     'KYC Collected',
+    'Documents Verification Started',
+    'Documents Verified',
     'Sent To Support',
+    'Registration Completed',
     'Documents Submitted',
+    'Liaison Started',
     'Liaison Completed',
+    'Loan Processing Started',
     'Loan Approved',
+    'Ready For Installation',
+    'Installation Started',
     'Installation Done',
+    'Inspection Scheduled',
+    'Inspection Completed',
+    'Government Approval Started',
     'Government Approval Completed',
+    'Subsidy Process Started',
+    'Subsidy Released',
     'Lead Completed',
     'Lead Closed',
   ];
 
   int _currentIndex() {
-    final milestoneIndex = _milestones.indexOf(currentStatus);
+    final normalizedCurrent = currentStatus.trim().toLowerCase();
 
-    if (milestoneIndex >= 0) {
-      return milestoneIndex;
-    }
+    final index = _steps.indexWhere(
+      (step) => step.trim().toLowerCase() == normalizedCurrent,
+    );
 
-    final allStatuses = [
-      ...LeadWorkflow.nextStatus.keys,
-      'Lead Closed',
-    ];
+    if (index >= 0) return index;
 
-    final statusIndex = allStatuses.indexOf(currentStatus);
-
-    if (statusIndex < 0) {
-      return 0;
-    }
-
-    return (statusIndex *
-            (_milestones.length - 1) /
-            (allStatuses.length - 1))
-        .round();
+    return 0;
   }
 
   @override
@@ -65,14 +65,23 @@ class WorkflowStepper extends StatelessWidget {
             'Workflow progress',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: Color(0xFF5663A0),
+              color: primaryColor,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            currentStatus.trim().isEmpty ? 'No status' : currentStatus,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: List.generate(_milestones.length, (i) {
+              children: List.generate(_steps.length, (i) {
                 final done = i <= current;
                 final active = i == current;
 
@@ -82,23 +91,29 @@ class WorkflowStepper extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 14,
-                          backgroundColor: done
-                              ? const Color(0xFF5663A0)
-                              : const Color(0xFFE4E1EA),
-                          child: Text(
-                            '${i + 1}',
-                            style: TextStyle(
-                              color: done ? Colors.white : Colors.black45,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          backgroundColor:
+                              done ? primaryColor : const Color(0xFFE4E1EA),
+                          child: active
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 15,
+                                )
+                              : Text(
+                                  '${i + 1}',
+                                  style: TextStyle(
+                                    color:
+                                        done ? Colors.white : Colors.black45,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                         const SizedBox(height: 4),
                         SizedBox(
-                          width: 72,
+                          width: 82,
                           child: Text(
-                            _milestones[i],
+                            _steps[i],
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -106,21 +121,19 @@ class WorkflowStepper extends StatelessWidget {
                               fontSize: 9,
                               fontWeight:
                                   active ? FontWeight.bold : FontWeight.normal,
-                              color: active
-                                  ? const Color(0xFF5663A0)
-                                  : Colors.black54,
+                              color: active ? primaryColor : Colors.black54,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    if (i < _milestones.length - 1)
+                    if (i < _steps.length - 1)
                       Container(
-                        width: 24,
+                        width: 22,
                         height: 2,
                         margin: const EdgeInsets.only(bottom: 20),
                         color: i < current
-                            ? const Color(0xFF5663A0)
+                            ? primaryColor
                             : const Color(0xFFE4E1EA),
                       ),
                   ],

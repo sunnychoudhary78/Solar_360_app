@@ -32,7 +32,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   void initState() {
     super.initState();
     _lead = widget.lead;
-    _load();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
   }
 
   Future<void> _load() async {
@@ -44,19 +47,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     });
 
     try {
-      final repo = ref.read(leadRepositoryProvider);
-      final fresh = await repo.getLeadById(_lead.id);
-      final hist = await repo.getLeadHistory(_lead.id);
-      final next = await repo.getAllowedNextStatuses(_lead.id);
-
-      if (!mounted) return;
-
-      setState(() {
-        _lead = fresh;
-        history = hist;
-        allowedNext = next;
-        loading = false;
-      });
+      await _reloadSilently();
     } catch (e) {
       if (!mounted) return;
 
@@ -69,6 +60,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
   Future<void> _reloadSilently() async {
     final repo = ref.read(leadRepositoryProvider);
+
     final fresh = await repo.getLeadById(_lead.id);
     final hist = await repo.getLeadHistory(_lead.id);
     final next = await repo.getAllowedNextStatuses(_lead.id);
@@ -80,6 +72,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       history = hist;
       allowedNext = next;
       loading = false;
+      loadError = null;
     });
   }
 
@@ -97,7 +90,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) {
+      barrierDismissible: false,
+      builder: (dialogContext) {
         return AlertDialog(
           title: Text('Update to "$nextStatus"?'),
           content: TextField(
@@ -110,11 +104,11 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Confirm'),
             ),
           ],
@@ -122,31 +116,54 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       },
     );
 
-    if (confirmed != true) {
-      remarksController.dispose();
-      return;
-    }
-
     final remarks = remarksController.text.trim();
     remarksController.dispose();
 
-    if (!mounted) return;
-    setState(() => loading = true);
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    setState(() {
+      loading = true;
+      loadError = null;
+    });
 
     try {
-      await ref.read(leadRepositoryProvider).updateLeadStatus(
+      final updatedLead = await ref.read(leadRepositoryProvider).updateLeadStatus(
             leadId: _lead.id,
             status: nextStatus,
             remarks: remarks,
           );
 
-      await _reloadSilently();
+      ref.invalidate(allLeadsProvider);
 
       if (!mounted) return;
 
-      ref.invalidate(allLeadsProvider);
+      if (updatedLead != null) {
+        setState(() {
+          _lead = updatedLead;
+        });
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      try {
+        await _reloadSilently();
+      } catch (_) {
+        if (!mounted) return;
+
+        setState(() => loading = false);
+
+        messenger.showSnackBar(
+          SnackBar(content: Text('Status updated to $nextStatus')),
+        );
+
+        navigator.pop(true);
+        return;
+      }
+
+      if (!mounted) return;
+
+      messenger.showSnackBar(
         SnackBar(content: Text('Status updated to $nextStatus')),
       );
     } catch (e) {
@@ -154,7 +171,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       setState(() => loading = false);
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
     }
@@ -168,9 +185,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     String selectedPeriod = 'AM';
 
     final oldTime = _lead.registrationTime.trim();
-    final match = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
-            caseSensitive: false)
-        .firstMatch(oldTime);
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
+      caseSensitive: false,
+    ).firstMatch(oldTime);
 
     if (match != null) {
       selectedHour = match.group(1)!;
@@ -184,7 +202,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     final saved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) {
+      builder: (dialogContext) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             Future<void> pickDate() async {
@@ -289,14 +307,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                               border: OutlineInputBorder(),
                             ),
                             items: const [
-                              DropdownMenuItem(
-                                value: 'AM',
-                                child: Text('AM'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'PM',
-                                child: Text('PM'),
-                              ),
+                              DropdownMenuItem(value: 'AM', child: Text('AM')),
+                              DropdownMenuItem(value: 'PM', child: Text('PM')),
                             ],
                             onChanged: (v) {
                               if (v == null) return;
@@ -311,11 +323,11 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, true),
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
                   child: const Text('Save'),
                 ),
               ],
@@ -332,31 +344,43 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     regIdController.dispose();
     regDateController.dispose();
 
-    if (saved != true) return;
+    if (saved != true || !mounted) return;
 
     if (regDate.isEmpty) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select registration date')),
       );
       return;
     }
 
-    if (!mounted) return;
-    setState(() => loading = true);
+    setState(() {
+      loading = true;
+      loadError = null;
+    });
 
     try {
-      await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
-        'registration_id': regId,
-        'registration_date': regDate,
-        'registration_time': regTime,
-      });
+      final updatedLead = await ref.read(leadRepositoryProvider).updateLead(
+        _lead.id,
+        {
+          'registration_id': regId,
+          'registration_date': regDate,
+          'registration_time': regTime,
+        },
+      );
+
+      ref.invalidate(allLeadsProvider);
+
+      if (!mounted) return;
+
+      if (updatedLead != null) {
+        setState(() {
+          _lead = updatedLead;
+        });
+      }
 
       await _reloadSilently();
 
       if (!mounted) return;
-
-      ref.invalidate(allLeadsProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Registration details saved')),
@@ -382,172 +406,209 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     final customerName =
         _lead.fullName.trim().isEmpty ? 'Customer' : _lead.fullName;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
-      appBar: AppBar(
+    return PopScope(
+      canPop: !loading,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && loading) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please wait, update is processing')),
+          );
+        }
+      },
+      child: Scaffold(
         backgroundColor: const Color(0xFFF7F8FC),
-        elevation: 0,
-        foregroundColor: const Color(0xFF1F2028),
-        title: Text(
-          customerName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            onPressed: loading ? null : _load,
-            icon: const Icon(Icons.refresh),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFF7F8FC),
+          elevation: 0,
+          foregroundColor: const Color(0xFF1F2028),
+          title: Text(
+            customerName,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-        ],
-      ),
-      body: loading && history.isEmpty && loadError == null
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (loadError != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(loadError!),
-                  ),
-                _headerCard(customerName),
-                const SizedBox(height: 14),
-                WorkflowStepper(currentStatus: _lead.status),
-                const SizedBox(height: 14),
-
-                if (auth.appRole == 'installation') ...[
-                  OutlinedButton.icon(
-                    onPressed: loading
-                        ? null
-                        : () async {
-                            final ok = await Navigator.push<bool>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    InstallationFormScreen(lead: _lead),
-                              ),
-                            );
-
-                            if (ok == true && mounted) {
-                              setState(() => loading = true);
-                              await _reloadSilently();
-                              if (mounted) ref.invalidate(allLeadsProvider);
-                            }
-                          },
-                    icon: const Icon(Icons.build_circle_outlined),
-                    label: Text(
-                      _lead.hasInstallationDetails
-                          ? 'Edit Installation Details'
-                          : 'Fill Installation Details (required)',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                if (auth.appRole == 'support' &&
-                    !_lead.hasRegistrationDetails) ...[
-                  OutlinedButton(
-                    onPressed: loading ? null : _saveRegistration,
-                    child: const Text('Add registration details'),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                _section('Customer Details', [
-                  _row('Full Name', _lead.fullName),
-                  _row('Lead Code', _lead.leadCode),
-                  _row('Mobile', _lead.mobile),
-                  _row('Email', _lead.email),
-                  _row('Address', _lead.address),
-                  _row('City', _lead.city),
-                  _row('State', _lead.state),
-                  _row('Pincode', _lead.pincode),
-                ]),
-
-                _section('Workflow', [
-                  _row('Status', _lead.status),
-                  _row('Department', _lead.currentDepartment),
-                  _row('Stage', _lead.leadStage),
-                  _row('Priority', _lead.priority),
-                  _row('Workflow Step', _lead.workflowStep),
-                ]),
-
-                _section('Connection & Bank', [
-                  _row('CA Number', _lead.caNumber),
-                  _row('K Number', _lead.kNumber),
-                  _row('Discom', _lead.discom),
-                  _row('Bank', _lead.bankName),
-                  _row('Account', _lead.accountNumber),
-                  _row('IFSC', _lead.ifscCode),
-                ]),
-
-                if (_lead.hasRegistrationDetails)
-                  _section('Registration', [
-                    _row('Registration ID', _lead.registrationId),
-                    _row('Registration Date', _lead.registrationDate),
-                    _row('Registration Time', _lead.registrationTime),
-                  ]),
-
-                _section('Uploaded Files & Images', [
-                  LeadAttachmentsView(files: files),
-                ]),
-
-                if (_lead.notes.trim().isNotEmpty)
-                  _section('Notes', [_row('Notes', _lead.notes)]),
-
-                if (nextStatuses.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Status actions',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  ...nextStatuses.map((status) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed:
-                              loading ? null : () => _advanceStatus(status),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
+          actions: [
+            IconButton(
+              onPressed: loading ? null : _load,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            loading && history.isEmpty && loadError == null
+                ? const Center(child: CircularProgressIndicator())
+                : ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      if (loadError != null)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text(
-                            LeadWorkflow.nextActionLabel(_lead.status),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          child: Text(loadError!),
+                        ),
+
+                      _headerCard(customerName),
+                      const SizedBox(height: 14),
+
+                      WorkflowStepper(currentStatus: _lead.status),
+                      const SizedBox(height: 14),
+
+                      if (auth.appRole == 'installation') ...[
+                        OutlinedButton.icon(
+                          onPressed: loading
+                              ? null
+                              : () async {
+                                  final ok = await Navigator.push<bool>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          InstallationFormScreen(lead: _lead),
+                                    ),
+                                  );
+
+                                  if (ok == true && mounted) {
+                                    ref.invalidate(allLeadsProvider);
+                                    setState(() => loading = true);
+                                    await _reloadSilently();
+                                  }
+                                },
+                          icon: const Icon(Icons.build_circle_outlined),
+                          label: Text(
+                            _lead.hasInstallationDetails
+                                ? 'Edit Installation Details'
+                                : 'Fill Installation Details (required)',
                           ),
                         ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      if (auth.appRole == 'support' &&
+                          !_lead.hasRegistrationDetails) ...[
+                        OutlinedButton(
+                          onPressed: loading ? null : _saveRegistration,
+                          child: const Text('Add registration details'),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      _section('Customer Details', [
+                        _row('Full Name', _lead.fullName),
+                        _row('Lead Code', _lead.leadCode),
+                        _row('Mobile', _lead.mobile),
+                        _row('Email', _lead.email),
+                        _row('Address', _lead.address),
+                        _row('City', _lead.city),
+                        _row('State', _lead.state),
+                        _row('Pincode', _lead.pincode),
+                      ]),
+
+                      _section('Workflow', [
+                        _row('Status', _lead.status),
+                        _row('Department', _lead.currentDepartment),
+                        _row('Stage', _lead.leadStage),
+                        _row('Priority', _lead.priority),
+                        _row('Workflow Step', _lead.workflowStep),
+                      ]),
+
+                      _section('Connection & Bank', [
+                        _row('CA Number', _lead.caNumber),
+                        _row('K Number', _lead.kNumber),
+                        _row('Discom', _lead.discom),
+                        _row('Bank', _lead.bankName),
+                        _row('Account', _lead.accountNumber),
+                        _row('IFSC', _lead.ifscCode),
+                      ]),
+
+                      if (_lead.hasRegistrationDetails)
+                        _section('Registration', [
+                          _row('Registration ID', _lead.registrationId),
+                          _row('Registration Date', _lead.registrationDate),
+                          _row('Registration Time', _lead.registrationTime),
+                        ]),
+
+                      _section('Uploaded Files & Images', [
+                        LeadAttachmentsView(files: files),
+                      ]),
+
+                      if (_lead.notes.trim().isNotEmpty)
+                        _section('Notes', [
+                          _row('Notes', _lead.notes),
+                        ]),
+
+                      if (nextStatuses.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Status actions',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ...nextStatuses.map((status) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed:
+                                    loading ? null : () => _advanceStatus(status),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: Text(
+                                  LeadWorkflow.nextActionLabel(_lead.status),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Status history',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    );
-                  }),
-                ],
+                      const SizedBox(height: 8),
 
-                const SizedBox(height: 16),
-                const Text(
-                  'Status history',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      if (history.isEmpty)
+                        const Text(
+                          'No history yet',
+                          style: TextStyle(color: Colors.black54),
+                        )
+                      else
+                        ...history.map(_historyTile),
+                    ],
+                  ),
+
+            if (loading && history.isNotEmpty)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
                 ),
-                const SizedBox(height: 8),
-
-                if (history.isEmpty)
-                  const Text(
-                    'No history yet',
-                    style: TextStyle(color: Colors.black54),
-                  )
-                else
-                  ...history.map(_historyTile),
-              ],
-            ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -596,9 +657,11 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   Widget _historyTile(Map<String, dynamic> h) {
     final status =
         h['new_status']?.toString() ?? h['status']?.toString() ?? 'Update';
+
     final old = h['old_status']?.toString();
     final remarks = h['remarks']?.toString() ?? h['notes']?.toString() ?? '';
     final when = h['created_at']?.toString() ?? '';
+
     final user = h['user'] is Map
         ? (h['user'] as Map)['name']?.toString()
         : h['user_name']?.toString();
@@ -610,15 +673,24 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
           backgroundColor: primaryColor.withValues(alpha: 0.12),
           child: const Icon(Icons.history, color: primaryColor, size: 20),
         ),
-        title: Text(status, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          status,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (old != null && old.isNotEmpty)
-              Text('From: $old', style: const TextStyle(fontSize: 12)),
+              Text(
+                'From: $old',
+                style: const TextStyle(fontSize: 12),
+              ),
             if (remarks.isNotEmpty) Text(remarks),
             if (user != null && user.isNotEmpty)
-              Text('By: $user', style: const TextStyle(fontSize: 11)),
+              Text(
+                'By: $user',
+                style: const TextStyle(fontSize: 11),
+              ),
             if (when.isNotEmpty)
               Text(
                 when,

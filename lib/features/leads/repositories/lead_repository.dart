@@ -34,9 +34,7 @@ class LeadRepository {
 
       if (additionalImagePaths != null && additionalImagePaths.isNotEmpty) {
         formDataMap['additional_images_files'] = await Future.wait(
-          additionalImagePaths
-              .where((f) => f.trim().isNotEmpty)
-              .map(
+          additionalImagePaths.where((f) => f.trim().isNotEmpty).map(
                 (f) => MultipartFile.fromFile(
                   f,
                   filename: _fileName(f),
@@ -48,9 +46,7 @@ class LeadRepository {
       if (additionalDocumentPaths != null &&
           additionalDocumentPaths.isNotEmpty) {
         formDataMap['additional_documents_files'] = await Future.wait(
-          additionalDocumentPaths
-              .where((f) => f.trim().isNotEmpty)
-              .map(
+          additionalDocumentPaths.where((f) => f.trim().isNotEmpty).map(
                 (f) => MultipartFile.fromFile(
                   f,
                   filename: _fileName(f),
@@ -84,37 +80,25 @@ class LeadRepository {
     }
   }
 
-  Map<String, dynamic> _extractLeadJson(dynamic data) {
-    dynamic lead = data;
-    if (data is Map) {
-      lead = data['data'] ?? data;
-    }
-    if (lead is Map && lead['dataValues'] is Map) {
-      lead = lead['dataValues'];
-    }
-    if (lead is! Map) {
-      throw Exception('Invalid lead response');
-    }
-    final map = Map<String, dynamic>.from(lead);
-    if (map['installationDetails'] is Map) {
-      map['installationDetails'] =
-          Map<String, dynamic>.from(map['installationDetails'] as Map);
-    }
-    return map;
-  }
-
   Future<List<Map<String, dynamic>>> getLeadHistory(String leadId) async {
     try {
       final response = await dio.get('/leads/$leadId/history');
       final data = response.data;
+
       if (data is Map && data['data'] is List) {
         return (data['data'] as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
             .toList();
       }
+
       if (data is List) {
-        return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        return data
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       }
+
       return [];
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
@@ -125,38 +109,58 @@ class LeadRepository {
     try {
       final response = await dio.get('/leads/$leadId');
       final data = response.data;
+
       if (data is Map && data['meta'] is Map) {
         final meta = data['meta'] as Map;
         final allowed = meta['allowedNextStatuses'];
+
         if (allowed is List) {
           return allowed.map((e) => e.toString()).toList();
         }
       }
-    } catch (_) {}
-    return [];
+
+      return [];
+    } catch (_) {
+      return [];
+    }
   }
 
-  Future<void> updateLeadStatus({
+  Future<LeadModel?> updateLeadStatus({
     required String leadId,
     required String status,
     String? remarks,
   }) async {
     try {
-      await dio.patch(
+      final response = await dio.patch(
         '/leads/$leadId/status',
         data: {
           'status': status,
-          if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+          if (remarks != null && remarks.trim().isNotEmpty)
+            'remarks': remarks.trim(),
         },
       );
+
+      try {
+        final leadJson = _extractLeadJson(response.data);
+        return LeadModel.fromJson(leadJson);
+      } catch (_) {
+        return null;
+      }
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
     }
   }
 
-  Future<void> updateLead(String leadId, Map<String, dynamic> data) async {
+  Future<LeadModel?> updateLead(String leadId, Map<String, dynamic> data) async {
     try {
-      await dio.put('/leads/$leadId', data: data);
+      final response = await dio.put('/leads/$leadId', data: data);
+
+      try {
+        final leadJson = _extractLeadJson(response.data);
+        return LeadModel.fromJson(leadJson);
+      } catch (_) {
+        return null;
+      }
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
     }
@@ -166,18 +170,51 @@ class LeadRepository {
     try {
       final response = await dio.get('/leads/workflow/meta');
       final data = response.data;
+
       if (data is Map && data['data'] is Map) {
         return Map<String, dynamic>.from(data['data'] as Map);
       }
+
       if (data is Map) return Map<String, dynamic>.from(data);
+
       return {};
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
     }
   }
 
+  Map<String, dynamic> _extractLeadJson(dynamic data) {
+    dynamic lead = data;
+
+    if (data is Map) {
+      lead = data['lead'] ?? data['data'] ?? data['result'] ?? data;
+    }
+
+    if (lead is Map && lead['lead'] is Map) {
+      lead = lead['lead'];
+    }
+
+    if (lead is Map && lead['dataValues'] is Map) {
+      lead = lead['dataValues'];
+    }
+
+    if (lead is! Map) {
+      throw Exception('Invalid lead response');
+    }
+
+    final map = Map<String, dynamic>.from(lead);
+
+    if (map['installationDetails'] is Map) {
+      map['installationDetails'] =
+          Map<String, dynamic>.from(map['installationDetails'] as Map);
+    }
+
+    return map;
+  }
+
   List<LeadModel> _parseLeadList(dynamic rawData) {
     final List data;
+
     if (rawData is List) {
       data = rawData;
     } else if (rawData is Map && rawData['data'] is List) {
@@ -189,18 +226,26 @@ class LeadRepository {
     }
 
     return data
+        .whereType<Map>()
         .map((item) => LeadModel.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
   String _handleDioError(DioException e) {
     final data = e.response?.data;
+
     if (data is Map && data['message'] != null) {
       return data['message'].toString();
     }
+
+    if (data is Map && data['error'] != null) {
+      return data['error'].toString();
+    }
+
     if (e.response?.statusCode != null) {
       return 'Request failed (${e.response?.statusCode})';
     }
+
     return e.message ?? 'Network error';
   }
 }

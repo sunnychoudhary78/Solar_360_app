@@ -11,12 +11,49 @@ class LeadAttachmentsView extends StatelessWidget {
     required this.files,
   });
 
-  Future<void> _openFile(BuildContext context, LeadFileItem item) async {
-    final uri = Uri.tryParse(item.url);
+  static const String _serverBaseUrl = 'http://192.168.1.16:3011';
 
-    if (uri == null || item.url.trim().isEmpty) {
+  String _fixedUrl(String url) {
+    var u = url.trim().replaceAll('\\', '/');
+
+    if (u.isEmpty) return '';
+
+    u = u.replaceFirst(RegExp(r'^https?://[^/]+/api/uploads/'), '/uploads/');
+    u = u.replaceFirst(RegExp(r'^https?://[^/]+/uploads/'), '/uploads/');
+
+    u = u.replaceFirst('/api/uploads/', '/uploads/');
+
+    if (u.startsWith('api/uploads/')) {
+      u = u.replaceFirst('api/uploads/', 'uploads/');
+    }
+
+    if (u.startsWith('uploads/')) {
+      u = '/$u';
+    }
+
+    if (!u.startsWith('http://') && !u.startsWith('https://')) {
+      if (!u.startsWith('/')) u = '/$u';
+      u = '$_serverBaseUrl$u';
+    }
+
+    return u;
+  }
+
+  Future<void> _openFile(BuildContext context, LeadFileItem item) async {
+    final fixedUrl = _fixedUrl(item.url);
+
+    if (fixedUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('File URL not found')),
+      );
+      return;
+    }
+
+    final uri = Uri.tryParse(fixedUrl);
+
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid file URL')),
       );
       return;
     }
@@ -49,6 +86,8 @@ class LeadAttachmentsView extends StatelessWidget {
       spacing: 12,
       runSpacing: 12,
       children: files.map((item) {
+        final fixedUrl = _fixedUrl(item.url);
+
         return InkWell(
           onTap: () => _openFile(context, item),
           borderRadius: BorderRadius.circular(14),
@@ -68,10 +107,13 @@ class LeadAttachmentsView extends StatelessWidget {
                   ),
                   child: SizedBox(
                     height: 100,
-                    child: item.isImage && item.url.isNotEmpty
+                    child: item.isImage && fixedUrl.isNotEmpty
                         ? Image.network(
-                            item.url,
+                            fixedUrl,
                             fit: BoxFit.cover,
+                            headers: const {
+                              'Accept': 'image/*,*/*',
+                            },
                             errorBuilder: (_, __, ___) => _fileIcon(item),
                           )
                         : _fileIcon(item),

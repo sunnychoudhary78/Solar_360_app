@@ -24,6 +24,20 @@ class LeadFileItem {
   }
 }
 
+String _fixedUploadUrl(String path) {
+  var url = resolveUploadUrl(path).trim().replaceAll('\\', '/');
+
+  if (url.isEmpty) return '';
+
+  // Backend only supports /api/uploads, not /uploads
+  url = url.replaceFirst('/uploads/', '/api/uploads/');
+
+  // Avoid duplicate api
+  url = url.replaceAll('/api/api/uploads/', '/api/uploads/');
+
+  return url;
+}
+
 List<LeadFileItem> collectLeadFiles(LeadModel lead) {
   final items = <LeadFileItem>[];
 
@@ -31,9 +45,9 @@ List<LeadFileItem> collectLeadFiles(LeadModel lead) {
     if (path == null || path.trim().isEmpty) return;
 
     final p = path.trim();
-    final url = resolveUploadUrl(p);
+    final url = _fixedUploadUrl(p);
 
-    if (url.trim().isEmpty) return;
+    if (url.isEmpty) return;
 
     items.add(
       LeadFileItem(
@@ -74,9 +88,9 @@ List<LeadFileItem> _parseExtraField(String prefix, dynamic raw) {
     try {
       decoded = jsonDecode(raw);
     } catch (_) {
-      final url = resolveUploadUrl(raw);
+      final url = _fixedUploadUrl(raw);
 
-      if (url.trim().isEmpty) return [];
+      if (url.isEmpty) return [];
 
       return [
         LeadFileItem(
@@ -97,22 +111,28 @@ List<LeadFileItem> _parseExtraField(String prefix, dynamic raw) {
   for (var i = 0; i < decoded.length; i++) {
     final entry = decoded[i];
 
-    if (entry is! Map) continue;
+    String title = '';
+    String file = '';
 
-    final title = entry['title']?.toString().trim();
-    final file = entry['file']?.toString().trim() ??
-        entry['path']?.toString().trim() ??
-        '';
+    if (entry is Map) {
+      title = entry['title']?.toString().trim() ?? '';
+      file = entry['file']?.toString().trim() ??
+          entry['path']?.toString().trim() ??
+          entry['url']?.toString().trim() ??
+          '';
+    } else if (entry is String) {
+      file = entry.trim();
+    }
 
     if (file.isEmpty) continue;
 
-    final url = resolveUploadUrl(file);
+    final url = _fixedUploadUrl(file);
 
-    if (url.trim().isEmpty) continue;
+    if (url.isEmpty) continue;
 
     out.add(
       LeadFileItem(
-        label: title == null || title.isEmpty ? '$prefix ${i + 1}' : title,
+        label: title.isEmpty ? '$prefix ${i + 1}' : title,
         path: file,
         url: url,
         isImage: isImagePath(file),
