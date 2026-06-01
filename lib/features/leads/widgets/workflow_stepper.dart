@@ -17,8 +17,12 @@ class WorkflowStepper extends StatelessWidget {
     'Documents Verified',
     'Sent To Support',
     'Registration Completed',
+    'Sent To Portal',
+    'Portal Processing Started',
+    'Loan Application Initiated',
     'Documents Submitted',
-    'Liaison Started',
+    'Liaison Process Started',
+    'Bank Coordination',
     'Liaison Completed',
     'Loan Processing Started',
     'Loan Approved',
@@ -35,11 +39,55 @@ class WorkflowStepper extends StatelessWidget {
     'Lead Closed',
   ];
 
+  static const Map<String, String> _aliases = {
+    'start loan application': 'Loan Application Initiated',
+    'loan application started': 'Loan Application Initiated',
+    'loan application initiated': 'Loan Application Initiated',
+
+    'liaison started': 'Liaison Process Started',
+    'liaison process started': 'Liaison Process Started',
+    'liaison process': 'Liaison Process Started',
+
+    'bank coordination': 'Bank Coordination',
+
+    'send to portal': 'Sent To Portal',
+    'sent to portal': 'Sent To Portal',
+
+    'portal processing': 'Portal Processing Started',
+    'portal processing started': 'Portal Processing Started',
+
+    'documents submitted': 'Documents Submitted',
+    'document submitted': 'Documents Submitted',
+
+    'kyc collected': 'KYC Collected',
+
+    'government approval completed': 'Government Approval Completed',
+    'govt approval completed': 'Government Approval Completed',
+
+    'installation done': 'Installation Done',
+    'lead completed': 'Lead Completed',
+    'lead closed': 'Lead Closed',
+  };
+
+  String _clean(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  String _displayStepName(String status) {
+    final cleaned = _clean(status);
+    return _aliases[cleaned] ?? status.trim();
+  }
+
   int _currentIndex() {
-    final normalizedCurrent = currentStatus.trim().toLowerCase();
+    final normalizedStatus = _clean(_displayStepName(currentStatus));
 
     final index = _steps.indexWhere(
-      (step) => step.trim().toLowerCase() == normalizedCurrent,
+      (step) => _clean(step) == normalizedStatus,
     );
 
     if (index >= 0) return index;
@@ -50,6 +98,9 @@ class WorkflowStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = _currentIndex();
+    final displayStatus = currentStatus.trim().isEmpty
+        ? 'No status'
+        : _displayStepName(currentStatus);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -70,7 +121,7 @@ class WorkflowStepper extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            currentStatus.trim().isEmpty ? 'No status' : currentStatus,
+            displayStatus,
             style: const TextStyle(
               fontSize: 12,
               color: Colors.black54,
@@ -111,7 +162,7 @@ class WorkflowStepper extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         SizedBox(
-                          width: 82,
+                          width: 88,
                           child: Text(
                             _steps[i],
                             textAlign: TextAlign.center,

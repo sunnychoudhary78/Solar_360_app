@@ -25,6 +25,7 @@ class LeadRepository {
         for (final entry in singleFilePaths.entries) {
           final filePath = entry.value.trim();
           if (filePath.isEmpty) continue;
+
           formDataMap[entry.key] = await MultipartFile.fromFile(
             filePath,
             filename: _fileName(filePath),
@@ -125,7 +126,7 @@ class LeadRepository {
     }
   }
 
-  Future<LeadModel?> updateLeadStatus({
+  Future<Map<String, dynamic>> updateLeadStatus({
     required String leadId,
     required String status,
     String? remarks,
@@ -140,12 +141,19 @@ class LeadRepository {
         },
       );
 
-      try {
-        final leadJson = _extractLeadJson(response.data);
-        return LeadModel.fromJson(leadJson);
-      } catch (_) {
-        return null;
+      final data = response.data;
+
+      if (data is Map && data['data'] is Map) {
+        return Map<String, dynamic>.from(data['data'] as Map);
       }
+
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+
+      return {
+        'new_status': status,
+      };
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
     }

@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/utils/upload_url.dart';
-
 import '../providers/lead_provider.dart';
 
 class LeadFormScreen extends ConsumerStatefulWidget {
@@ -21,6 +21,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   static const cardColor = Color(0xFFFEFBFF);
   static const primaryColor = Color(0xFF5663A0);
   static const textColor = Color(0xFF1F2028);
+
+  final _formKey = GlobalKey<FormState>();
 
   final fullName = TextEditingController();
   final mobile = TextEditingController();
@@ -58,11 +60,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   bool roofLoadBearingCapacity = false;
   bool shadowFreeRoof = false;
   bool vendorVisitedSite = false;
+
   final ImagePicker _imagePicker = ImagePicker();
 
   String? roofPhotoPath;
   String? bankClearPhotoPath;
   String? chequePassbookPath;
+
   final List<String> additionalImages = [];
   final List<String> additionalDocs = [];
 
@@ -77,21 +81,26 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     city.dispose();
     state.dispose();
     pincode.dispose();
+
     caNumber.dispose();
     kNumber.dispose();
     referenceNumber.dispose();
     discom.dispose();
+
     geoLocation.dispose();
     latitude.dispose();
     longitude.dispose();
+
     bankAccountName.dispose();
     bankName.dispose();
     accountNumber.dispose();
     ifscCode.dispose();
+
     availableShadowFreeArea.dispose();
     quotationAmount.dispose();
     visitedEmployeeName.dispose();
     visitedEmployeeContact.dispose();
+
     notes.dispose();
     super.dispose();
   }
@@ -102,10 +111,91 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return value;
   }
 
+  String? _validateFullName(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Full name is required';
+    if (v.length < 3) return 'Full name minimum 3 letters hona chahiye';
+    if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
+      return 'Full name me sirf alphabets allowed hain';
+    }
+    return null;
+  }
+
+  String? _validateMobile(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Mobile number is required';
+    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(v)) {
+      return 'Valid 10 digit mobile number enter karo';
+    }
+    return null;
+  }
+
+  String? _validateOptionalMobile(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    return _validateMobile(v);
+  }
+
+  String? _validateEmail(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (!RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$').hasMatch(v)) {
+      return 'Email sirf @gmail.com hona chahiye';
+    }
+    return null;
+  }
+
+  String? _validateOptionalAlpha(String? value, String label) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
+      return '$label me sirf alphabets allowed hain';
+    }
+    return null;
+  }
+
+  String? _validatePincode(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (!RegExp(r'^\d{6}$').hasMatch(v)) {
+      return 'Pincode 6 digits ka hona chahiye';
+    }
+    return null;
+  }
+
+  String? _validateNumber(String? value, String label) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (!RegExp(r'^\d+(\.\d+)?$').hasMatch(v)) {
+      return '$label valid number hona chahiye';
+    }
+    return null;
+  }
+
+  String? _validateAccount(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (!RegExp(r'^\d{9,18}$').hasMatch(v)) {
+      return 'Account number 9 to 18 digits hona chahiye';
+    }
+    return null;
+  }
+
+  String? _validateIfsc(String? value) {
+    final v = value?.trim().toUpperCase() ?? '';
+    if (v.isEmpty) return null;
+    if (!RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(v)) {
+      return 'Valid IFSC code enter karo';
+    }
+    return null;
+  }
+
   Future<void> saveLead() async {
-    if (fullName.text.trim().isEmpty || mobile.text.trim().isEmpty) {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Full name and mobile are required')),
+        const SnackBar(content: Text('Please fix validation errors')),
       );
       return;
     }
@@ -128,7 +218,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'bank_account_name': _textOrNull(bankAccountName),
       'bank_name': _textOrNull(bankName),
       'account_number': _textOrNull(accountNumber),
-      'ifsc_code': _textOrNull(ifscCode),
+      'ifsc_code': _textOrNull(ifscCode)?.toUpperCase(),
       'project_type': projectType,
       'source': source,
       'priority': priority,
@@ -138,9 +228,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'quotation_amount': _textOrNull(quotationAmount),
       'visited_employee_name': _textOrNull(visitedEmployeeName),
       'visited_employee_contact': _textOrNull(visitedEmployeeContact),
-      'roof_load_bearing_capacity': roofLoadBearingCapacity,
-      'shadow_free_roof': shadowFreeRoof,
-      'vendor_visited_site': vendorVisitedSite,
+      'roof_load_bearing_capacity': roofLoadBearingCapacity.toString(),
+      'shadow_free_roof': shadowFreeRoof.toString(),
+      'vendor_visited_site': vendorVisitedSite.toString(),
     };
 
     try {
@@ -167,7 +257,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         const SnackBar(content: Text('Lead created successfully')),
       );
 
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
 
@@ -186,18 +276,26 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     TextEditingController controller, {
     TextInputType keyboardType = TextInputType.text,
     int maxLines = 1,
+    String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
+    TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: TextField(
+      child: TextFormField(
         controller: controller,
         enabled: !isLoading,
         keyboardType: keyboardType,
         maxLines: maxLines,
+        validator: validator,
+        inputFormatters: inputFormatters,
+        textCapitalization: textCapitalization,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         decoration: InputDecoration(
           labelText: label,
           filled: true,
           fillColor: bgColor,
+          errorMaxLines: 2,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -234,6 +332,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
         value: value,
+        isExpanded: true,
+        validator: (v) {
+          if (v == null || v.trim().isEmpty) return '$label is required';
+          return null;
+        },
         decoration: InputDecoration(
           labelText: label,
           filled: true,
@@ -291,15 +394,18 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 25,
             offset: const Offset(0, 12),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: children,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
       ),
     );
   }
@@ -321,12 +427,19 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   Future<void> _pickDocs(List<String> target, {required bool imageOnly}) async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
+      withData: false,
       type: imageOnly ? FileType.image : FileType.custom,
-      allowedExtensions: imageOnly ? null : ['pdf', 'doc', 'docx', 'jpg', 'png', 'jpeg'],
+      allowedExtensions: imageOnly
+          ? null
+          : ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
     );
+
     if (result == null) return;
+
     final picked = result.paths.whereType<String>().toList();
+
     if (!mounted) return;
+
     setState(() {
       target.addAll(picked);
     });
@@ -390,7 +503,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     radius: 18,
                     child: IconButton(
                       padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                       onPressed: isLoading
                           ? null
                           : () => setState(() => onChanged(null)),
@@ -411,10 +528,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               child: const Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_photo_alternate_outlined,
-                      size: 40, color: primaryColor),
+                  Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 40,
+                    color: primaryColor,
+                  ),
                   SizedBox(height: 6),
-                  Text('No file selected', style: TextStyle(color: Colors.black45)),
+                  Text(
+                    'No file selected',
+                    style: TextStyle(color: Colors.black45),
+                  ),
                 ],
               ),
             ),
@@ -445,27 +568,34 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   Widget _docPreview(String path) {
     final pdf = isPdfPath(path);
-    return ColoredBox(
+
+    return Container(
       color: const Color(0xFFEEF0F8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            pdf ? Icons.picture_as_pdf : Icons.insert_drive_file,
-            size: 48,
-            color: pdf ? Colors.red : primaryColor,
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              fileDisplayName(path),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              pdf ? Icons.picture_as_pdf : Icons.insert_drive_file,
+              size: 42,
+              color: pdf ? Colors.red : primaryColor,
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Flexible(
+              child: Text(
+                fileDisplayName(path),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -519,8 +649,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 final path = entry.value;
                 final idx = entry.key;
                 final image = isImagePath(path);
+
                 return SizedBox(
                   width: 110,
+                  height: 150,
                   child: Column(
                     children: [
                       Stack(
@@ -528,10 +660,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: SizedBox(
-                              height: 90,
+                              height: 105,
                               width: 110,
                               child: image
-                                  ? Image.file(File(path), fit: BoxFit.cover)
+                                  ? Image.file(
+                                      File(path),
+                                      fit: BoxFit.cover,
+                                    )
                                   : _docPreview(path),
                             ),
                           ),
@@ -543,16 +678,25 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               child: const CircleAvatar(
                                 radius: 12,
                                 backgroundColor: Colors.black54,
-                                child: Icon(Icons.close,
-                                    size: 14, color: Colors.white),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      TextButton(
-                        onPressed: isLoading ? null : () => onReplace(idx),
-                        child: const Text('Replace', style: TextStyle(fontSize: 11)),
+                      SizedBox(
+                        height: 34,
+                        child: TextButton(
+                          onPressed: isLoading ? null : () => onReplace(idx),
+                          child: const Text(
+                            'Replace',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -565,20 +709,29 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
   }
 
-  Future<void> _replaceFileAt(List<String> target, int index,
-      {required bool imageOnly}) async {
+  Future<void> _replaceFileAt(
+    List<String> target,
+    int index, {
+    required bool imageOnly,
+  }) async {
     if (imageOnly) {
       final file = await _imagePicker.pickImage(source: ImageSource.gallery);
       if (file == null) return;
+      if (!mounted) return;
       setState(() => target[index] = file.path);
       return;
     }
+
     final result = await FilePicker.platform.pickFiles(
+      withData: false,
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png', 'jpeg'],
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
     );
+
     final path = result?.files.single.path;
     if (path == null) return;
+    if (!mounted) return;
+
     setState(() => target[index] = path);
   }
 
@@ -603,13 +756,60 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           child: formCard(
             children: [
               sectionTitle('Basic Details'),
-              input('Full Name *', fullName),
-              input('Mobile *', mobile, keyboardType: TextInputType.phone),
-              input('Email', email, keyboardType: TextInputType.emailAddress),
+              input(
+                'Full Name *',
+                fullName,
+                validator: _validateFullName,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                ],
+                textCapitalization: TextCapitalization.words,
+              ),
+              input(
+                'Mobile *',
+                mobile,
+                keyboardType: TextInputType.phone,
+                validator: _validateMobile,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+              ),
+              input(
+                'Email',
+                email,
+                keyboardType: TextInputType.emailAddress,
+                validator: _validateEmail,
+              ),
               input('Address', address),
-              input('City', city),
-              input('State', state),
-              input('Pincode', pincode, keyboardType: TextInputType.number),
+              input(
+                'City',
+                city,
+                validator: (v) => _validateOptionalAlpha(v, 'City'),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                ],
+                textCapitalization: TextCapitalization.words,
+              ),
+              input(
+                'State',
+                state,
+                validator: (v) => _validateOptionalAlpha(v, 'State'),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                ],
+                textCapitalization: TextCapitalization.words,
+              ),
+              input(
+                'Pincode',
+                pincode,
+                keyboardType: TextInputType.number,
+                validator: _validatePincode,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+              ),
 
               sectionTitle('Connection Details'),
               input('CA Number', caNumber),
@@ -619,14 +819,49 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
               sectionTitle('Location'),
               input('Geo Location', geoLocation),
-              input('Latitude', latitude, keyboardType: TextInputType.number),
-              input('Longitude', longitude, keyboardType: TextInputType.number),
+              input(
+                'Latitude',
+                latitude,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) => _validateNumber(v, 'Latitude'),
+              ),
+              input(
+                'Longitude',
+                longitude,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) => _validateNumber(v, 'Longitude'),
+              ),
 
               sectionTitle('Bank Details'),
               input('Bank Account Name', bankAccountName),
               input('Bank Name', bankName),
-              input('Account Number', accountNumber),
-              input('IFSC Code', ifscCode),
+              input(
+                'Account Number',
+                accountNumber,
+                keyboardType: TextInputType.number,
+                validator: _validateAccount,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(18),
+                ],
+              ),
+              input(
+                'IFSC Code',
+                ifscCode,
+                validator: _validateIfsc,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+                  LengthLimitingTextInputFormatter(11),
+                  TextInputFormatter.withFunction((oldValue, newValue) {
+                    return newValue.copyWith(
+                      text: newValue.text.toUpperCase(),
+                      selection: newValue.selection,
+                    );
+                  }),
+                ],
+              ),
 
               sectionTitle('Project Details'),
               dropdown(
@@ -668,17 +903,34 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 'Available Shadow Free Area',
                 availableShadowFreeArea,
                 keyboardType: TextInputType.number,
+                validator: (v) =>
+                    _validateNumber(v, 'Available Shadow Free Area'),
               ),
               input(
                 'Quotation Amount',
                 quotationAmount,
                 keyboardType: TextInputType.number,
+                validator: (v) => _validateNumber(v, 'Quotation Amount'),
               ),
-              input('Visited Employee Name', visitedEmployeeName),
+              input(
+                'Visited Employee Name',
+                visitedEmployeeName,
+                validator: (v) =>
+                    _validateOptionalAlpha(v, 'Visited Employee Name'),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                ],
+                textCapitalization: TextCapitalization.words,
+              ),
               input(
                 'Visited Employee Contact',
                 visitedEmployeeContact,
                 keyboardType: TextInputType.phone,
+                validator: _validateOptionalMobile,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
               ),
               switchTile(
                 title: 'Roof Load Bearing Capacity',

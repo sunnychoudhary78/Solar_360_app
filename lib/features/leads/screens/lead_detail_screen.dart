@@ -25,6 +25,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   late LeadModel _lead;
   bool loading = false;
   String? loadError;
+
   List<Map<String, dynamic>> history = [];
   List<String> allowedNext = [];
 
@@ -47,33 +48,52 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     });
 
     try {
-      await _reloadSilently();
+      final repo = ref.read(leadRepositoryProvider);
+
+      final fresh = await repo.getLeadById(_lead.id);
+      final hist = await repo.getLeadHistory(_lead.id);
+      final next = await repo.getAllowedNextStatuses(_lead.id);
+
+      if (!mounted) return;
+
+      setState(() {
+        _lead = fresh;
+        history = hist;
+        allowedNext = next;
+        loading = false;
+        loadError = null;
+      });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        loadError = e.toString();
         loading = false;
+        loadError = e.toString();
       });
     }
   }
 
   Future<void> _reloadSilently() async {
-    final repo = ref.read(leadRepositoryProvider);
+    try {
+      final repo = ref.read(leadRepositoryProvider);
 
-    final fresh = await repo.getLeadById(_lead.id);
-    final hist = await repo.getLeadHistory(_lead.id);
-    final next = await repo.getAllowedNextStatuses(_lead.id);
+      final fresh = await repo.getLeadById(_lead.id);
+      final hist = await repo.getLeadHistory(_lead.id);
+      final next = await repo.getAllowedNextStatuses(_lead.id);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _lead = fresh;
-      history = hist;
-      allowedNext = next;
-      loading = false;
-      loadError = null;
-    });
+      setState(() {
+        _lead = fresh;
+        history = hist;
+        allowedNext = next;
+        loading = false;
+        loadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => loading = false);
+    }
   }
 
   List<String> _resolveNextStatuses(String roleName) {
@@ -109,7 +129,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Confirm'),
+              child: const Text('Submit'),
             ),
           ],
         );
@@ -121,16 +141,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-
-    setState(() {
-      loading = true;
-      loadError = null;
-    });
-
     try {
-      final updatedLead = await ref.read(leadRepositoryProvider).updateLeadStatus(
+      await ref.read(leadRepositoryProvider).updateLeadStatus(
             leadId: _lead.id,
             status: nextStatus,
             remarks: remarks,
@@ -140,231 +152,45 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
-      if (updatedLead != null) {
-        setState(() {
-          _lead = updatedLead;
-        });
-      }
-
-      try {
-        await _reloadSilently();
-      } catch (_) {
-        if (!mounted) return;
-
-        setState(() => loading = false);
-
-        messenger.showSnackBar(
-          SnackBar(content: Text('Status updated to $nextStatus')),
-        );
-
-        navigator.pop(true);
-        return;
-      }
-
-      if (!mounted) return;
-
-      messenger.showSnackBar(
-        SnackBar(content: Text('Status updated to $nextStatus')),
-      );
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
 
-      setState(() => loading = false);
-
-      messenger.showSnackBar(
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
     }
   }
 
   Future<void> _saveRegistration() async {
-    String regId = _lead.registrationId;
-    String regDate = _lead.registrationDate;
-    String selectedHour = '1';
-    String selectedMinute = '00';
-    String selectedPeriod = 'AM';
-
-    final oldTime = _lead.registrationTime.trim();
-    final match = RegExp(
-      r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
-      caseSensitive: false,
-    ).firstMatch(oldTime);
-
-    if (match != null) {
-      selectedHour = match.group(1)!;
-      selectedMinute = match.group(2)!;
-      selectedPeriod = match.group(3)!.toUpperCase();
-    }
-
-    final regIdController = TextEditingController(text: regId);
-    final regDateController = TextEditingController(text: regDate);
-
-    final saved = await showDialog<bool>(
+    final result = await showDialog<_RegistrationResult>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            Future<void> pickDate() async {
-              final now = DateTime.now();
-
-              final picked = await showDatePicker(
-                context: ctx,
-                initialDate: now,
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2100),
-              );
-
-              if (picked == null) return;
-
-              final formatted =
-                  '${picked.year.toString().padLeft(4, '0')}-'
-                  '${picked.month.toString().padLeft(2, '0')}-'
-                  '${picked.day.toString().padLeft(2, '0')}';
-
-              setDialogState(() {
-                regDateController.text = formatted;
-              });
-            }
-
-            return AlertDialog(
-              title: const Text('Registration details'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: regIdController,
-                      decoration: const InputDecoration(
-                        labelText: 'Registration ID',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: regDateController,
-                      readOnly: true,
-                      onTap: pickDate,
-                      decoration: InputDecoration(
-                        labelText: 'Registration Date',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_month),
-                          onPressed: pickDate,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: selectedHour,
-                            decoration: const InputDecoration(
-                              labelText: 'Hour',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: List.generate(12, (i) {
-                              final v = '${i + 1}';
-                              return DropdownMenuItem(
-                                value: v,
-                                child: Text(v),
-                              );
-                            }),
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setDialogState(() => selectedHour = v);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: selectedMinute,
-                            decoration: const InputDecoration(
-                              labelText: 'Min',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: List.generate(60, (i) {
-                              final v = i.toString().padLeft(2, '0');
-                              return DropdownMenuItem(
-                                value: v,
-                                child: Text(v),
-                              );
-                            }),
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setDialogState(() => selectedMinute = v);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: selectedPeriod,
-                            decoration: const InputDecoration(
-                              labelText: 'AM/PM',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(value: 'AM', child: Text('AM')),
-                              DropdownMenuItem(value: 'PM', child: Text('PM')),
-                            ],
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setDialogState(() => selectedPeriod = v);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _RegistrationDialog(
+        initialRegId: _lead.registrationId,
+        initialRegDate: _lead.registrationDate,
+        initialRegTime: _lead.registrationTime,
+      ),
     );
 
-    regId = regIdController.text.trim();
-    regDate = regDateController.text.trim();
-    final regTime = '$selectedHour:$selectedMinute $selectedPeriod';
+    if (result == null || !mounted) return;
 
-    regIdController.dispose();
-    regDateController.dispose();
-
-    if (saved != true || !mounted) return;
-
-    if (regDate.isEmpty) {
+    if (result.regDate.trim().isEmpty) {
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select registration date')),
       );
       return;
     }
 
-    setState(() {
-      loading = true;
-      loadError = null;
-    });
-
     try {
-      final updatedLead = await ref.read(leadRepositoryProvider).updateLead(
+      await ref.read(leadRepositoryProvider).updateLead(
         _lead.id,
         {
-          'registration_id': regId,
-          'registration_date': regDate,
-          'registration_time': regTime,
+          'registration_id': result.regId,
+          'registration_date': result.regDate,
+          'registration_time': result.regTime,
         },
       );
 
@@ -372,24 +198,11 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
-      if (updatedLead != null) {
-        setState(() {
-          _lead = updatedLead;
-        });
-      }
-
-      await _reloadSilently();
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registration details saved')),
-      );
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
 
-      setState(() => loading = false);
-
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
@@ -406,209 +219,175 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     final customerName =
         _lead.fullName.trim().isEmpty ? 'Customer' : _lead.fullName;
 
-    return PopScope(
-      canPop: !loading,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && loading) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please wait, update is processing')),
-          );
-        }
-      },
-      child: Scaffold(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FC),
+      appBar: AppBar(
         backgroundColor: const Color(0xFFF7F8FC),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFFF7F8FC),
-          elevation: 0,
-          foregroundColor: const Color(0xFF1F2028),
-          title: Text(
-            customerName,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          actions: [
-            IconButton(
-              onPressed: loading ? null : _load,
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
+        elevation: 0,
+        foregroundColor: const Color(0xFF1F2028),
+        title: Text(
+          customerName,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        body: Stack(
-          children: [
-            loading && history.isEmpty && loadError == null
-                ? const Center(child: CircularProgressIndicator())
-                : ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (loadError != null)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(loadError!),
-                        ),
+        actions: [
+          IconButton(
+            onPressed: loading ? null : _load,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: loading && history.isEmpty && loadError == null
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (loadError != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(loadError!),
+                  ),
 
-                      _headerCard(customerName),
-                      const SizedBox(height: 14),
+                _headerCard(customerName),
+                const SizedBox(height: 14),
 
-                      WorkflowStepper(currentStatus: _lead.status),
-                      const SizedBox(height: 14),
+                WorkflowStepper(currentStatus: _lead.status),
+                const SizedBox(height: 14),
 
-                      if (auth.appRole == 'installation') ...[
-                        OutlinedButton.icon(
-                          onPressed: loading
-                              ? null
-                              : () async {
-                                  final ok = await Navigator.push<bool>(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          InstallationFormScreen(lead: _lead),
-                                    ),
-                                  );
-
-                                  if (ok == true && mounted) {
-                                    ref.invalidate(allLeadsProvider);
-                                    setState(() => loading = true);
-                                    await _reloadSilently();
-                                  }
-                                },
-                          icon: const Icon(Icons.build_circle_outlined),
-                          label: Text(
-                            _lead.hasInstallationDetails
-                                ? 'Edit Installation Details'
-                                : 'Fill Installation Details (required)',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      if (auth.appRole == 'support' &&
-                          !_lead.hasRegistrationDetails) ...[
-                        OutlinedButton(
-                          onPressed: loading ? null : _saveRegistration,
-                          child: const Text('Add registration details'),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      _section('Customer Details', [
-                        _row('Full Name', _lead.fullName),
-                        _row('Lead Code', _lead.leadCode),
-                        _row('Mobile', _lead.mobile),
-                        _row('Email', _lead.email),
-                        _row('Address', _lead.address),
-                        _row('City', _lead.city),
-                        _row('State', _lead.state),
-                        _row('Pincode', _lead.pincode),
-                      ]),
-
-                      _section('Workflow', [
-                        _row('Status', _lead.status),
-                        _row('Department', _lead.currentDepartment),
-                        _row('Stage', _lead.leadStage),
-                        _row('Priority', _lead.priority),
-                        _row('Workflow Step', _lead.workflowStep),
-                      ]),
-
-                      _section('Connection & Bank', [
-                        _row('CA Number', _lead.caNumber),
-                        _row('K Number', _lead.kNumber),
-                        _row('Discom', _lead.discom),
-                        _row('Bank', _lead.bankName),
-                        _row('Account', _lead.accountNumber),
-                        _row('IFSC', _lead.ifscCode),
-                      ]),
-
-                      if (_lead.hasRegistrationDetails)
-                        _section('Registration', [
-                          _row('Registration ID', _lead.registrationId),
-                          _row('Registration Date', _lead.registrationDate),
-                          _row('Registration Time', _lead.registrationTime),
-                        ]),
-
-                      _section('Uploaded Files & Images', [
-                        LeadAttachmentsView(files: files),
-                      ]),
-
-                      if (_lead.notes.trim().isNotEmpty)
-                        _section('Notes', [
-                          _row('Notes', _lead.notes),
-                        ]),
-
-                      if (nextStatuses.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Status actions',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ...nextStatuses.map((status) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed:
-                                    loading ? null : () => _advanceStatus(status),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: primaryColor,
-                                  foregroundColor: Colors.white,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: Text(
-                                  LeadWorkflow.nextActionLabel(_lead.status),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                if (auth.appRole == 'installation') ...[
+                  OutlinedButton.icon(
+                    onPressed: loading
+                        ? null
+                        : () async {
+                            final ok = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    InstallationFormScreen(lead: _lead),
                               ),
-                            ),
-                          );
-                        }),
-                      ],
+                            );
 
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Status history',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                            if (ok == true && mounted) {
+                              ref.invalidate(allLeadsProvider);
+                              Navigator.of(context).pop(true);
+                            }
+                          },
+                    icon: const Icon(Icons.build_circle_outlined),
+                    label: Text(
+                      _lead.hasInstallationDetails
+                          ? 'Edit Installation Details'
+                          : 'Fill Installation Details (required)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                if (auth.appRole == 'support' &&
+                    !_lead.hasRegistrationDetails) ...[
+                  OutlinedButton(
+                    onPressed: loading ? null : _saveRegistration,
+                    child: const Text('Add registration details'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                _section('Customer Details', [
+                  _row('Full Name', _lead.fullName),
+                  _row('Lead Code', _lead.leadCode),
+                  _row('Mobile', _lead.mobile),
+                  _row('Email', _lead.email),
+                  _row('Address', _lead.address),
+                  _row('City', _lead.city),
+                  _row('State', _lead.state),
+                  _row('Pincode', _lead.pincode),
+                ]),
+
+                _section('Workflow', [
+                  _row('Status', _lead.status),
+                  _row('Department', _lead.currentDepartment),
+                  _row('Stage', _lead.leadStage),
+                  _row('Priority', _lead.priority),
+                  _row('Workflow Step', _lead.workflowStep),
+                ]),
+
+                _section('Connection & Bank', [
+                  _row('CA Number', _lead.caNumber),
+                  _row('K Number', _lead.kNumber),
+                  _row('Discom', _lead.discom),
+                  _row('Bank', _lead.bankName),
+                  _row('Account', _lead.accountNumber),
+                  _row('IFSC', _lead.ifscCode),
+                ]),
+
+                if (_lead.hasRegistrationDetails)
+                  _section('Registration', [
+                    _row('Registration ID', _lead.registrationId),
+                    _row('Registration Date', _lead.registrationDate),
+                    _row('Registration Time', _lead.registrationTime),
+                  ]),
+
+                _section('Uploaded Files & Images', [
+                  LeadAttachmentsView(files: files),
+                ]),
+
+                if (_lead.notes.trim().isNotEmpty)
+                  _section('Notes', [
+                    _row('Notes', _lead.notes),
+                  ]),
+
+                if (nextStatuses.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Status actions',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  ...nextStatuses.map((status) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed:
+                              loading ? null : () => _advanceStatus(status),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(
+                            LeadWorkflow.nextActionLabel(_lead.status),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                    );
+                  }),
+                ],
 
-                      if (history.isEmpty)
-                        const Text(
-                          'No history yet',
-                          style: TextStyle(color: Colors.black54),
-                        )
-                      else
-                        ...history.map(_historyTile),
-                    ],
-                  ),
-
-            if (loading && history.isNotEmpty)
-              Positioned.fill(
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Status history',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-              ),
-          ],
-        ),
-      ),
+                const SizedBox(height: 8),
+
+                if (history.isEmpty)
+                  const Text(
+                    'No history yet',
+                    style: TextStyle(color: Colors.black54),
+                  )
+                else
+                  ...history.map(_historyTile),
+              ],
+            ),
     );
   }
 
@@ -748,6 +527,204 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
           Expanded(child: Text(value)),
         ],
       ),
+    );
+  }
+}
+
+class _RegistrationResult {
+  final String regId;
+  final String regDate;
+  final String regTime;
+
+  const _RegistrationResult({
+    required this.regId,
+    required this.regDate,
+    required this.regTime,
+  });
+}
+
+class _RegistrationDialog extends StatefulWidget {
+  final String initialRegId;
+  final String initialRegDate;
+  final String initialRegTime;
+
+  const _RegistrationDialog({
+    required this.initialRegId,
+    required this.initialRegDate,
+    required this.initialRegTime,
+  });
+
+  @override
+  State<_RegistrationDialog> createState() => _RegistrationDialogState();
+}
+
+class _RegistrationDialogState extends State<_RegistrationDialog> {
+  late final TextEditingController regIdController;
+  late final TextEditingController regDateController;
+
+  String selectedHour = '1';
+  String selectedMinute = '00';
+  String selectedPeriod = 'AM';
+
+  @override
+  void initState() {
+    super.initState();
+
+    regIdController = TextEditingController(text: widget.initialRegId);
+    regDateController = TextEditingController(text: widget.initialRegDate);
+
+    final oldTime = widget.initialRegTime.trim();
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
+      caseSensitive: false,
+    ).firstMatch(oldTime);
+
+    if (match != null) {
+      selectedHour = match.group(1)!;
+      selectedMinute = match.group(2)!;
+      selectedPeriod = match.group(3)!.toUpperCase();
+    }
+  }
+
+  @override
+  void dispose() {
+    regIdController.dispose();
+    regDateController.dispose();
+    super.dispose();
+  }
+
+  Future<void> pickDate() async {
+    final now = DateTime.now();
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+
+    if (!mounted || picked == null) return;
+
+    final formatted =
+        '${picked.year.toString().padLeft(4, '0')}-'
+        '${picked.month.toString().padLeft(2, '0')}-'
+        '${picked.day.toString().padLeft(2, '0')}';
+
+    setState(() {
+      regDateController.text = formatted;
+    });
+  }
+
+  void save() {
+    Navigator.of(context).pop(
+      _RegistrationResult(
+        regId: regIdController.text.trim(),
+        regDate: regDateController.text.trim(),
+        regTime: '$selectedHour:$selectedMinute $selectedPeriod',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Registration details'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: regIdController,
+              decoration: const InputDecoration(
+                labelText: 'Registration ID',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: regDateController,
+              readOnly: true,
+              onTap: pickDate,
+              decoration: InputDecoration(
+                labelText: 'Registration Date',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.calendar_month),
+                  onPressed: pickDate,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: selectedHour,
+                    decoration: const InputDecoration(
+                      labelText: 'Hour',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: List.generate(12, (i) {
+                      final v = '${i + 1}';
+                      return DropdownMenuItem(value: v, child: Text(v));
+                    }),
+                    onChanged: (v) {
+                      if (v == null || !mounted) return;
+                      setState(() => selectedHour = v);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: selectedMinute,
+                    decoration: const InputDecoration(
+                      labelText: 'Min',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: List.generate(60, (i) {
+                      final v = i.toString().padLeft(2, '0');
+                      return DropdownMenuItem(value: v, child: Text(v));
+                    }),
+                    onChanged: (v) {
+                      if (v == null || !mounted) return;
+                      setState(() => selectedMinute = v);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: selectedPeriod,
+                    decoration: const InputDecoration(
+                      labelText: 'AM/PM',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'AM', child: Text('AM')),
+                      DropdownMenuItem(value: 'PM', child: Text('PM')),
+                    ],
+                    onChanged: (v) {
+                      if (v == null || !mounted) return;
+                      setState(() => selectedPeriod = v);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: save,
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
