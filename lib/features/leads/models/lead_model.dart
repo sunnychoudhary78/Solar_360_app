@@ -138,65 +138,93 @@ class LeadModel {
   });
 
   factory LeadModel.fromJson(Map<String, dynamic> json) {
+    final installationRaw =
+        json['installationDetails'] ?? json['installation_details'];
+
     return LeadModel(
       id: _str(json['id']),
-      leadCode: _str(json['lead_code']),
-      fullName: _str(json['full_name']),
+      leadCode: _str(json['lead_code'] ?? json['leadCode']),
+      fullName: _str(json['full_name'] ?? json['fullName']),
       mobile: _str(json['mobile']),
       email: _str(json['email']),
       address: _str(json['address']),
       city: _str(json['city']),
       state: _str(json['state']),
       pincode: _str(json['pincode']),
-      caNumber: _str(json['ca_number']),
-      kNumber: _str(json['k_number']),
-      referenceNumber: _str(json['reference_number']),
+      caNumber: _str(json['ca_number'] ?? json['caNumber']),
+      kNumber: _str(json['k_number'] ?? json['kNumber']),
+      referenceNumber: _str(json['reference_number'] ?? json['referenceNumber']),
       discom: _str(json['discom']),
-      geoLocation: _str(json['geo_location']),
+      geoLocation: _str(json['geo_location'] ?? json['geoLocation']),
       latitude: _str(json['latitude']),
       longitude: _str(json['longitude']),
-      bankAccountName: _str(json['bank_account_name']),
-      bankName: _str(json['bank_name']),
-      accountNumber: _str(json['account_number']),
-      ifscCode: _str(json['ifsc_code']),
-      projectType: _str(json['project_type']),
+      bankAccountName:
+          _str(json['bank_account_name'] ?? json['bankAccountName']),
+      bankName: _str(json['bank_name'] ?? json['bankName']),
+      accountNumber: _str(json['account_number'] ?? json['accountNumber']),
+      ifscCode: _str(json['ifsc_code'] ?? json['ifscCode']),
+      projectType: _str(json['project_type'] ?? json['projectType']),
       source: _str(json['source']),
       status: _str(json['status']),
-      currentDepartment: _str(json['current_department']),
-      workflowStep: _str(json['workflow_step']),
-      leadStage: _str(json['lead_stage']),
-      assignedTo: _str(json['assigned_to']),
-      assignedBy: _str(json['assigned_by']),
-      createdBy: _str(json['created_by']),
-      updatedBy: _str(json['updated_by']),
+      currentDepartment:
+          _str(json['current_department'] ?? json['currentDepartment']),
+      workflowStep: _str(json['workflow_step'] ?? json['workflowStep']),
+      leadStage: _str(json['lead_stage'] ?? json['leadStage']),
+      assignedTo: _str(json['assigned_to'] ?? json['assignedTo']),
+      assignedBy: _str(json['assigned_by'] ?? json['assignedBy']),
+      createdBy: _str(json['created_by'] ?? json['createdBy']),
+      updatedBy: _str(json['updated_by'] ?? json['updatedBy']),
       priority: _str(json['priority']),
       notes: _str(json['notes']),
-      roofPhotoStatus: _str(json['roof_photo_status']),
-      availableShadowFreeArea: _str(json['available_shadow_free_area']),
-      quotationAmount: _str(json['quotation_amount']),
-      visitedEmployeeName: _str(json['visited_employee_name']),
-      visitedEmployeeContact: _str(json['visited_employee_contact']),
-      followUpDate: _str(json['follow_up_date']),
-      lastContactedAt: _str(json['last_contacted_at']),
-      roofLoadBearingCapacity: _bool(json['roof_load_bearing_capacity']),
-      shadowFreeRoof: _bool(json['shadow_free_roof']),
-      vendorVisitedSite: _bool(json['vendor_visited_site']),
-      isActive: _bool(json['is_active']),
-      additionalDocuments: _str(json['additional_documents']),
-      additionalImages: _str(json['additional_images']),
-      chequePassbookCopy: _str(json['cheque_passbook_copy']),
-      bankClearPhoto: _str(json['bank_clear_photo']),
-      roofPhoto: _str(json['roof_photo']),
-      preInstallationPhoto: _str(json['pre_installation_photo']),
-      quotationDocument: _str(json['quotation_document']),
-      installationReport: _str(json['installation_report']),
-      installationImages: _str(json['installation_images']),
-      statusRemarks: _str(json['status_remarks']),
-      registrationId: _str(json['registration_id']),
-      registrationDate: _str(json['registration_date']),
-      registrationTime: _str(json['registration_time']),
-      installationDetails: json['installationDetails'] is Map
-          ? Map<String, dynamic>.from(json['installationDetails'] as Map)
+      roofPhotoStatus:
+          _str(json['roof_photo_status'] ?? json['roofPhotoStatus']),
+      availableShadowFreeArea: _str(
+        json['available_shadow_free_area'] ?? json['availableShadowFreeArea'],
+      ),
+      quotationAmount:
+          _str(json['quotation_amount'] ?? json['quotationAmount']),
+      visitedEmployeeName: _str(
+        json['visited_employee_name'] ?? json['visitedEmployeeName'],
+      ),
+      visitedEmployeeContact: _str(
+        json['visited_employee_contact'] ?? json['visitedEmployeeContact'],
+      ),
+      followUpDate: _str(json['follow_up_date'] ?? json['followUpDate']),
+      lastContactedAt:
+          _str(json['last_contacted_at'] ?? json['lastContactedAt']),
+      roofLoadBearingCapacity: _bool(
+        json['roof_load_bearing_capacity'] ?? json['roofLoadBearingCapacity'],
+      ),
+      shadowFreeRoof:
+          _bool(json['shadow_free_roof'] ?? json['shadowFreeRoof']),
+      vendorVisitedSite:
+          _bool(json['vendor_visited_site'] ?? json['vendorVisitedSite']),
+      isActive: _bool(json['is_active'] ?? json['isActive']),
+      additionalDocuments:
+          _str(json['additional_documents'] ?? json['additionalDocuments']),
+      additionalImages:
+          _str(json['additional_images'] ?? json['additionalImages']),
+      chequePassbookCopy:
+          _str(json['cheque_passbook_copy'] ?? json['chequePassbookCopy']),
+      bankClearPhoto:
+          _str(json['bank_clear_photo'] ?? json['bankClearPhoto']),
+      roofPhoto: _str(json['roof_photo'] ?? json['roofPhoto']),
+      preInstallationPhoto:
+          _str(json['pre_installation_photo'] ?? json['preInstallationPhoto']),
+      quotationDocument:
+          _str(json['quotation_document'] ?? json['quotationDocument']),
+      installationReport:
+          _str(json['installation_report'] ?? json['installationReport']),
+      installationImages:
+          _str(json['installation_images'] ?? json['installationImages']),
+      statusRemarks: _str(json['status_remarks'] ?? json['statusRemarks']),
+      registrationId: _str(json['registration_id'] ?? json['registrationId']),
+      registrationDate:
+          _str(json['registration_date'] ?? json['registrationDate']),
+      registrationTime:
+          _str(json['registration_time'] ?? json['registrationTime']),
+      installationDetails: installationRaw is Map
+          ? Map<String, dynamic>.from(installationRaw)
           : null,
       createdAt: _str(json['created_at'] ?? json['createdAt']),
       updatedAt: _str(json['updated_at'] ?? json['updatedAt']),
@@ -206,17 +234,18 @@ class LeadModel {
   bool get hasInstallationDetails {
     final d = installationDetails;
     if (d == null) return false;
-    const required = [
+
+    const requiredKeys = [
       'file_no',
       'capacity',
       'solar_panel_brand',
       'number_of_solar_panel',
       'invoice_no',
     ];
-    return required.every((key) {
-      final v = d[key];
-      if (v == null) return false;
-      return v.toString().trim().isNotEmpty;
+
+    return requiredKeys.every((key) {
+      final value = d[key];
+      return value != null && value.toString().trim().isNotEmpty;
     });
   }
 
@@ -284,6 +313,7 @@ class LeadModel {
       'registration_id': registrationId,
       'registration_date': registrationDate,
       'registration_time': registrationTime,
+      'installation_details': installationDetails,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
@@ -434,9 +464,12 @@ class LeadModel {
     if (value == false) return false;
     if (value == 1) return true;
     if (value == 0) return false;
+
     if (value is String) {
-      return value.toLowerCase() == 'true' || value == '1';
+      final v = value.trim().toLowerCase();
+      return v == 'true' || v == '1' || v == 'yes';
     }
+
     return false;
   }
 }

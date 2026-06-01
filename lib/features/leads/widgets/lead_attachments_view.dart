@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../screens/image_viewer_screen.dart';
 import '../utils/lead_files.dart';
 
 class LeadAttachmentsView extends StatelessWidget {
   final List<LeadFileItem> files;
 
-  const LeadAttachmentsView({
-    super.key,
-    required this.files,
-  });
+  const LeadAttachmentsView({super.key, required this.files});
 
   static const String _serverBaseUrl = 'http://192.168.1.16:3011';
 
@@ -43,30 +41,41 @@ class LeadAttachmentsView extends StatelessWidget {
     final fixedUrl = _fixedUrl(item.url);
 
     if (fixedUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('File URL not found')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('File URL not found')));
       return;
     }
 
     final uri = Uri.tryParse(fixedUrl);
 
     if (uri == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid file URL')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invalid file URL')));
       return;
     }
 
-    final opened = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
+    if (!context.mounted) return;
 
-    if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open file')),
+    if (item.isImage) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ImageViewerScreen(
+            imageUrl: fixedUrl,
+            label: item.label,
+            fileName: item.displayName,
+          ),
+        ),
       );
+    } else {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not open file')));
+      }
     }
   }
 
@@ -111,9 +120,7 @@ class LeadAttachmentsView extends StatelessWidget {
                         ? Image.network(
                             fixedUrl,
                             fit: BoxFit.cover,
-                            headers: const {
-                              'Accept': 'image/*,*/*',
-                            },
+                            headers: const {'Accept': 'image/*,*/*'},
                             errorBuilder: (_, __, ___) => _fileIcon(item),
                           )
                         : _fileIcon(item),

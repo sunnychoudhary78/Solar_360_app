@@ -3,73 +3,34 @@ import 'package:flutter/material.dart';
 class WorkflowStepper extends StatelessWidget {
   final String currentStatus;
 
-  const WorkflowStepper({
-    super.key,
-    required this.currentStatus,
-  });
+  const WorkflowStepper({super.key, required this.currentStatus});
 
   static const Color primaryColor = Color(0xFF5663A0);
 
   static const List<String> _steps = [
     'New Lead',
     'KYC Collected',
-    'Documents Verification Started',
-    'Documents Verified',
     'Sent To Support',
-    'Registration Completed',
-    'Sent To Portal',
+    'Documents Verification Started',
     'Portal Processing Started',
     'Loan Application Initiated',
     'Documents Submitted',
     'Liaison Process Started',
-    'Bank Coordination',
+    'Bank Coordination In Progress',
     'Liaison Completed',
-    'Loan Processing Started',
+    'Finance Verification Started',
     'Loan Approved',
-    'Ready For Installation',
-    'Installation Started',
+    'Installation In Progress',
     'Installation Done',
-    'Inspection Scheduled',
-    'Inspection Completed',
-    'Government Approval Started',
+    'Final Verification Started',
+    'Sent For Final Liaison',
+    'Meter Process Started',
     'Government Approval Completed',
-    'Subsidy Process Started',
-    'Subsidy Released',
     'Lead Completed',
     'Lead Closed',
   ];
 
-  static const Map<String, String> _aliases = {
-    'start loan application': 'Loan Application Initiated',
-    'loan application started': 'Loan Application Initiated',
-    'loan application initiated': 'Loan Application Initiated',
-
-    'liaison started': 'Liaison Process Started',
-    'liaison process started': 'Liaison Process Started',
-    'liaison process': 'Liaison Process Started',
-
-    'bank coordination': 'Bank Coordination',
-
-    'send to portal': 'Sent To Portal',
-    'sent to portal': 'Sent To Portal',
-
-    'portal processing': 'Portal Processing Started',
-    'portal processing started': 'Portal Processing Started',
-
-    'documents submitted': 'Documents Submitted',
-    'document submitted': 'Documents Submitted',
-
-    'kyc collected': 'KYC Collected',
-
-    'government approval completed': 'Government Approval Completed',
-    'govt approval completed': 'Government Approval Completed',
-
-    'installation done': 'Installation Done',
-    'lead completed': 'Lead Completed',
-    'lead closed': 'Lead Closed',
-  };
-
-  String _clean(String value) {
+  static String _clean(String value) {
     return value
         .trim()
         .toLowerCase()
@@ -78,21 +39,65 @@ class WorkflowStepper extends StatelessWidget {
         .replaceAll(RegExp(r'\s+'), ' ');
   }
 
-  String _displayStepName(String status) {
-    final cleaned = _clean(status);
-    return _aliases[cleaned] ?? status.trim();
+  static String _normalizeStatus(String status) {
+    final s = _clean(status);
+
+    const aliases = {
+      'bank coordination': 'bank coordination in progress',
+      'start installation': 'installation in progress',
+      'installation started': 'installation in progress',
+      'installation complete': 'installation done',
+      'mark installation complete': 'installation done',
+      'state meter process': 'meter process started',
+      'government approval done': 'government approval completed',
+      'final liaison': 'sent for final liaison',
+      'send for final liaison': 'sent for final liaison',
+      'complete liaison': 'liaison completed',
+      'start final verification': 'final verification started',
+      'start portal processing': 'portal processing started',
+      'start loan application': 'loan application initiated',
+      'start document verification': 'documents verification started',
+      'approve loan': 'loan approved',
+      'support intake': 'sent to support',
+      'liaison process': 'liaison process started',
+      'finance intake': 'finance verification started',
+      'installation': 'installation in progress',
+      'support final': 'final verification started',
+      'liaison meter': 'meter process started',
+      'support completion': 'government approval completed',
+      'completed': 'lead completed',
+      'closed': 'lead closed',
+    };
+
+    return aliases[s] ?? s;
   }
 
   int _currentIndex() {
-    final normalizedStatus = _clean(_displayStepName(currentStatus));
+    final normalized = _normalizeStatus(currentStatus);
 
-    final index = _steps.indexWhere(
-      (step) => _clean(step) == normalizedStatus,
-    );
+    var index = _steps.indexWhere((step) => _clean(step) == normalized);
 
     if (index >= 0) return index;
 
-    return 0;
+    // Some backend workflow step codes may reach this widget.
+    const workflowAliases = {
+      'support_intake': 'sent to support',
+      'liaison_process': 'liaison process started',
+      'finance_intake': 'finance verification started',
+      'installation': 'installation in progress',
+      'support_final': 'final verification started',
+      'liaison_meter': 'meter process started',
+      'support_completion': 'government approval completed',
+      'completed': 'lead completed',
+      'closed': 'lead closed',
+    };
+
+    final fallback = workflowAliases[normalized];
+    if (fallback != null) {
+      index = _steps.indexWhere((step) => _clean(step) == fallback);
+    }
+
+    return index < 0 ? 0 : index;
   }
 
   @override
@@ -100,7 +105,7 @@ class WorkflowStepper extends StatelessWidget {
     final current = _currentIndex();
     final displayStatus = currentStatus.trim().isEmpty
         ? 'No status'
-        : _displayStepName(currentStatus);
+        : currentStatus.trim();
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -114,10 +119,7 @@ class WorkflowStepper extends StatelessWidget {
         children: [
           const Text(
             'Workflow progress',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: primaryColor,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor),
           ),
           const SizedBox(height: 6),
           Text(
@@ -142,8 +144,9 @@ class WorkflowStepper extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 14,
-                          backgroundColor:
-                              done ? primaryColor : const Color(0xFFE4E1EA),
+                          backgroundColor: done
+                              ? primaryColor
+                              : const Color(0xFFE4E1EA),
                           child: active
                               ? const Icon(
                                   Icons.check,
@@ -153,8 +156,7 @@ class WorkflowStepper extends StatelessWidget {
                               : Text(
                                   '${i + 1}',
                                   style: TextStyle(
-                                    color:
-                                        done ? Colors.white : Colors.black45,
+                                    color: done ? Colors.white : Colors.black45,
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -170,8 +172,9 @@ class WorkflowStepper extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 9,
-                              fontWeight:
-                                  active ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: active
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                               color: active ? primaryColor : Colors.black54,
                             ),
                           ),

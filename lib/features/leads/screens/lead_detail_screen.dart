@@ -48,21 +48,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     });
 
     try {
-      final repo = ref.read(leadRepositoryProvider);
-
-      final fresh = await repo.getLeadById(_lead.id);
-      final hist = await repo.getLeadHistory(_lead.id);
-      final next = await repo.getAllowedNextStatuses(_lead.id);
-
-      if (!mounted) return;
-
-      setState(() {
-        _lead = fresh;
-        history = hist;
-        allowedNext = next;
-        loading = false;
-        loadError = null;
-      });
+      await _fetchFreshData();
     } catch (e) {
       if (!mounted) return;
 
@@ -75,34 +61,44 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
   Future<void> _reloadSilently() async {
     try {
-      final repo = ref.read(leadRepositoryProvider);
-
-      final fresh = await repo.getLeadById(_lead.id);
-      final hist = await repo.getLeadHistory(_lead.id);
-      final next = await repo.getAllowedNextStatuses(_lead.id);
-
-      if (!mounted) return;
-
-      setState(() {
-        _lead = fresh;
-        history = hist;
-        allowedNext = next;
-        loading = false;
-        loadError = null;
-      });
+      await _fetchFreshData();
     } catch (_) {
       if (!mounted) return;
       setState(() => loading = false);
     }
   }
 
+  Future<void> _fetchFreshData() async {
+    final repo = ref.read(leadRepositoryProvider);
+
+    final fresh = await repo.getLeadById(_lead.id);
+    final hist = await repo.getLeadHistory(_lead.id);
+    final next = await repo.getAllowedNextStatuses(_lead.id);
+
+    if (!mounted) return;
+
+    setState(() {
+      _lead = fresh;
+      history = hist;
+      allowedNext = next;
+      loading = false;
+      loadError = null;
+    });
+  }
+
   List<String> _resolveNextStatuses(String roleName) {
-    final localAllowed =
-        LeadWorkflow.getAllowedNextStatuses(_lead.status, roleName);
+    final localAllowed = LeadWorkflow.getAllowedNextStatuses(
+      _lead.status,
+      roleName,
+    );
 
     if (allowedNext.isEmpty) return localAllowed;
 
-    return allowedNext.where(localAllowed.contains).toList();
+    final matched = allowedNext.where(localAllowed.contains).toList();
+
+    if (matched.isNotEmpty) return matched;
+
+    return localAllowed;
   }
 
   Future<void> _advanceStatus(String nextStatus) async {
@@ -141,25 +137,40 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    setState(() => loading = true);
+
     try {
-      await ref.read(leadRepositoryProvider).updateLeadStatus(
+      await ref
+          .read(leadRepositoryProvider)
+          .updateLeadStatus(
             leadId: _lead.id,
             status: nextStatus,
             remarks: remarks,
           );
 
-      ref.invalidate(allLeadsProvider);
+      await _reloadSilently();
 
       if (!mounted) return;
 
-      Navigator.of(context).pop(true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.invalidate(allLeadsProvider);
+        }
+      });
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Status updated to $nextStatus')));
     } catch (e) {
       if (!mounted) return;
 
+      setState(() => loading = false);
+
       ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -184,27 +195,53 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       return;
     }
 
+    setState(() => loading = true);
+
     try {
-      await ref.read(leadRepositoryProvider).updateLead(
-        _lead.id,
-        {
-          'registration_id': result.regId,
-          'registration_date': result.regDate,
-          'registration_time': result.regTime,
-        },
-      );
+      await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
+        'registration_id': result.regId,
+        'registration_date': result.regDate,
+        'registration_time': result.regTime,
+      });
 
       ref.invalidate(allLeadsProvider);
 
-      if (!mounted) return;
+      await _reloadSilently();
 
-      Navigator.of(context).pop(true);
-    } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        const SnackBar(content: Text('Registration details saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => loading = false);
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _openInstallationForm() async {
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => InstallationFormScreen(lead: _lead)),
+    );
+
+    if (ok == true && mounted) {
+      ref.invalidate(allLeadsProvider);
+      setState(() => loading = true);
+      await _reloadSilently();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Installation details saved')),
       );
     }
   }
@@ -216,8 +253,9 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     final nextStatuses = _resolveNextStatuses(roleName);
     final files = collectLeadFiles(_lead);
 
-    final customerName =
-        _lead.fullName.trim().isEmpty ? 'Customer' : _lead.fullName;
+    final customerName = _lead.fullName.trim().isEmpty
+        ? 'Customer'
+        : _lead.fullName;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
@@ -238,157 +276,176 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       ),
       body: loading && history.isEmpty && loadError == null
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (loadError != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(12),
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (loadError != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(loadError!),
                     ),
-                    child: Text(loadError!),
+
+                  _headerCard(customerName),
+                  const SizedBox(height: 14),
+
+                  WorkflowStepper(
+                    currentStatus: _lead.status.trim().isNotEmpty
+                        ? _lead.status
+                        : _lead.workflowStep,
                   ),
+                  const SizedBox(height: 14),
 
-                _headerCard(customerName),
-                const SizedBox(height: 14),
+                  if (auth.appRole == 'installation') ...[
+                    OutlinedButton.icon(
+                      onPressed: loading ? null : _openInstallationForm,
+                      icon: const Icon(Icons.build_circle_outlined),
+                      label: Text(
+                        _lead.hasInstallationDetails
+                            ? 'Edit Installation Details'
+                            : 'Fill Installation Details (required)',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
 
-                WorkflowStepper(currentStatus: _lead.status),
-                const SizedBox(height: 14),
+                  if (auth.appRole == 'support' &&
+                      !_lead.hasRegistrationDetails) ...[
+                    OutlinedButton(
+                      onPressed: loading ? null : _saveRegistration,
+                      child: const Text('Add registration details'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
 
-                if (auth.appRole == 'installation') ...[
-                  OutlinedButton.icon(
-                    onPressed: loading
-                        ? null
-                        : () async {
-                            final ok = await Navigator.push<bool>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    InstallationFormScreen(lead: _lead),
+                  _section('Customer Details', [
+                    _row('Full Name', _lead.fullName),
+                    _row('Lead Code', _lead.leadCode),
+                    _row('Mobile', _lead.mobile),
+                    _row('Email', _lead.email),
+                    _row('Address', _lead.address),
+                    _row('City', _lead.city),
+                    _row('State', _lead.state),
+                    _row('Pincode', _lead.pincode),
+                  ]),
+
+                  _section('Workflow', [
+                    _row('Status', _lead.status),
+                    _row('Department', _lead.currentDepartment),
+                    _row('Stage', _lead.leadStage),
+                    _row('Priority', _lead.priority),
+                    _row('Workflow Step', _lead.workflowStep),
+                  ]),
+
+                  _section('Connection & Bank', [
+                    _row('CA Number', _lead.caNumber),
+                    _row('K Number', _lead.kNumber),
+                    _row('Discom', _lead.discom),
+                    _row('Bank', _lead.bankName),
+                    _row('Account', _lead.accountNumber),
+                    _row('IFSC', _lead.ifscCode),
+                  ]),
+
+                  if (_lead.hasRegistrationDetails)
+                    _section('Registration', [
+                      _row('Registration ID', _lead.registrationId),
+                      _row('Registration Date', _lead.registrationDate),
+                      _row('Registration Time', _lead.registrationTime),
+                    ]),
+
+                  if (_lead.hasInstallationDetails)
+                    _section('Installation Details', [
+                      _row('File No', _installationValue('file_no')),
+                      _row('Capacity', _installationValue('capacity')),
+                      _row(
+                        'Panel Brand',
+                        _installationValue('solar_panel_brand'),
+                      ),
+                      _row(
+                        'No. of Panels',
+                        _installationValue('number_of_solar_panel'),
+                      ),
+                      _row('Invoice No', _installationValue('invoice_no')),
+                    ]),
+
+                  _section('Uploaded Files & Images', [
+                    LeadAttachmentsView(files: files),
+                  ]),
+
+                  if (_lead.notes.trim().isNotEmpty)
+                    _section('Notes', [_row('Notes', _lead.notes)]),
+
+                  if (nextStatuses.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Status actions',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...nextStatuses.map((status) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: loading
+                                ? null
+                                : () => _advanceStatus(status),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                            );
-
-                            if (ok == true && mounted) {
-                              ref.invalidate(allLeadsProvider);
-                              Navigator.of(context).pop(true);
-                            }
-                          },
-                    icon: const Icon(Icons.build_circle_outlined),
-                    label: Text(
-                      _lead.hasInstallationDetails
-                          ? 'Edit Installation Details'
-                          : 'Fill Installation Details (required)',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                if (auth.appRole == 'support' &&
-                    !_lead.hasRegistrationDetails) ...[
-                  OutlinedButton(
-                    onPressed: loading ? null : _saveRegistration,
-                    child: const Text('Add registration details'),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                _section('Customer Details', [
-                  _row('Full Name', _lead.fullName),
-                  _row('Lead Code', _lead.leadCode),
-                  _row('Mobile', _lead.mobile),
-                  _row('Email', _lead.email),
-                  _row('Address', _lead.address),
-                  _row('City', _lead.city),
-                  _row('State', _lead.state),
-                  _row('Pincode', _lead.pincode),
-                ]),
-
-                _section('Workflow', [
-                  _row('Status', _lead.status),
-                  _row('Department', _lead.currentDepartment),
-                  _row('Stage', _lead.leadStage),
-                  _row('Priority', _lead.priority),
-                  _row('Workflow Step', _lead.workflowStep),
-                ]),
-
-                _section('Connection & Bank', [
-                  _row('CA Number', _lead.caNumber),
-                  _row('K Number', _lead.kNumber),
-                  _row('Discom', _lead.discom),
-                  _row('Bank', _lead.bankName),
-                  _row('Account', _lead.accountNumber),
-                  _row('IFSC', _lead.ifscCode),
-                ]),
-
-                if (_lead.hasRegistrationDetails)
-                  _section('Registration', [
-                    _row('Registration ID', _lead.registrationId),
-                    _row('Registration Date', _lead.registrationDate),
-                    _row('Registration Time', _lead.registrationTime),
-                  ]),
-
-                _section('Uploaded Files & Images', [
-                  LeadAttachmentsView(files: files),
-                ]),
-
-                if (_lead.notes.trim().isNotEmpty)
-                  _section('Notes', [
-                    _row('Notes', _lead.notes),
-                  ]),
-
-                if (nextStatuses.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Status actions',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  ...nextStatuses.map((status) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed:
-                              loading ? null : () => _advanceStatus(status),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Text(
+                              nextStatuses.length == 1
+                                  ? LeadWorkflow.nextActionLabel(_lead.status)
+                                  : status,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            LeadWorkflow.nextActionLabel(_lead.status),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
                         ),
-                      ),
-                    );
-                  }),
-                ],
+                      );
+                    }),
+                  ],
 
-                const SizedBox(height: 16),
-                const Text(
-                  'Status history',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-
-                if (history.isEmpty)
+                  const SizedBox(height: 16),
                   const Text(
-                    'No history yet',
-                    style: TextStyle(color: Colors.black54),
-                  )
-                else
-                  ...history.map(_historyTile),
-              ],
+                    'Status history',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (history.isEmpty)
+                    const Text(
+                      'No history yet',
+                      style: TextStyle(color: Colors.black54),
+                    )
+                  else
+                    ...history.map(_historyTile),
+                ],
+              ),
             ),
     );
+  }
+
+  String _installationValue(String key) {
+    final d = _lead.installationDetails;
+    if (d == null) return '';
+    return d[key]?.toString() ?? '';
   }
 
   Widget _headerCard(String customerName) {
@@ -460,16 +517,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (old != null && old.isNotEmpty)
-              Text(
-                'From: $old',
-                style: const TextStyle(fontSize: 12),
-              ),
+              Text('From: $old', style: const TextStyle(fontSize: 12)),
             if (remarks.isNotEmpty) Text(remarks),
             if (user != null && user.isNotEmpty)
-              Text(
-                'By: $user',
-                style: const TextStyle(fontSize: 11),
-              ),
+              Text('By: $user', style: const TextStyle(fontSize: 11)),
             if (when.isNotEmpty)
               Text(
                 when,
@@ -482,6 +533,12 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   }
 
   Widget _section(String title, List<Widget> children) {
+    final visibleChildren = children
+        .where((child) => child is! SizedBox)
+        .toList();
+
+    if (visibleChildren.isEmpty) return const SizedBox.shrink();
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 14),
@@ -503,7 +560,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
             ),
           ),
           const Divider(height: 20),
-          ...children,
+          ...visibleChildren,
         ],
       ),
     );
@@ -720,10 +777,7 @@ class _RegistrationDialogState extends State<_RegistrationDialog> {
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
-          onPressed: save,
-          child: const Text('Save'),
-        ),
+        ElevatedButton(onPressed: save, child: const Text('Save')),
       ],
     );
   }
