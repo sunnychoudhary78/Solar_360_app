@@ -236,20 +236,30 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     try {
       setState(() => isLoading = true);
 
-      await ref.read(leadRepositoryProvider).createLead(
-        data,
-        singleFilePaths: {
-          if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
-          if (bankClearPhotoPath != null)
-            'bank_clear_photo': bankClearPhotoPath!,
-          if (chequePassbookPath != null)
-            'cheque_passbook_copy': chequePassbookPath!,
-        },
-        additionalImagePaths: additionalImages,
-        additionalDocumentPaths: additionalDocs,
-      );
+      await ref
+          .read(leadRepositoryProvider)
+          .createLead(
+            data,
+            singleFilePaths: {
+              if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
+              if (bankClearPhotoPath != null)
+                'bank_clear_photo': bankClearPhotoPath!,
+              if (chequePassbookPath != null)
+                'cheque_passbook_copy': chequePassbookPath!,
+            },
+            additionalImagePaths: additionalImages,
+            additionalDocumentPaths: additionalDocs,
+          );
 
-      ref.invalidate(allLeadsProvider);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          try {
+            ref.invalidate(allLeadsProvider);
+          } catch (err, st) {
+            debugPrint('invalidate failed: $err\n$st');
+          }
+        }
+      });
 
       if (!mounted) return;
 
@@ -261,9 +271,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create lead: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to create lead: $e')));
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -296,9 +306,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           filled: true,
           fillColor: bgColor,
           errorMaxLines: 2,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: primaryColor, width: 1.3),
@@ -341,16 +349,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           labelText: label,
           filled: true,
           fillColor: bgColor,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
         items: items
             .map(
-              (item) => DropdownMenuItem<String>(
-                value: item,
-                child: Text(item),
-              ),
+              (item) =>
+                  DropdownMenuItem<String>(value: item, child: Text(item)),
             )
             .toList(),
         onChanged: isLoading ? null : onChanged,
@@ -374,10 +378,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         value: value,
         title: Text(
           title,
-          style: const TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: textColor, fontWeight: FontWeight.w600),
         ),
         activeColor: primaryColor,
         onChanged: isLoading ? null : onChanged,
@@ -488,10 +489,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     height: 160,
                     width: double.infinity,
                     child: isImage
-                        ? Image.file(
-                            File(value),
-                            fit: BoxFit.cover,
-                          )
+                        ? Image.file(File(value), fit: BoxFit.cover)
                         : _docPreview(value),
                   ),
                 ),
@@ -632,9 +630,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               ),
               FilledButton.icon(
                 onPressed: isLoading ? null : onAdd,
-                style: FilledButton.styleFrom(
-                  backgroundColor: primaryColor,
-                ),
+                style: FilledButton.styleFrom(backgroundColor: primaryColor),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add'),
               ),
@@ -663,10 +659,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               height: 105,
                               width: 110,
                               child: image
-                                  ? Image.file(
-                                      File(path),
-                                      fit: BoxFit.cover,
-                                    )
+                                  ? Image.file(File(path), fit: BoxFit.cover)
                                   : _docPreview(path),
                             ),
                           ),
@@ -822,15 +815,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               input(
                 'Latitude',
                 latitude,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 validator: (v) => _validateNumber(v, 'Latitude'),
               ),
               input(
                 'Longitude',
                 longitude,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 validator: (v) => _validateNumber(v, 'Longitude'),
               ),
 
@@ -979,22 +974,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 imagesOnly: true,
                 onAdd: () => _pickDocs(additionalImages, imageOnly: true),
                 onRemove: (i) => setState(() => additionalImages.removeAt(i)),
-                onReplace: (i) => _replaceFileAt(
-                  additionalImages,
-                  i,
-                  imageOnly: true,
-                ),
+                onReplace: (i) =>
+                    _replaceFileAt(additionalImages, i, imageOnly: true),
               ),
               _multiFilePicker(
                 title: 'Additional Documents',
                 files: additionalDocs,
                 onAdd: () => _pickDocs(additionalDocs, imageOnly: false),
                 onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
-                onReplace: (i) => _replaceFileAt(
-                  additionalDocs,
-                  i,
-                  imageOnly: false,
-                ),
+                onReplace: (i) =>
+                    _replaceFileAt(additionalDocs, i, imageOnly: false),
               ),
 
               const SizedBox(height: 24),

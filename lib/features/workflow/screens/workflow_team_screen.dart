@@ -17,8 +17,7 @@ class WorkflowTeamScreen extends ConsumerStatefulWidget {
   const WorkflowTeamScreen({super.key, this.titleOverride});
 
   @override
-  ConsumerState<WorkflowTeamScreen> createState() =>
-      _WorkflowTeamScreenState();
+  ConsumerState<WorkflowTeamScreen> createState() => _WorkflowTeamScreenState();
 }
 
 class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
@@ -67,7 +66,17 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
           ),
           actions: [
             IconButton(
-              onPressed: () => ref.invalidate(allLeadsProvider),
+              onPressed: () {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    try {
+                      ref.invalidate(allLeadsProvider);
+                    } catch (err, st) {
+                      debugPrint('invalidate failed: $err\n$st');
+                    }
+                  }
+                });
+              },
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
@@ -79,8 +88,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
         body: selectedPage == 1
             ? const NotificationsScreen()
             : leadsAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -288,10 +296,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
             const SizedBox(height: 12),
             Text(
               auth.user?.name ?? _title,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             Text(
               auth.user?.roleName ?? '',

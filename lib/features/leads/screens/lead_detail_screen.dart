@@ -51,7 +51,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       await _fetchFreshData();
     } catch (e) {
       if (!mounted) return;
-
       setState(() {
         loading = false;
         loadError = e.toString();
@@ -62,7 +61,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   Future<void> _reloadSilently() async {
     try {
       await _fetchFreshData();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Silent reload failed: $e');
       if (!mounted) return;
       setState(() => loading = false);
     }
@@ -95,16 +95,15 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     if (allowedNext.isEmpty) return localAllowed;
 
     final matched = allowedNext.where(localAllowed.contains).toList();
-
-    if (matched.isNotEmpty) return matched;
-
-    return localAllowed;
+    return matched.isNotEmpty ? matched : localAllowed;
   }
 
   Future<void> _advanceStatus(String nextStatus) async {
+    if (loading) return;
+
     final remarksController = TextEditingController();
 
-    final confirmed = await showDialog<bool>(
+    final remarks = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
@@ -114,17 +113,20 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
             controller: remarksController,
             maxLines: 3,
             decoration: const InputDecoration(
-              labelText: 'Remarks (optional)',
+              labelText: 'Remarks / Comment',
               border: OutlineInputBorder(),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () => Navigator.of(dialogContext).pop(null),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () {
+                final text = remarksController.text.trim();
+                Navigator.of(dialogContext).pop(text);
+              },
               child: const Text('Submit'),
             ),
           ],
@@ -132,49 +134,44 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       },
     );
 
-    final remarks = remarksController.text.trim();
     remarksController.dispose();
 
-    if (confirmed != true || !mounted) return;
+    if (remarks == null || !mounted) return;
 
     setState(() => loading = true);
 
     try {
-      await ref
-          .read(leadRepositoryProvider)
-          .updateLeadStatus(
+      await ref.read(leadRepositoryProvider).updateLeadStatus(
             leadId: _lead.id,
             status: nextStatus,
             remarks: remarks,
           );
 
+      if (!mounted) return;
+
       await _reloadSilently();
 
       if (!mounted) return;
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ref.invalidate(allLeadsProvider);
-        }
-      });
-
       ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Status updated to $nextStatus')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Status updated to $nextStatus')),
+      );
     } catch (e) {
       if (!mounted) return;
 
       setState(() => loading = false);
 
       ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
   Future<void> _saveRegistration() async {
+    if (loading) return;
+
     final result = await showDialog<_RegistrationResult>(
       context: context,
       barrierDismissible: false,
@@ -204,7 +201,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
         'registration_time': result.regTime,
       });
 
-      ref.invalidate(allLeadsProvider);
+      if (!mounted) return;
 
       await _reloadSilently();
 
@@ -220,30 +217,33 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       setState(() => loading = false);
 
       ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
   Future<void> _openInstallationForm() async {
-    final ok = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => InstallationFormScreen(lead: _lead)),
+    if (loading) return;
+
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => InstallationFormScreen(lead: _lead),
+      ),
     );
 
-    if (ok == true && mounted) {
-      ref.invalidate(allLeadsProvider);
-      setState(() => loading = true);
-      await _reloadSilently();
+    if (ok != true || !mounted) return;
 
-      if (!mounted) return;
+    setState(() => loading = true);
 
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Installation details saved')),
-      );
-    }
+    await _reloadSilently();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Installation details saved')),
+    );
   }
 
   @override
@@ -253,9 +253,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     final nextStatuses = _resolveNextStatuses(roleName);
     final files = collectLeadFiles(_lead);
 
-    final customerName = _lead.fullName.trim().isEmpty
-        ? 'Customer'
-        : _lead.fullName;
+    final customerName =
+        _lead.fullName.trim().isEmpty ? 'Customer' : _lead.fullName;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
@@ -291,17 +290,14 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       ),
                       child: Text(loadError!),
                     ),
-
                   _headerCard(customerName),
                   const SizedBox(height: 14),
-
                   WorkflowStepper(
                     currentStatus: _lead.status.trim().isNotEmpty
                         ? _lead.status
                         : _lead.workflowStep,
                   ),
                   const SizedBox(height: 14),
-
                   if (auth.appRole == 'installation') ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _openInstallationForm,
@@ -314,7 +310,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-
                   if (auth.appRole == 'support' &&
                       !_lead.hasRegistrationDetails) ...[
                     OutlinedButton(
@@ -323,7 +318,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-
                   _section('Customer Details', [
                     _row('Full Name', _lead.fullName),
                     _row('Lead Code', _lead.leadCode),
@@ -334,7 +328,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('State', _lead.state),
                     _row('Pincode', _lead.pincode),
                   ]),
-
                   _section('Workflow', [
                     _row('Status', _lead.status),
                     _row('Department', _lead.currentDepartment),
@@ -342,7 +335,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('Priority', _lead.priority),
                     _row('Workflow Step', _lead.workflowStep),
                   ]),
-
                   _section('Connection & Bank', [
                     _row('CA Number', _lead.caNumber),
                     _row('K Number', _lead.kNumber),
@@ -351,36 +343,28 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('Account', _lead.accountNumber),
                     _row('IFSC', _lead.ifscCode),
                   ]),
-
                   if (_lead.hasRegistrationDetails)
                     _section('Registration', [
                       _row('Registration ID', _lead.registrationId),
                       _row('Registration Date', _lead.registrationDate),
                       _row('Registration Time', _lead.registrationTime),
                     ]),
-
                   if (_lead.hasInstallationDetails)
                     _section('Installation Details', [
                       _row('File No', _installationValue('file_no')),
                       _row('Capacity', _installationValue('capacity')),
-                      _row(
-                        'Panel Brand',
-                        _installationValue('solar_panel_brand'),
-                      ),
+                      _row('Panel Brand', _installationValue('solar_panel_brand')),
                       _row(
                         'No. of Panels',
                         _installationValue('number_of_solar_panel'),
                       ),
                       _row('Invoice No', _installationValue('invoice_no')),
                     ]),
-
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
                   ]),
-
                   if (_lead.notes.trim().isNotEmpty)
                     _section('Notes', [_row('Notes', _lead.notes)]),
-
                   if (nextStatuses.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     const Text(
@@ -397,9 +381,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                         child: SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: loading
-                                ? null
-                                : () => _advanceStatus(status),
+                            onPressed:
+                                loading ? null : () => _advanceStatus(status),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryColor,
                               foregroundColor: Colors.white,
@@ -412,23 +395,20 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                               nextStatuses.length == 1
                                   ? LeadWorkflow.nextActionLabel(_lead.status)
                                   : status,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
                       );
                     }),
                   ],
-
                   const SizedBox(height: 16),
                   const Text(
                     'Status history',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-
                   if (history.isEmpty)
                     const Text(
                       'No history yet',
@@ -506,13 +486,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: primaryColor.withValues(alpha: 0.12),
+          backgroundColor: primaryColor.withOpacity(0.12),
           child: const Icon(Icons.history, color: primaryColor, size: 20),
         ),
-        title: Text(
-          status,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(status, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -533,9 +510,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   }
 
   Widget _section(String title, List<Widget> children) {
-    final visibleChildren = children
-        .where((child) => child is! SizedBox)
-        .toList();
+    final visibleChildren =
+        children.where((child) => child is! SizedBox).toList();
 
     if (visibleChildren.isEmpty) return const SizedBox.shrink();
 

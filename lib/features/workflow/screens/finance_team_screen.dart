@@ -49,24 +49,31 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     try {
       setState(() => actionLoading = true);
 
-      await ref.read(leadRepositoryProvider).updateLeadStatus(
-            leadId: lead.id,
-            status: status,
-          );
+      await ref
+          .read(leadRepositoryProvider)
+          .updateLeadStatus(leadId: lead.id, status: status);
 
-      ref.invalidate(allLeadsProvider);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          try {
+            ref.invalidate(allLeadsProvider);
+          } catch (err, st) {
+            debugPrint('invalidate failed: $err\n$st');
+          }
+        }
+      });
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Status updated: $status')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Status updated: $status')));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
       if (mounted) {
         setState(() => actionLoading = false);
@@ -121,14 +128,21 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
           ),
           title: Text(
             _pageTitle(),
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 24,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
           ),
           actions: [
             IconButton(
-              onPressed: () => ref.invalidate(allLeadsProvider),
+              onPressed: () {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    try {
+                      ref.invalidate(allLeadsProvider);
+                    } catch (err, st) {
+                      debugPrint('invalidate failed: $err\n$st');
+                    }
+                  }
+                });
+              },
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
@@ -165,8 +179,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                 _dashboard(leads),
                 LeadsTable(
                   leads: liaisonLeads,
-                  emptyMessage:
-                      'No leads received from Liaison Team yet',
+                  emptyMessage: 'No leads received from Liaison Team yet',
                 ),
                 const NotificationsScreen(),
               ],
@@ -277,8 +290,9 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
           status == 'finance verification started';
     }).length;
 
-    final approvedCount =
-        leads.where((lead) => lead.status == 'Loan Approved').length;
+    final approvedCount = leads
+        .where((lead) => lead.status == 'Loan Approved')
+        .length;
 
     return Column(
       children: [
@@ -338,10 +352,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF5663A0),
-            Color(0xFF18A999),
-          ],
+          colors: [Color(0xFF5663A0), Color(0xFF18A999)],
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
@@ -412,12 +423,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     );
   }
 
-  Widget _metricCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _metricCard(String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -543,10 +549,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
           Text(
             subtitle,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.black54,
-              height: 1.4,
-            ),
+            style: const TextStyle(color: Colors.black54, height: 1.4),
           ),
         ],
       ),
@@ -578,10 +581,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: primaryColor.withOpacity(0.12),
-                child: const Icon(
-                  Icons.person,
-                  color: primaryColor,
-                ),
+                child: const Icon(Icons.person, color: primaryColor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -600,10 +600,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
           Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(20),
@@ -659,20 +656,14 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
       padding: const EdgeInsets.only(bottom: 7),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 18,
-            color: primaryColor,
-          ),
+          Icon(icon, size: 18, color: primaryColor),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               cleanValue,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -693,10 +684,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
         title: 'Start Finance Verification',
         icon: Icons.verified_user_rounded,
         color: Colors.orange,
-        onTap: () => _changeStatus(
-          lead,
-          'Finance Verification Started',
-        ),
+        onTap: () => _changeStatus(lead, 'Finance Verification Started'),
       );
     }
 
@@ -705,10 +693,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
         title: 'Approve Loan & Send To Installation',
         icon: Icons.check_circle_rounded,
         color: Colors.green,
-        onTap: () => _changeStatus(
-          lead,
-          'Loan Approved',
-        ),
+        onTap: () => _changeStatus(lead, 'Loan Approved'),
       );
     }
 

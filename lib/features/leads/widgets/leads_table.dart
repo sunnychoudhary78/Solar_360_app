@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../models/lead_model.dart';
 import '../screens/lead_detail_screen.dart';
 
-/// Modern table for lead lists — used across Sales, Support, Liaison, Finance, Installation.
 class LeadsTable extends StatefulWidget {
   final List<LeadModel> leads;
   final bool showSearch;
@@ -25,11 +24,21 @@ class _LeadsTableState extends State<LeadsTable> {
   static const headerBg = Color(0xFF5663A0);
   static const textColor = Color(0xFF1F2028);
 
+  final TextEditingController searchController = TextEditingController();
   String search = '';
+  bool openingLead = false;
 
-  List<LeadModel> get _filtered {
-    if (search.trim().isEmpty) return widget.leads;
-    final q = search.toLowerCase();
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  List<LeadModel> get filteredLeads {
+    final q = search.trim().toLowerCase();
+
+    if (q.isEmpty) return widget.leads;
+
     return widget.leads.where((lead) {
       return lead.fullName.toLowerCase().contains(q) ||
           lead.mobile.toLowerCase().contains(q) ||
@@ -39,16 +48,25 @@ class _LeadsTableState extends State<LeadsTable> {
     }).toList();
   }
 
-  void _openLead(LeadModel lead) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => LeadDetailScreen(lead: lead)),
+  Future<void> openLead(LeadModel lead) async {
+    if (openingLead || !mounted) return;
+
+    setState(() => openingLead = true);
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LeadDetailScreen(lead: lead),
+      ),
     );
+
+    if (!mounted) return;
+
+    setState(() => openingLead = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final leads = _filtered;
+    final leads = filteredLeads;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -57,7 +75,11 @@ class _LeadsTableState extends State<LeadsTable> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: TextField(
-              onChanged: (v) => setState(() => search = v),
+              controller: searchController,
+              onChanged: (v) {
+                if (!mounted) return;
+                setState(() => search = v);
+              },
               decoration: InputDecoration(
                 hintText: 'Search name, mobile, code, status…',
                 prefixIcon: const Icon(Icons.search, color: primaryColor),
@@ -74,11 +96,15 @@ class _LeadsTableState extends State<LeadsTable> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: primaryColor, width: 1.5),
+                  borderSide: const BorderSide(
+                    color: primaryColor,
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
           ),
+
         Expanded(
           child: leads.isEmpty
               ? Center(
@@ -99,7 +125,7 @@ class _LeadsTableState extends State<LeadsTable> {
                       border: Border.all(color: const Color(0xFFE7EAF2)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
+                          color: Colors.black.withOpacity(0.04),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -114,8 +140,7 @@ class _LeadsTableState extends State<LeadsTable> {
                             headingRowHeight: 48,
                             dataRowMinHeight: 52,
                             dataRowMaxHeight: 64,
-                            headingRowColor:
-                                WidgetStateProperty.all(headerBg),
+                            headingRowColor: WidgetStateProperty.all(headerBg),
                             headingTextStyle: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -132,16 +157,17 @@ class _LeadsTableState extends State<LeadsTable> {
                               DataColumn(label: Text('Status')),
                               DataColumn(label: Text('Department')),
                               DataColumn(label: Text('Priority')),
-                              DataColumn(label: Text('')),
+                              DataColumn(label: Text('Action')),
                             ],
-                            rows: leads.map((lead) {
+                            rows: List.generate(leads.length, (index) {
+                              final lead = leads[index];
+
                               return DataRow(
-                                color: WidgetStateProperty.resolveWith((states) {
-                                  final index = leads.indexOf(lead);
-                                  return index.isEven
+                                color: WidgetStateProperty.all(
+                                  index.isEven
                                       ? Colors.white
-                                      : const Color(0xFFF9FAFC);
-                                }),
+                                      : const Color(0xFFF9FAFC),
+                                ),
                                 cells: [
                                   DataCell(Text(lead.leadCode)),
                                   DataCell(
@@ -155,23 +181,44 @@ class _LeadsTableState extends State<LeadsTable> {
                                     ),
                                   ),
                                   DataCell(Text(lead.mobile)),
-                                  DataCell(_statusChip(lead.status)),
-                                  DataCell(Text(lead.currentDepartment)),
-                                  DataCell(Text(lead.priority)),
+                                  DataCell(statusChip(lead.status)),
                                   DataCell(
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.arrow_forward_ios,
-                                        size: 16,
-                                        color: primaryColor,
+                                    Text(
+                                      lead.currentDepartment.isEmpty
+                                          ? '—'
+                                          : lead.currentDepartment,
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      lead.priority.isEmpty
+                                          ? '—'
+                                          : lead.priority,
+                                    ),
+                                  ),
+                                  DataCell(
+                                    ElevatedButton(
+                                      onPressed: openingLead
+                                          ? null
+                                          : () => openLead(lead),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: primaryColor,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
                                       ),
-                                      onPressed: () => _openLead(lead),
+                                      child: const Text('View'),
                                     ),
                                   ),
                                 ],
-                                onSelectChanged: (_) => _openLead(lead),
                               );
-                            }).toList(),
+                            }),
                           ),
                         ),
                       ),
@@ -183,11 +230,11 @@ class _LeadsTableState extends State<LeadsTable> {
     );
   }
 
-  Widget _statusChip(String status) {
+  Widget statusChip(String status) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: primaryColor.withValues(alpha: 0.12),
+        color: primaryColor.withOpacity(0.12),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(

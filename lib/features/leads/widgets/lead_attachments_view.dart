@@ -39,6 +39,7 @@ class LeadAttachmentsView extends StatelessWidget {
 
   Future<void> _openFile(BuildContext context, LeadFileItem item) async {
     final fixedUrl = _fixedUrl(item.url);
+    debugPrint('Opening file: ${item.displayName}, url: $fixedUrl');
 
     if (fixedUrl.isEmpty) {
       ScaffoldMessenger.of(
@@ -56,9 +57,8 @@ class LeadAttachmentsView extends StatelessWidget {
       return;
     }
 
-    if (!context.mounted) return;
-
     if (item.isImage) {
+      if (!context.mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ImageViewerScreen(
@@ -68,14 +68,27 @@ class LeadAttachmentsView extends StatelessWidget {
           ),
         ),
       );
-    } else {
-      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
 
-      if (!opened && context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Could not open file')));
-      }
+    final messenger = ScaffoldMessenger.of(context);
+    final canLaunch = await canLaunchUrl(uri);
+    debugPrint('Can launch PDF/attachment: $canLaunch for uri: $uri');
+
+    if (!canLaunch) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No app available to open this file')),
+      );
+      return;
+    }
+
+    final opened = await launchUrl(uri, mode: LaunchMode.platformDefault);
+    debugPrint('Launch result: $opened for uri: $uri');
+
+    if (!opened) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not open file')),
+      );
     }
   }
 
