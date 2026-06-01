@@ -101,40 +101,13 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   Future<void> _advanceStatus(String nextStatus) async {
     if (loading) return;
 
-    final remarksController = TextEditingController();
-
     final remarks = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text('Update to "$nextStatus"?'),
-          content: TextField(
-            controller: remarksController,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Remarks / Comment',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(null),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final text = remarksController.text.trim();
-                Navigator.of(dialogContext).pop(text);
-              },
-              child: const Text('Submit'),
-            ),
-          ],
-        );
+        return _StatusRemarksDialog(nextStatus: nextStatus);
       },
     );
-
-    remarksController.dispose();
 
     if (remarks == null || !mounted) return;
 
@@ -560,6 +533,70 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
           Expanded(child: Text(value)),
         ],
       ),
+    );
+  }
+}
+
+/// Owns [TextEditingController] lifecycle so it is not disposed while the route pops.
+class _StatusRemarksDialog extends StatefulWidget {
+  final String nextStatus;
+
+  const _StatusRemarksDialog({required this.nextStatus});
+
+  @override
+  State<_StatusRemarksDialog> createState() => _StatusRemarksDialogState();
+}
+
+class _StatusRemarksDialogState extends State<_StatusRemarksDialog> {
+  late final TextEditingController _remarksController;
+
+  @override
+  void initState() {
+    super.initState();
+    _remarksController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _remarksController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    Navigator.of(context).pop(_remarksController.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Update to "${widget.nextStatus}"?'),
+      content: TextField(
+        controller: _remarksController,
+        maxLines: 3,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _submit(),
+        decoration: const InputDecoration(
+          labelText: 'Remarks / Comment',
+          hintText: 'Add a note for this status change (optional)',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _LeadDetailScreenState.primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Submit'),
+        ),
+      ],
     );
   }
 }

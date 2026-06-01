@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/utils/file_download.dart';
+import '../../../core/utils/upload_url.dart';
+import '../screens/document_preview_screen.dart';
 import '../screens/image_viewer_screen.dart';
 import '../utils/lead_files.dart';
 
@@ -9,60 +11,28 @@ class LeadAttachmentsView extends StatelessWidget {
 
   const LeadAttachmentsView({super.key, required this.files});
 
-  static const String _serverBaseUrl = 'http://192.168.1.16:3011';
+  static const _primaryColor = Color(0xFF5663A0);
 
-  String _fixedUrl(String url) {
-    var u = url.trim().replaceAll('\\', '/');
-
-    if (u.isEmpty) return '';
-
-    u = u.replaceFirst(RegExp(r'^https?://[^/]+/api/uploads/'), '/uploads/');
-    u = u.replaceFirst(RegExp(r'^https?://[^/]+/uploads/'), '/uploads/');
-
-    u = u.replaceFirst('/api/uploads/', '/uploads/');
-
-    if (u.startsWith('api/uploads/')) {
-      u = u.replaceFirst('api/uploads/', 'uploads/');
-    }
-
-    if (u.startsWith('uploads/')) {
-      u = '/$u';
-    }
-
-    if (!u.startsWith('http://') && !u.startsWith('https://')) {
-      if (!u.startsWith('/')) u = '/$u';
-      u = '$_serverBaseUrl$u';
-    }
-
-    return u;
+  String _resolveUrl(LeadFileItem item) {
+    final fromItem = item.url.trim();
+    if (fromItem.isNotEmpty) return fromItem;
+    return resolveUploadUrl(item.path);
   }
 
-  Future<void> _openFile(BuildContext context, LeadFileItem item) async {
-    final fixedUrl = _fixedUrl(item.url);
-    debugPrint('Opening file: ${item.displayName}, url: $fixedUrl');
-
-    if (fixedUrl.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('File URL not found')));
+  Future<void> _preview(BuildContext context, LeadFileItem item) async {
+    final url = _resolveUrl(item);
+    if (url.isEmpty) {
+      _snack(context, 'File URL not found');
       return;
     }
 
-    final uri = Uri.tryParse(fixedUrl);
-
-    if (uri == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Invalid file URL')));
-      return;
-    }
+    if (!context.mounted) return;
 
     if (item.isImage) {
-      if (!context.mounted) return;
-      Navigator.of(context).push(
+      await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ImageViewerScreen(
-            imageUrl: fixedUrl,
+            imageUrl: url,
             label: item.label,
             fileName: item.displayName,
           ),
@@ -71,25 +41,43 @@ class LeadAttachmentsView extends StatelessWidget {
       return;
     }
 
-    final messenger = ScaffoldMessenger.of(context);
-    final canLaunch = await canLaunchUrl(uri);
-    debugPrint('Can launch PDF/attachment: $canLaunch for uri: $uri');
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DocumentPreviewScreen(
+          fileUrl: url,
+          label: item.label,
+          fileName: item.displayName,
+        ),
+      ),
+    );
+  }
 
-    if (!canLaunch) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('No app available to open this file')),
-      );
+  Future<void> _download(BuildContext context, LeadFileItem item) async {
+    final url = _resolveUrl(item);
+    if (url.isEmpty) {
+      _snack(context, 'File URL not found');
       return;
     }
 
-    final opened = await launchUrl(uri, mode: LaunchMode.platformDefault);
-    debugPrint('Launch result: $opened for uri: $uri');
-
-    if (!opened) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Could not open file')),
+    try {
+      final path = await downloadRemoteFile(
+        url: url,
+        fileName: item.displayName,
+        openAfterSave: false,
       );
+      if (!context.mounted) return;
+      _snack(context, 'Saved: $path');
+    } catch (e) {
+      if (!context.mounted) return;
+      _snack(context, e.toString());
     }
+  }
+
+  void _snack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -108,65 +96,100 @@ class LeadAttachmentsView extends StatelessWidget {
       spacing: 12,
       runSpacing: 12,
       children: files.map((item) {
-        final fixedUrl = _fixedUrl(item.url);
+        final fixedUrl = _resolveUrl(item);
 
-        return InkWell(
-          onTap: () => _openFile(context, item),
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            width: 140,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFAF8FF),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE4E1EA)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(13),
-                  ),
-                  child: SizedBox(
-                    height: 100,
-                    child: item.isImage && fixedUrl.isNotEmpty
-                        ? Image.network(
-                            fixedUrl,
-                            fit: BoxFit.cover,
-                            headers: const {'Accept': 'image/*,*/*'},
-                            errorBuilder: (_, __, ___) => _fileIcon(item),
-                          )
-                        : _fileIcon(item),
-                  ),
+        return Container(
+          width: 160,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE4E1EA)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(13),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Text(
-                        item.displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: SizedBox(
+                  height: 96,
+                  child: item.isImage && fixedUrl.isNotEmpty
+                      ? Image.network(
+                          fixedUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _fileIcon(item),
+                        )
+                      : _fileIcon(item),
                 ),
-              ],
-            ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      item.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: fixedUrl.isEmpty
+                            ? null
+                            : () => _preview(context, item),
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          foregroundColor: _primaryColor,
+                        ),
+                        child: const Text('Preview', style: TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: fixedUrl.isEmpty
+                            ? null
+                            : () => _download(context, item),
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                        ),
+                        child: const Text('Download', style: TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       }).toList(),
@@ -179,8 +202,8 @@ class LeadAttachmentsView extends StatelessWidget {
       child: Center(
         child: Icon(
           item.isPdf ? Icons.picture_as_pdf : Icons.insert_drive_file,
-          size: 42,
-          color: item.isPdf ? Colors.red : const Color(0xFF5663A0),
+          size: 40,
+          color: item.isPdf ? Colors.red : _primaryColor,
         ),
       ),
     );

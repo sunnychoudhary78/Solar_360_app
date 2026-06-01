@@ -18,6 +18,11 @@ String resolveUploadUrl(String? value) {
   normalized = normalized.replaceFirst(RegExp(r'^api/uploads/'), '');
   normalized = normalized.replaceFirst(RegExp(r'^uploads/'), '');
 
+  // Lead files are stored under uploads/leads/ on the server.
+  if (!normalized.startsWith('leads/')) {
+    normalized = 'leads/$normalized';
+  }
+
   return '$base/api/uploads/$normalized';
 }
 

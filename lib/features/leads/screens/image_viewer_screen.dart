@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:permission_handler/permission_handler.dart';
+
+import '../../../core/utils/file_download.dart';
 
 class ImageViewerScreen extends StatefulWidget {
   final String imageUrl;
@@ -29,46 +29,21 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     });
 
     try {
-      final status = await Permission.storage.request();
-      if (!status.isGranted) {
-        setState(() {
-          _downloadError = 'Storage permission denied';
-          _downloading = false;
-        });
-        return;
-      }
+      final path = await downloadRemoteFile(
+        url: widget.imageUrl,
+        fileName: widget.fileName,
+        openAfterSave: false,
+      );
 
-      final uri = Uri.tryParse(widget.imageUrl);
-      if (uri == null) {
-        setState(() {
-          _downloadError = 'Invalid image URL';
-          _downloading = false;
-        });
-        return;
-      }
+      if (!mounted) return;
 
-      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      setState(() => _downloading = false);
 
-      if (!opened && mounted) {
-        setState(() {
-          _downloadError = 'Could not start download';
-          _downloading = false;
-        });
-      } else if (mounted) {
-        setState(() {
-          _downloading = false;
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Download started. Check your downloads folder.'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Image saved to $path')),
+      );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _downloadError = e.toString();
         _downloading = false;
@@ -125,16 +100,16 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                     );
                   },
                   errorBuilder: (context, error, stackTrace) {
-                    return Center(
+                    return const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.broken_image,
                             color: Colors.white54,
                             size: 48,
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           Text(
                             'Failed to load image',
                             style: TextStyle(color: Colors.white54),
