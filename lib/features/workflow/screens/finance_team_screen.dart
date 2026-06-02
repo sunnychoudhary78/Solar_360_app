@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/auth_session.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../leads/models/lead_model.dart';
 import '../../leads/providers/lead_provider.dart';
 import '../../leads/widgets/leads_table.dart';
@@ -16,6 +17,7 @@ class FinanceTeamScreen extends ConsumerStatefulWidget {
 
 class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
   static const bgColor = Color(0xfff4f7fb);
+  static const drawerBgColor = Color(0xFFF9F7FF);
   static const cardColor = Colors.white;
   static const primaryColor = Color(0xFF5663A0);
   static const accentColor = Color(0xFF18A999);
@@ -39,7 +41,6 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
   List<LeadModel> _liaisonTeamLeads(List<LeadModel> leads) {
     return _financeLeads(leads).where((lead) {
       final status = lead.status.toLowerCase();
-
       return status == 'liaison completed' ||
           status == 'finance verification started';
     }).toList();
@@ -49,36 +50,41 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     try {
       setState(() => actionLoading = true);
 
-      await ref
-          .read(leadRepositoryProvider)
-          .updateLeadStatus(leadId: lead.id, status: status);
+      await ref.read(leadRepositoryProvider).updateLeadStatus(
+            leadId: lead.id,
+            status: status,
+          );
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          try {
-            ref.invalidate(allLeadsProvider);
-          } catch (err, st) {
-            debugPrint('invalidate failed: $err\n$st');
-          }
-        }
-      });
+      _refreshLeads();
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Status updated: $status')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Status updated: $status')),
+      );
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e')),
+      );
     } finally {
       if (mounted) {
         setState(() => actionLoading = false);
       }
     }
+  }
+
+  void _refreshLeads() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      try {
+        ref.invalidate(allLeadsProvider);
+      } catch (err, st) {
+        debugPrint('invalidate failed: $err\n$st');
+      }
+    });
   }
 
   Color _statusColor(String status) {
@@ -128,21 +134,14 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
           ),
           title: Text(
             _pageTitle(),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 24,
+            ),
           ),
           actions: [
             IconButton(
-              onPressed: () {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) {
-                    try {
-                      ref.invalidate(allLeadsProvider);
-                    } catch (err, st) {
-                      debugPrint('invalidate failed: $err\n$st');
-                    }
-                  }
-                });
-              },
+              onPressed: _refreshLeads,
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
@@ -202,81 +201,228 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
   }
 
   Widget _drawer() {
+    final auth = ref.watch(authProvider);
+
+    final userName = auth.user?.name?.trim().isNotEmpty == true
+        ? auth.user!.name!.trim()
+        : 'Finance User';
+
+    final roleName = auth.user?.roleName?.trim().isNotEmpty == true
+        ? auth.user!.roleName!.trim()
+        : 'Finance Team';
+
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.78,
-      backgroundColor: bgColor,
+      backgroundColor: drawerBgColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+      ),
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              const Icon(
-                Icons.solar_power_rounded,
-                size: 80,
-                color: primaryColor,
+        child: Column(
+          children: [
+            _drawerHeader(
+              userName: userName,
+              roleName: roleName,
+            ),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _drawerSectionTitle('MAIN'),
+                  _drawerItem(
+                    icon: Icons.dashboard_rounded,
+                    title: 'Dashboard',
+                    selected: selectedPage == 0,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => selectedPage = 0);
+                    },
+                  ),
+                  _drawerSectionTitle('WORK'),
+                  _drawerItem(
+                    icon: Icons.account_tree_rounded,
+                    title: 'Liaison Team',
+                    selected: selectedPage == 1,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => selectedPage = 1);
+                    },
+                  ),
+                  _drawerItem(
+                    icon: Icons.notifications_none_rounded,
+                    title: 'Notifications',
+                    selected: selectedPage == 2,
+                    trailing: Container(
+                      height: 8,
+                      width: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE53935),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => selectedPage = 2);
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Finance Team',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-              const SizedBox(height: 38),
-              _drawerItem(Icons.dashboard_rounded, 'Dashboard', 0),
-              _drawerItem(Icons.account_tree_rounded, 'Liaison Team', 1),
-              _drawerItem(Icons.notifications_none_rounded, 'Notifications', 2),
-              const Spacer(),
-              ListTile(
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+              child: _drawerItem(
+                icon: Icons.logout_rounded,
+                title: 'Logout',
+                isLogout: true,
                 onTap: () async {
                   Navigator.pop(context);
                   await AuthSession.logout(context, ref);
                 },
-                leading: const Icon(
-                  Icons.logout_rounded,
-                  color: primaryColor,
-                  size: 30,
-                ),
-                title: const Text(
-                  'Logout',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _drawerItem(IconData icon, String title, int page) {
-    final selected = selectedPage == page;
+  Widget _drawerHeader({
+    required String userName,
+    required String roleName,
+  }) {
+    final initial = userName.isNotEmpty ? userName[0].toUpperCase() : 'F';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: selected ? primaryColor.withOpacity(0.10) : Colors.transparent,
-        borderRadius: BorderRadius.circular(18),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryColor,
+            Color(0xFFBFC6FF),
+          ],
+        ),
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(26),
+        ),
       ),
-      child: ListTile(
-        onTap: () {
-          Navigator.pop(context);
-          setState(() => selectedPage = page);
-        },
-        leading: Icon(icon, color: primaryColor, size: 30),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: textColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 62,
+            width: 62,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              initial,
+              style: const TextStyle(
+                color: primaryColor,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            userName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 21,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            roleName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _drawerSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 24, 20, 10),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.black.withOpacity(0.55),
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _drawerItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    bool selected = false,
+    bool isLogout = false,
+    Widget? trailing,
+  }) {
+    final color = isLogout
+        ? const Color(0xFFD32F2F)
+        : selected
+            ? primaryColor
+            : textColor;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: Material(
+        color: selected ? primaryColor.withOpacity(0.10) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 23),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 16,
+                      fontWeight:
+                          selected || isLogout ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (trailing != null) trailing,
+              ],
+            ),
           ),
         ),
       ),
@@ -290,9 +436,8 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
           status == 'finance verification started';
     }).length;
 
-    final approvedCount = leads
-        .where((lead) => lead.status == 'Loan Approved')
-        .length;
+    final approvedCount =
+        leads.where((lead) => lead.status == 'Loan Approved').length;
 
     return Column(
       children: [
@@ -352,7 +497,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF5663A0), Color(0xFF18A999)],
+          colors: [primaryColor, accentColor],
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
@@ -363,60 +508,91 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
+          Positioned(
+            right: -18,
+            top: -24,
+            child: Container(
+              height: 112,
+              width: 112,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.07),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 40,
+            bottom: -46,
+            child: Container(
+              height: 96,
+              width: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.06),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(13),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.16),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Icon(
-                  Icons.account_balance_rounded,
+              Row(
+                children: [
+                  Container(
+                    height: 58,
+                    width: 58,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: const Text(
+                      'Finance Desk',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Finance Dashboard',
+                style: TextStyle(
                   color: Colors.white,
-                  size: 34,
+                  fontSize: 29,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.3,
                 ),
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.16),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Text(
-                  'Finance desk',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+              const SizedBox(height: 10),
+              Text(
+                '$total active leads, $fromLiaison from Liaison Team, $approved approved',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  height: 1.4,
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 22),
-          const Text(
-            'Finance Dashboard',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 29,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            '$total active leads, $fromLiaison from Liaison Team, $approved approved',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 15,
-              height: 1.4,
-            ),
           ),
         ],
       ),
