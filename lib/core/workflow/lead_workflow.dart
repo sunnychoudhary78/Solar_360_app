@@ -16,7 +16,6 @@ class LeadWorkflow {
       'Final Verification Started',
       'Sent For Final Liaison',
       'Lead Completed',
-      'Lead Closed',
     ],
 
     'Liaising': [
@@ -64,8 +63,20 @@ class LeadWorkflow {
     'Meter Process Started': ['Government Approval Completed'],
 
     'Government Approval Completed': ['Lead Completed'],
-    'Lead Completed': ['Lead Closed'],
+
+    // Final status: no action button after this.
+    'Lead Completed': [],
+    'Lead Closed': [],
   };
+
+  static const finalStatuses = <String>{
+    'Lead Completed',
+    'Lead Closed',
+  };
+
+  static bool isFinalStatus(String? status) {
+    return finalStatuses.contains((status ?? '').trim());
+  }
 
   static String resolveRoleKey(String? role) {
     final r = (role ?? '').trim();
@@ -98,18 +109,31 @@ class LeadWorkflow {
     String currentStatus,
     String userRole,
   ) {
+    final cleanStatus = currentStatus.trim();
+
+    if (isFinalStatus(cleanStatus)) {
+      return [];
+    }
+
+    final sequential = nextStatus[cleanStatus] ?? [];
+
+    if (sequential.isEmpty) {
+      return [];
+    }
+
     if (isAdminRole(userRole)) {
-      return nextStatus[currentStatus] ?? [];
+      return sequential;
     }
 
     final roleKey = resolveRoleKey(userRole);
     final roleStatuses = statusFlow[roleKey] ?? [];
-    final sequential = nextStatus[currentStatus] ?? [];
 
     return sequential.where(roleStatuses.contains).toList();
   }
 
   static String nextActionLabel(String currentStatus) {
+    final cleanStatus = currentStatus.trim();
+
     const labels = {
       'New Lead': 'Mark KYC Collected',
       'KYC Collected': 'Send to Support',
@@ -129,9 +153,8 @@ class LeadWorkflow {
       'Sent For Final Liaison': 'Start Meter Process',
       'Meter Process Started': 'Government Approval Done',
       'Government Approval Completed': 'Complete Lead',
-      'Lead Completed': 'Close Lead',
     };
 
-    return labels[currentStatus] ?? 'Advance status';
+    return labels[cleanStatus] ?? 'Advance status';
   }
 }

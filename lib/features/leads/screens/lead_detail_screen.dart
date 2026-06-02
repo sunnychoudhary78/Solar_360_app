@@ -1,5 +1,9 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/workflow/lead_workflow.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -98,6 +102,14 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     return matched.isNotEmpty ? matched : localAllowed;
   }
 
+  bool _canUploadDocuments(List<String> nextStatuses) {
+    final status = _lead.status.trim().toLowerCase();
+
+    return status == 'loan application initiated' ||
+        status == 'documents submitted' ||
+        nextStatuses.contains('Documents Submitted');
+  }
+
   Future<void> _advanceStatus(String nextStatus) async {
     if (loading) return;
 
@@ -163,6 +175,58 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Note added successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => loading = false);
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  Future<void> _uploadDocuments() async {
+    if (loading) return;
+
+    final result = await showDialog<_UploadDocumentsResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _UploadDocumentsDialog(),
+    );
+
+    if (result == null || !mounted) return;
+
+    if (result.images.isEmpty && result.documents.isEmpty) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one file')),
+      );
+      return;
+    }
+
+    setState(() => loading = true);
+
+    try {
+      await ref.read(leadRepositoryProvider).uploadLeadDocuments(
+            leadId: _lead.id,
+            additionalImageEntries:
+                result.images.map((item) => item.toPayload()).toList(),
+            additionalDocumentEntries:
+                result.documents.map((item) => item.toPayload()).toList(),
+          );
+
+      if (!mounted) return;
+
+      await _reloadSilently();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Documents uploaded successfully')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -259,6 +323,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     final roleName = auth.user?.roleName ?? '';
     final nextStatuses = _resolveNextStatuses(roleName);
     final files = collectLeadFiles(_lead);
+    final showUploadButton = _canUploadDocuments(nextStatuses);
 
     final customerName =
         _lead.fullName.trim().isEmpty ? 'Customer' : _lead.fullName;
@@ -440,6 +505,26 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       ),
                     ),
                   ),
+
+                  if (showUploadButton) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: loading ? null : _uploadDocuments,
+                        icon: const Icon(Icons.upload_file_outlined),
+                        label: const Text('Upload Document'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryColor,
+                          side: const BorderSide(color: primaryColor),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
 
                   if (nextStatuses.isNotEmpty) ...[
                     const SizedBox(height: 14),
@@ -638,6 +723,514 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
           Expanded(child: Text(value)),
         ],
       ),
+    );
+  }
+}
+
+class TitledLocalFile {
+  final String title;
+  final String path;
+
+  const TitledLocalFile({
+    required this.title,
+    required this.path,
+  });
+
+  Map<String, String> toPayload() {
+    return {
+      'title': title.trim(),
+      'path': path,
+    };
+  }
+
+  TitledLocalFile copyWith({
+    String? title,
+    String? path,
+  }) {
+    return TitledLocalFile(
+      title: title ?? this.title,
+      path: path ?? this.path,
+    );
+  }
+}
+
+class _UploadDocumentsResult {
+  final List<TitledLocalFile> images;
+  final List<TitledLocalFile> documents;
+
+  const _UploadDocumentsResult({
+    required this.images,
+    required this.documents,
+  });
+}
+
+class _UploadDocumentsDialog extends StatefulWidget {
+  const _UploadDocumentsDialog();
+
+  @override
+  State<_UploadDocumentsDialog> createState() => _UploadDocumentsDialogState();
+}
+
+class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
+  static const primaryColor = _LeadDetailScreenState.primaryColor;
+  static const bgColor = Color(0xFFF7F8FC);
+
+  final ImagePicker _imagePicker = ImagePicker();
+
+  final List<TitledLocalFile> additionalImages = [];
+  final List<TitledLocalFile> additionalDocs = [];
+
+  bool saving = false;
+
+  bool _isImagePath(String path) {
+    final p = path.toLowerCase();
+    return p.endsWith('.jpg') ||
+        p.endsWith('.jpeg') ||
+        p.endsWith('.png') ||
+        p.endsWith('.webp');
+  }
+
+  bool _isPdfPath(String path) {
+    return path.toLowerCase().endsWith('.pdf');
+  }
+
+  String _fileDisplayName(String path) {
+    final parts = path.split(RegExp(r'[\\/]'));
+    return parts.isEmpty ? path : parts.last;
+  }
+
+  Future<String?> _pickSingleFile({required bool imageOnly}) async {
+    FocusScope.of(context).unfocus();
+
+    if (imageOnly) {
+      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      return file?.path;
+    }
+
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: false,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
+    );
+
+    return result?.files.single.path;
+  }
+
+  Future<void> _showAddTitledFileDialog({
+    required String dialogTitle,
+    required String titleLabel,
+    required String uploadLabel,
+    required String defaultTitlePrefix,
+    required bool imageOnly,
+    required List<TitledLocalFile> target,
+  }) async {
+    final titleController = TextEditingController(
+      text: '$defaultTitlePrefix ${target.length + 1}',
+    );
+
+    String? selectedPath;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(dialogTitle),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: titleController,
+                        decoration: InputDecoration(
+                          labelText: titleLabel,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      InkWell(
+                        onTap: () async {
+                          final path =
+                              await _pickSingleFile(imageOnly: imageOnly);
+
+                          if (path == null) return;
+                          if (!mounted) return;
+
+                          setDialogState(() {
+                            selectedPath = path;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 130,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFFE4E1EA),
+                            ),
+                          ),
+                          child: selectedPath == null
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      imageOnly
+                                          ? Icons.add_photo_alternate_outlined
+                                          : Icons.upload_file_outlined,
+                                      color: primaryColor,
+                                      size: 38,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(uploadLabel),
+                                  ],
+                                )
+                              : ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: _isImagePath(selectedPath!)
+                                      ? Image.file(
+                                          File(selectedPath!),
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                        )
+                                      : _docPreview(selectedPath!),
+                                ),
+                        ),
+                      ),
+                      if (selectedPath != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _fileDisplayName(selectedPath!),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryColor,
+                  ),
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
+
+                    final title = titleController.text.trim();
+
+                    if (title.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$titleLabel is required')),
+                      );
+                      return;
+                    }
+
+                    if (selectedPath == null || selectedPath!.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$uploadLabel is required')),
+                      );
+                      return;
+                    }
+
+                    setState(() {
+                      target.add(
+                        TitledLocalFile(
+                          title: title,
+                          path: selectedPath!,
+                        ),
+                      );
+                    });
+
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _docPreview(String path) {
+    final pdf = _isPdfPath(path);
+
+    return Container(
+      color: const Color(0xFFEEF0F8),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              pdf ? Icons.picture_as_pdf : Icons.insert_drive_file,
+              size: 42,
+              color: pdf ? Colors.red : primaryColor,
+            ),
+            const SizedBox(height: 6),
+            Flexible(
+              child: Text(
+                _fileDisplayName(path),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _multiFilePicker({
+    required String title,
+    required List<TitledLocalFile> files,
+    required VoidCallback onAdd,
+    required void Function(int index) onRemove,
+    required void Function(int index) onReplace,
+    bool imagesOnly = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4E1EA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$title (${files.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1F2028),
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: saving ? null : onAdd,
+                style: FilledButton.styleFrom(backgroundColor: primaryColor),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add'),
+              ),
+            ],
+          ),
+          if (files.isEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              height: 90,
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE4E1EA)),
+              ),
+              child: Text(
+                imagesOnly
+                    ? 'No images added.'
+                    : 'No documents added.',
+                style: const TextStyle(color: Colors.black45),
+              ),
+            ),
+          ],
+          if (files.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: files.asMap().entries.map((entry) {
+                final item = entry.value;
+                final idx = entry.key;
+                final image = _isImagePath(item.path);
+
+                return SizedBox(
+                  width: 120,
+                  height: 178,
+                  child: Column(
+                    children: [
+                      Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: SizedBox(
+                              height: 105,
+                              width: 120,
+                              child: image
+                                  ? Image.file(
+                                      File(item.path),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : _docPreview(item.path),
+                            ),
+                          ),
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: InkWell(
+                              onTap: saving ? null : () => onRemove(idx),
+                              child: const CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.black54,
+                                child: Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(
+                        height: 34,
+                        child: TextButton(
+                          onPressed: saving ? null : () => onReplace(idx),
+                          child: const Text(
+                            'Replace',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _replaceFileAt(
+    List<TitledLocalFile> target,
+    int index, {
+    required bool imageOnly,
+  }) async {
+    final path = await _pickSingleFile(imageOnly: imageOnly);
+    if (path == null) return;
+    if (!mounted) return;
+
+    setState(() {
+      target[index] = target[index].copyWith(path: path);
+    });
+  }
+
+  void _submit() {
+    if (additionalImages.isEmpty && additionalDocs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one file')),
+      );
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _UploadDocumentsResult(
+        images: List<TitledLocalFile>.from(additionalImages),
+        documents: List<TitledLocalFile>.from(additionalDocs),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Upload Document'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              _multiFilePicker(
+                title: 'Images',
+                files: additionalImages,
+                imagesOnly: true,
+                onAdd: () => _showAddTitledFileDialog(
+                  dialogTitle: 'Add Image',
+                  titleLabel: 'Image title',
+                  uploadLabel: 'Choose Image',
+                  defaultTitlePrefix: 'Image',
+                  imageOnly: true,
+                  target: additionalImages,
+                ),
+                onRemove: (i) => setState(() => additionalImages.removeAt(i)),
+                onReplace: (i) =>
+                    _replaceFileAt(additionalImages, i, imageOnly: true),
+              ),
+              _multiFilePicker(
+                title: 'Documents',
+                files: additionalDocs,
+                imagesOnly: false,
+                onAdd: () => _showAddTitledFileDialog(
+                  dialogTitle: 'Add Document',
+                  titleLabel: 'Document title',
+                  uploadLabel: 'Choose File',
+                  defaultTitlePrefix: 'Document',
+                  imageOnly: false,
+                  target: additionalDocs,
+                ),
+                onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
+                onReplace: (i) =>
+                    _replaceFileAt(additionalDocs, i, imageOnly: false),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: saving ? null : () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: saving ? null : _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          icon: const Icon(Icons.cloud_upload_outlined),
+          label: const Text('Upload'),
+        ),
+      ],
     );
   }
 }
