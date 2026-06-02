@@ -22,8 +22,10 @@ class WorkflowTeamScreen extends ConsumerStatefulWidget {
 
 class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
   static const bgColor = Color(0xFFF7F8FC);
+  static const drawerBgColor = Color(0xFFF9F7FF);
   static const cardColor = Colors.white;
   static const primaryColor = Color(0xFF5663A0);
+  static const supportAccent = Color(0xFF6C63FF);
   static const textColor = Color(0xFF1F2028);
 
   int selectedPage = 0;
@@ -62,21 +64,14 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
           ),
           title: Text(
             selectedPage == 1 ? 'Notifications' : _title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 22,
+            ),
           ),
           actions: [
             IconButton(
-              onPressed: () {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) {
-                    try {
-                      ref.invalidate(allLeadsProvider);
-                    } catch (err, st) {
-                      debugPrint('invalidate failed: $err\n$st');
-                    }
-                  }
-                });
-              },
+              onPressed: _refreshLeads,
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
@@ -88,7 +83,9 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
         body: selectedPage == 1
             ? const NotificationsScreen()
             : leadsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(
+                  child: CircularProgressIndicator(),
+                ),
                 error: (e, _) => Center(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -105,12 +102,23 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                 data: (leads) {
                   final roleName = auth.user?.roleName ?? '';
                   final filteredLeads = _filterLeadsForRole(leads, roleName);
-
                   return _dashboard(filteredLeads, roleName);
                 },
               ),
       ),
     );
+  }
+
+  void _refreshLeads() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      try {
+        ref.invalidate(allLeadsProvider);
+      } catch (err, st) {
+        debugPrint('invalidate failed: $err\n$st');
+      }
+    });
   }
 
   List<LeadModel> _filterLeadsForRole(List<LeadModel> leads, String roleName) {
@@ -169,14 +177,18 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _metric('Active', '$active', Icons.groups_rounded),
+                    child: _metric(
+                      label: 'Active',
+                      value: '$active',
+                      icon: Icons.groups_rounded,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _metric(
-                      'Completed',
-                      '$completed',
-                      Icons.check_circle_outline,
+                      label: 'Completed',
+                      value: '$completed',
+                      icon: Icons.check_circle_outline,
                     ),
                   ),
                 ],
@@ -216,40 +228,131 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
     final resolvedRole = LeadWorkflow.resolveRoleKey(roleName);
 
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF5663A0), Color(0xFF6C63FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryColor,
+            supportAccent,
+          ],
         ),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: supportAccent.withOpacity(0.24),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Text(
-            _title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
+          Positioned(
+            right: -18,
+            top: -24,
+            child: Container(
+              height: 112,
+              width: 112,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.07),
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '$active active · $completed completed',
-            style: const TextStyle(color: Colors.white70, fontSize: 15),
+          Positioned(
+            right: 40,
+            bottom: -46,
+            child: Container(
+              height: 96,
+              width: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.06),
+              ),
+            ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Role: $resolvedRole',
-            style: const TextStyle(color: Colors.white60, fontSize: 13),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    height: 58,
+                    width: 58,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Icon(
+                      Icons.support_agent_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: const Text(
+                      'Support Desk',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Text(
+                _title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '$active active leads, $completed completed',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                'Role: $resolvedRole',
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _metric(String label, String value, IconData icon) {
+  Widget _metric({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -275,73 +378,243 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
               color: textColor,
             ),
           ),
-          Text(label, style: const TextStyle(color: Colors.black54)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.black54),
+          ),
         ],
       ),
     );
   }
 
   Widget _drawer(AuthState auth) {
+    final userName = auth.user?.name?.trim().isNotEmpty == true
+        ? auth.user!.name!.trim()
+        : 'User';
+
+    final roleName = auth.user?.roleName?.trim().isNotEmpty == true
+        ? auth.user!.roleName!.trim()
+        : 'Support';
+
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.78,
+      backgroundColor: drawerBgColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+      ),
       child: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 28),
-            const Icon(
-              Icons.solar_power_rounded,
-              size: 72,
-              color: primaryColor,
+            _drawerHeader(
+              userName: userName,
+              roleName: roleName,
             ),
-            const SizedBox(height: 12),
-            Text(
-              auth.user?.name ?? _title,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              auth.user?.roleName ?? '',
-              style: const TextStyle(color: Colors.black54),
-            ),
-            const SizedBox(height: 32),
-            ListTile(
-              leading: const Icon(
-                Icons.dashboard_outlined,
-                color: primaryColor,
+
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _drawerSectionTitle('MAIN'),
+
+                  _drawerItem(
+                    icon: Icons.dashboard_rounded,
+                    title: 'Dashboard',
+                    selected: selectedPage == 0,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => selectedPage = 0);
+                    },
+                  ),
+
+                  _drawerSectionTitle('WORK'),
+
+                  _drawerItem(
+                    icon: Icons.notifications_none_rounded,
+                    title: 'Notifications',
+                    selected: selectedPage == 1,
+                    trailing: Container(
+                      height: 8,
+                      width: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE53935),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => selectedPage = 1);
+                    },
+                  ),
+
+                  _drawerItem(
+                    icon: Icons.support_agent_rounded,
+                    title: 'Support Desk',
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => selectedPage = 0);
+                    },
+                  ),
+                ],
               ),
-              title: const Text(
-                'Pipeline',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => selectedPage = 0);
-              },
             ),
-            ListTile(
-              leading: const Icon(
-                Icons.notifications_none,
-                color: primaryColor,
+
+            const Divider(height: 1),
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+              child: _drawerItem(
+                icon: Icons.logout_rounded,
+                title: 'Logout',
+                isLogout: true,
+                onTap: () async {
+                  Navigator.pop(context);
+                  await AuthSession.logout(context, ref);
+                },
               ),
-              title: const Text('Notifications'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => selectedPage = 1);
-              },
             ),
-            const Spacer(),
-            ListTile(
-              leading: const Icon(Icons.logout_rounded, color: primaryColor),
-              title: const Text(
-                'Logout',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                await AuthSession.logout(context, ref);
-              },
-            ),
-            const SizedBox(height: 20),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _drawerHeader({
+    required String userName,
+    required String roleName,
+  }) {
+    final initial = userName.isNotEmpty ? userName[0].toUpperCase() : 'U';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryColor,
+            Color(0xFFBFC6FF),
+          ],
+        ),
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(26),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 62,
+            width: 62,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              initial,
+              style: const TextStyle(
+                color: primaryColor,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            userName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 21,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            roleName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _drawerSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 24, 20, 10),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.black.withOpacity(0.55),
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _drawerItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    bool selected = false,
+    bool isLogout = false,
+    Widget? trailing,
+  }) {
+    final color = isLogout
+        ? const Color(0xFFD32F2F)
+        : selected
+            ? primaryColor
+            : textColor;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: Material(
+        color: selected ? primaryColor.withOpacity(0.10) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 23),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 16,
+                      fontWeight:
+                          selected || isLogout ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (trailing != null) trailing,
+              ],
+            ),
+          ),
         ),
       ),
     );

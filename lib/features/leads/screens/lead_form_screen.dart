@@ -9,6 +9,33 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/utils/upload_url.dart';
 import '../providers/lead_provider.dart';
 
+class TitledLocalFile {
+  final String title;
+  final String path;
+
+  const TitledLocalFile({
+    required this.title,
+    required this.path,
+  });
+
+  Map<String, String> toPayload() {
+    return {
+      'title': title.trim(),
+      'path': path,
+    };
+  }
+
+  TitledLocalFile copyWith({
+    String? title,
+    String? path,
+  }) {
+    return TitledLocalFile(
+      title: title ?? this.title,
+      path: path ?? this.path,
+    );
+  }
+}
+
 class LeadFormScreen extends ConsumerStatefulWidget {
   const LeadFormScreen({super.key});
 
@@ -21,6 +48,58 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   static const cardColor = Color(0xFFFEFBFF);
   static const primaryColor = Color(0xFF5663A0);
   static const textColor = Color(0xFF1F2028);
+
+  static const List<String> indianStates = [
+    'Andhra Pradesh',
+    'Arunachal Pradesh',
+    'Assam',
+    'Bihar',
+    'Chhattisgarh',
+    'Delhi',
+    'Goa',
+    'Gujarat',
+    'Haryana',
+    'Himachal Pradesh',
+    'Jammu and Kashmir',
+    'Jharkhand',
+    'Karnataka',
+    'Kerala',
+    'Ladakh',
+    'Madhya Pradesh',
+    'Maharashtra',
+    'Manipur',
+    'Meghalaya',
+    'Mizoram',
+    'Nagaland',
+    'Odisha',
+    'Puducherry',
+    'Punjab',
+    'Rajasthan',
+    'Sikkim',
+    'Tamil Nadu',
+    'Telangana',
+    'Tripura',
+    'Uttar Pradesh',
+    'Uttarakhand',
+    'West Bengal',
+    'Other',
+  ];
+
+  static const List<String> discomOptions = [
+    'BSES Rajdhani',
+    'BSES Yamuna',
+    'TPDDL',
+    'NPCL',
+    'UPPCL',
+    'DHBVN',
+    'UHBVN',
+    'PSPCL',
+    'JVVNL',
+    'MSEDCL',
+    'BESCOM',
+    'TANGEDCO',
+    'Other',
+  ];
 
   final _formKey = GlobalKey<FormState>();
 
@@ -67,8 +146,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   String? bankClearPhotoPath;
   String? chequePassbookPath;
 
-  final List<String> additionalImages = [];
-  final List<String> additionalDocs = [];
+  final List<TitledLocalFile> additionalImages = [];
+  final List<TitledLocalFile> additionalDocs = [];
 
   bool isLoading = false;
 
@@ -236,28 +315,24 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     try {
       setState(() => isLoading = true);
 
-      await ref
-          .read(leadRepositoryProvider)
-          .createLead(
-            data,
-            singleFilePaths: {
-              if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
-              if (bankClearPhotoPath != null)
-                'bank_clear_photo': bankClearPhotoPath!,
-              if (chequePassbookPath != null)
-                'cheque_passbook_copy': chequePassbookPath!,
-            },
-            additionalImagePaths: additionalImages,
-            additionalDocumentPaths: additionalDocs,
-          );
+      await ref.read(leadRepositoryProvider).createLead(
+        data,
+        singleFilePaths: {
+          if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
+          if (bankClearPhotoPath != null)
+            'bank_clear_photo': bankClearPhotoPath!,
+          if (chequePassbookPath != null)
+            'cheque_passbook_copy': chequePassbookPath!,
+        },
+        additionalImageEntries:
+            additionalImages.map((item) => item.toPayload()).toList(),
+        additionalDocumentEntries:
+            additionalDocs.map((item) => item.toPayload()).toList(),
+      );
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          try {
-            ref.invalidate(allLeadsProvider);
-          } catch (err, st) {
-            debugPrint('invalidate failed: $err\n$st');
-          }
+          ref.invalidate(allLeadsProvider);
         }
       });
 
@@ -271,9 +346,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to create lead: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to create lead: $e')),
+      );
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -316,16 +391,43 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
   }
 
-  Widget sectionTitle(String title) {
+  Widget controllerDropdown({
+    required String label,
+    required TextEditingController controller,
+    required List<String> items,
+    required String hintText,
+  }) {
+    final currentValue =
+        items.contains(controller.text.trim()) ? controller.text.trim() : null;
+
     return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 12),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: primaryColor,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DropdownButtonFormField<String>(
+        value: currentValue,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hintText,
+          filled: true,
+          fillColor: bgColor,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
+        items: items
+            .map(
+              (item) => DropdownMenuItem<String>(
+                value: item,
+                child: Text(item),
+              ),
+            )
+            .toList(),
+        onChanged: isLoading
+            ? null
+            : (value) {
+                if (value == null) return;
+                setState(() {
+                  controller.text = value;
+                });
+              },
       ),
     );
   }
@@ -353,11 +455,27 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         ),
         items: items
             .map(
-              (item) =>
-                  DropdownMenuItem<String>(value: item, child: Text(item)),
+              (item) => DropdownMenuItem<String>(
+                value: item,
+                child: Text(item),
+              ),
             )
             .toList(),
         onChanged: isLoading ? null : onChanged,
+      ),
+    );
+  }
+
+  Widget sectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: primaryColor,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -378,7 +496,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         value: value,
         title: Text(
           title,
-          style: const TextStyle(color: textColor, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         activeColor: primaryColor,
         onChanged: isLoading ? null : onChanged,
@@ -395,7 +516,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withOpacity(0.08),
             blurRadius: 25,
             offset: const Offset(0, 12),
           ),
@@ -412,38 +533,201 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   }
 
   Future<void> _captureImage(ValueChanged<String?> onPicked) async {
+    FocusScope.of(context).unfocus();
+
     final file = await _imagePicker.pickImage(source: ImageSource.camera);
     if (file == null) return;
     if (!mounted) return;
+
     setState(() => onPicked(file.path));
   }
 
   Future<void> _pickImage(ValueChanged<String?> onPicked) async {
+    FocusScope.of(context).unfocus();
+
     final file = await _imagePicker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
     if (!mounted) return;
+
     setState(() => onPicked(file.path));
   }
 
-  Future<void> _pickDocs(List<String> target, {required bool imageOnly}) async {
+  Future<String?> _pickSingleFile({required bool imageOnly}) async {
+    FocusScope.of(context).unfocus();
+
+    if (imageOnly) {
+      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      return file?.path;
+    }
+
     final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
+      allowMultiple: false,
       withData: false,
-      type: imageOnly ? FileType.image : FileType.custom,
-      allowedExtensions: imageOnly
-          ? null
-          : ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
     );
 
-    if (result == null) return;
+    return result?.files.single.path;
+  }
 
-    final picked = result.paths.whereType<String>().toList();
+  Future<void> _showAddTitledFileDialog({
+    required String dialogTitle,
+    required String titleLabel,
+    required String uploadLabel,
+    required String defaultTitlePrefix,
+    required bool imageOnly,
+    required List<TitledLocalFile> target,
+  }) async {
+    final titleController = TextEditingController(
+      text: '$defaultTitlePrefix ${target.length + 1}',
+    );
 
-    if (!mounted) return;
+    String? selectedPath;
 
-    setState(() {
-      target.addAll(picked);
-    });
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(dialogTitle),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: titleController,
+                        decoration: InputDecoration(
+                          labelText: titleLabel,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      InkWell(
+                        onTap: () async {
+                          FocusScope.of(context).unfocus();
+
+                          final path =
+                              await _pickSingleFile(imageOnly: imageOnly);
+
+                          if (path == null) return;
+                          if (!mounted) return;
+
+                          setDialogState(() {
+                            selectedPath = path;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 130,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFFE4E1EA),
+                            ),
+                          ),
+                          child: selectedPath == null
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      imageOnly
+                                          ? Icons.add_photo_alternate_outlined
+                                          : Icons.upload_file_outlined,
+                                      color: primaryColor,
+                                      size: 38,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(uploadLabel),
+                                  ],
+                                )
+                              : ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: isImagePath(selectedPath!)
+                                      ? Image.file(
+                                          File(selectedPath!),
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                        )
+                                      : _docPreview(selectedPath!),
+                                ),
+                        ),
+                      ),
+                      if (selectedPath != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          fileDisplayName(selectedPath!),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryColor,
+                  ),
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
+
+                    final title = titleController.text.trim();
+
+                    if (title.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$titleLabel is required')),
+                      );
+                      return;
+                    }
+
+                    if (selectedPath == null || selectedPath!.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$uploadLabel is required')),
+                      );
+                      return;
+                    }
+
+                    setState(() {
+                      target.add(
+                        TitledLocalFile(
+                          title: title,
+                          path: selectedPath!,
+                        ),
+                      );
+                    });
+
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    // IMPORTANT:
+    // titleController.dispose(); yahan intentionally nahi lagaya hai.
+    // Dispose karne se title edit karke image/pdf pick karne par Flutter red screen aa rahi thi.
   }
 
   Widget _singleImagePicker({
@@ -463,7 +747,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         border: Border.all(color: const Color(0xFFE4E1EA)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -600,7 +884,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   Widget _multiFilePicker({
     required String title,
-    required List<String> files,
+    required List<TitledLocalFile> files,
     required VoidCallback onAdd,
     required void Function(int index) onRemove,
     required void Function(int index) onReplace,
@@ -636,19 +920,38 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               ),
             ],
           ),
+          if (files.isEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              height: 90,
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE4E1EA)),
+              ),
+              child: Text(
+                imagesOnly
+                    ? 'No additional images added.'
+                    : 'No extra documents added.',
+                style: const TextStyle(color: Colors.black45),
+              ),
+            ),
+          ],
           if (files.isNotEmpty) ...[
             const SizedBox(height: 12),
             Wrap(
               spacing: 10,
               runSpacing: 10,
               children: files.asMap().entries.map((entry) {
-                final path = entry.value;
+                final item = entry.value;
                 final idx = entry.key;
-                final image = isImagePath(path);
+                final image = isImagePath(item.path);
 
                 return SizedBox(
-                  width: 110,
-                  height: 150,
+                  width: 120,
+                  height: 178,
                   child: Column(
                     children: [
                       Stack(
@@ -657,10 +960,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                             borderRadius: BorderRadius.circular(12),
                             child: SizedBox(
                               height: 105,
-                              width: 110,
+                              width: 120,
                               child: image
-                                  ? Image.file(File(path), fit: BoxFit.cover)
-                                  : _docPreview(path),
+                                  ? Image.file(
+                                      File(item.path),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : _docPreview(item.path),
                             ),
                           ),
                           Positioned(
@@ -680,6 +986,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       SizedBox(
                         height: 34,
@@ -703,29 +1019,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   }
 
   Future<void> _replaceFileAt(
-    List<String> target,
+    List<TitledLocalFile> target,
     int index, {
     required bool imageOnly,
   }) async {
-    if (imageOnly) {
-      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
-      if (file == null) return;
-      if (!mounted) return;
-      setState(() => target[index] = file.path);
-      return;
-    }
-
-    final result = await FilePicker.platform.pickFiles(
-      withData: false,
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
-    );
-
-    final path = result?.files.single.path;
+    final path = await _pickSingleFile(imageOnly: imageOnly);
     if (path == null) return;
     if (!mounted) return;
 
-    setState(() => target[index] = path);
+    setState(() {
+      target[index] = target[index].copyWith(path: path);
+    });
   }
 
   @override
@@ -738,7 +1042,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         elevation: 0,
         title: const Text(
           'Create Lead',
-          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         iconTheme: const IconThemeData(color: textColor),
       ),
@@ -784,14 +1091,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ],
                 textCapitalization: TextCapitalization.words,
               ),
-              input(
-                'State',
-                state,
-                validator: (v) => _validateOptionalAlpha(v, 'State'),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                ],
-                textCapitalization: TextCapitalization.words,
+              controllerDropdown(
+                label: 'State',
+                controller: state,
+                items: indianStates,
+                hintText: 'Select state',
               ),
               input(
                 'Pincode',
@@ -808,7 +1112,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               input('CA Number', caNumber),
               input('K Number', kNumber),
               input('Reference Number', referenceNumber),
-              input('Discom', discom),
+              controllerDropdown(
+                label: 'DISCOM',
+                controller: discom,
+                items: discomOptions,
+                hintText: 'Select DISCOM',
+              ),
 
               sectionTitle('Location'),
               input('Geo Location', geoLocation),
@@ -972,7 +1281,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 title: 'Additional Images',
                 files: additionalImages,
                 imagesOnly: true,
-                onAdd: () => _pickDocs(additionalImages, imageOnly: true),
+                onAdd: () => _showAddTitledFileDialog(
+                  dialogTitle: 'Add Additional Image',
+                  titleLabel: 'Image title',
+                  uploadLabel: 'Choose Image',
+                  defaultTitlePrefix: 'Image',
+                  imageOnly: true,
+                  target: additionalImages,
+                ),
                 onRemove: (i) => setState(() => additionalImages.removeAt(i)),
                 onReplace: (i) =>
                     _replaceFileAt(additionalImages, i, imageOnly: true),
@@ -980,7 +1296,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               _multiFilePicker(
                 title: 'Additional Documents',
                 files: additionalDocs,
-                onAdd: () => _pickDocs(additionalDocs, imageOnly: false),
+                imagesOnly: false,
+                onAdd: () => _showAddTitledFileDialog(
+                  dialogTitle: 'Add Additional Document',
+                  titleLabel: 'Document title',
+                  uploadLabel: 'Choose File',
+                  defaultTitlePrefix: 'Document',
+                  imageOnly: false,
+                  target: additionalDocs,
+                ),
                 onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
                 onReplace: (i) =>
                     _replaceFileAt(additionalDocs, i, imageOnly: false),

@@ -323,16 +323,68 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       _row('Registration Time', _lead.registrationTime),
                     ]),
                   if (_lead.hasInstallationDetails)
-                    _section('Installation Details', [
-                      _row('File No', _installationValue('file_no')),
-                      _row('Capacity', _installationValue('capacity')),
-                      _row('Panel Brand', _installationValue('solar_panel_brand')),
-                      _row(
-                        'No. of Panels',
-                        _installationValue('number_of_solar_panel'),
-                      ),
-                      _row('Invoice No', _installationValue('invoice_no')),
-                    ]),
+  _section('Installation Details', [
+    _row('File No', _installationValue('file_no')),
+    _row('Capacity', _installationValue('capacity')),
+
+    _row(
+      'DCR Certificate No',
+      _installationValue('dcr_certificate_no'),
+    ),
+
+    _row(
+      'Application No',
+      _installationValue('application_no'),
+    ),
+
+    _row(
+      'Stamp Paper Rs.100',
+      _installationValue('stamp_paper_rs_100'),
+    ),
+
+    _row(
+      'Central Govt Subsidy Date',
+      _installationValue('central_govt_subsidy_date'),
+    ),
+
+    _row(
+      'State Govt Subsidy Date',
+      _installationValue('state_govt_subsidy_date'),
+    ),
+
+    _row(
+      'Solar Panel Brand',
+      _installationValue('solar_panel_brand'),
+    ),
+
+    _row(
+      'No. Of Solar Panels',
+      _installationValue('number_of_solar_panel'),
+    ),
+
+    _row(
+      'Install Net Meter Date',
+      _installationValue('install_net_meter_date'),
+    ),
+
+    _row(
+      'Inspect DISCOM Date',
+      _installationValue('inspect_discom_date'),
+    ),
+
+    _row(
+      'Invoice No',
+      _installationValue('invoice_no'),
+    ),
+
+    const Divider(),
+
+    _row('S.P. No. 1', _installationValue('sp_no_1')),
+    _row('S.P. No. 2', _installationValue('sp_no_2')),
+    _row('S.P. No. 3', _installationValue('sp_no_3')),
+    _row('S.P. No. 4', _installationValue('sp_no_4')),
+    _row('S.P. No. 5', _installationValue('sp_no_5')),
+  ]),
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
                   ]),

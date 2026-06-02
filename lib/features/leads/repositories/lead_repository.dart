@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../models/lead_model.dart';
@@ -15,8 +17,8 @@ class LeadRepository {
   Future<void> createLead(
     Map<String, dynamic> data, {
     Map<String, String>? singleFilePaths,
-    List<String>? additionalImagePaths,
-    List<String>? additionalDocumentPaths,
+    List<Map<String, String>>? additionalImageEntries,
+    List<Map<String, String>>? additionalDocumentEntries,
   }) async {
     try {
       final formDataMap = <String, dynamic>{...data};
@@ -33,26 +35,55 @@ class LeadRepository {
         }
       }
 
-      if (additionalImagePaths != null && additionalImagePaths.isNotEmpty) {
+      final imageEntries = (additionalImageEntries ?? [])
+          .where((item) =>
+              (item['path'] ?? '').trim().isNotEmpty &&
+              (item['title'] ?? '').trim().isNotEmpty)
+          .toList();
+
+      if (imageEntries.isNotEmpty) {
+        formDataMap['additional_images_entries_json'] = jsonEncode(
+          imageEntries
+              .map((item) => {
+                    'title': item['title']!.trim(),
+                    'existingPath': null,
+                  })
+              .toList(),
+        );
+
         formDataMap['additional_images_files'] = await Future.wait(
-          additionalImagePaths.where((f) => f.trim().isNotEmpty).map(
-                (f) => MultipartFile.fromFile(
-                  f,
-                  filename: _fileName(f),
-                ),
-              ),
+          imageEntries.map(
+            (item) => MultipartFile.fromFile(
+              item['path']!.trim(),
+              filename: _fileName(item['path']!.trim()),
+            ),
+          ),
         );
       }
 
-      if (additionalDocumentPaths != null &&
-          additionalDocumentPaths.isNotEmpty) {
+      final documentEntries = (additionalDocumentEntries ?? [])
+          .where((item) =>
+              (item['path'] ?? '').trim().isNotEmpty &&
+              (item['title'] ?? '').trim().isNotEmpty)
+          .toList();
+
+      if (documentEntries.isNotEmpty) {
+        formDataMap['additional_documents_entries_json'] = jsonEncode(
+          documentEntries
+              .map((item) => {
+                    'title': item['title']!.trim(),
+                    'existingPath': null,
+                  })
+              .toList(),
+        );
+
         formDataMap['additional_documents_files'] = await Future.wait(
-          additionalDocumentPaths.where((f) => f.trim().isNotEmpty).map(
-                (f) => MultipartFile.fromFile(
-                  f,
-                  filename: _fileName(f),
-                ),
-              ),
+          documentEntries.map(
+            (item) => MultipartFile.fromFile(
+              item['path']!.trim(),
+              filename: _fileName(item['path']!.trim()),
+            ),
+          ),
         );
       }
 
