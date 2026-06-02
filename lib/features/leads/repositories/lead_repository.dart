@@ -35,61 +35,106 @@ class LeadRepository {
         }
       }
 
-      final imageEntries = (additionalImageEntries ?? [])
-          .where((item) =>
-              (item['path'] ?? '').trim().isNotEmpty &&
-              (item['title'] ?? '').trim().isNotEmpty)
-          .toList();
-
-      if (imageEntries.isNotEmpty) {
-        formDataMap['additional_images_entries_json'] = jsonEncode(
-          imageEntries
-              .map((item) => {
-                    'title': item['title']!.trim(),
-                    'existingPath': null,
-                  })
-              .toList(),
-        );
-
-        formDataMap['additional_images_files'] = await Future.wait(
-          imageEntries.map(
-            (item) => MultipartFile.fromFile(
-              item['path']!.trim(),
-              filename: _fileName(item['path']!.trim()),
-            ),
-          ),
-        );
-      }
-
-      final documentEntries = (additionalDocumentEntries ?? [])
-          .where((item) =>
-              (item['path'] ?? '').trim().isNotEmpty &&
-              (item['title'] ?? '').trim().isNotEmpty)
-          .toList();
-
-      if (documentEntries.isNotEmpty) {
-        formDataMap['additional_documents_entries_json'] = jsonEncode(
-          documentEntries
-              .map((item) => {
-                    'title': item['title']!.trim(),
-                    'existingPath': null,
-                  })
-              .toList(),
-        );
-
-        formDataMap['additional_documents_files'] = await Future.wait(
-          documentEntries.map(
-            (item) => MultipartFile.fromFile(
-              item['path']!.trim(),
-              filename: _fileName(item['path']!.trim()),
-            ),
-          ),
-        );
-      }
+      await _attachAdditionalFiles(
+        formDataMap,
+        additionalImageEntries: additionalImageEntries,
+        additionalDocumentEntries: additionalDocumentEntries,
+      );
 
       await dio.post('/leads', data: FormData.fromMap(formDataMap));
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
+    }
+  }
+
+  Future<void> uploadLeadDocuments({
+    required String leadId,
+    List<Map<String, String>>? additionalImageEntries,
+    List<Map<String, String>>? additionalDocumentEntries,
+  }) async {
+    try {
+      final formDataMap = <String, dynamic>{};
+
+      await _attachAdditionalFiles(
+        formDataMap,
+        additionalImageEntries: additionalImageEntries,
+        additionalDocumentEntries: additionalDocumentEntries,
+      );
+
+      if (formDataMap.isEmpty) return;
+
+      await dio.put(
+        '/leads/$leadId',
+        data: FormData.fromMap(formDataMap),
+      );
+    } on DioException catch (e) {
+      throw Exception(_handleDioError(e));
+    }
+  }
+
+  Future<void> _attachAdditionalFiles(
+    Map<String, dynamic> formDataMap, {
+    List<Map<String, String>>? additionalImageEntries,
+    List<Map<String, String>>? additionalDocumentEntries,
+  }) async {
+    final imageEntries = (additionalImageEntries ?? [])
+        .where(
+          (item) =>
+              (item['path'] ?? '').trim().isNotEmpty &&
+              (item['title'] ?? '').trim().isNotEmpty,
+        )
+        .toList();
+
+    if (imageEntries.isNotEmpty) {
+      formDataMap['additional_images_entries_json'] = jsonEncode(
+        imageEntries
+            .map(
+              (item) => {
+                'title': item['title']!.trim(),
+                'existingPath': null,
+              },
+            )
+            .toList(),
+      );
+
+      formDataMap['additional_images_files'] = await Future.wait(
+        imageEntries.map(
+          (item) => MultipartFile.fromFile(
+            item['path']!.trim(),
+            filename: _fileName(item['path']!.trim()),
+          ),
+        ),
+      );
+    }
+
+    final documentEntries = (additionalDocumentEntries ?? [])
+        .where(
+          (item) =>
+              (item['path'] ?? '').trim().isNotEmpty &&
+              (item['title'] ?? '').trim().isNotEmpty,
+        )
+        .toList();
+
+    if (documentEntries.isNotEmpty) {
+      formDataMap['additional_documents_entries_json'] = jsonEncode(
+        documentEntries
+            .map(
+              (item) => {
+                'title': item['title']!.trim(),
+                'existingPath': null,
+              },
+            )
+            .toList(),
+      );
+
+      formDataMap['additional_documents_files'] = await Future.wait(
+        documentEntries.map(
+          (item) => MultipartFile.fromFile(
+            item['path']!.trim(),
+            filename: _fileName(item['path']!.trim()),
+          ),
+        ),
+      );
     }
   }
 
@@ -182,9 +227,7 @@ class LeadRepository {
         return Map<String, dynamic>.from(data);
       }
 
-      return {
-        'new_status': status,
-      };
+      return {'new_status': status};
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
     }

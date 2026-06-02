@@ -101,23 +101,12 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   Future<void> _advanceStatus(String nextStatus) async {
     if (loading) return;
 
-    final remarks = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return _StatusRemarksDialog(nextStatus: nextStatus);
-      },
-    );
-
-    if (remarks == null || !mounted) return;
-
     setState(() => loading = true);
 
     try {
       await ref.read(leadRepositoryProvider).updateLeadStatus(
             leadId: _lead.id,
             status: nextStatus,
-            remarks: remarks,
           );
 
       if (!mounted) return;
@@ -129,6 +118,51 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Status updated to $nextStatus')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => loading = false);
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  Future<void> _addNote() async {
+    if (loading) return;
+
+    final note = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _AddNoteDialog(),
+    );
+
+    if (note == null || note.trim().isEmpty || !mounted) return;
+
+    setState(() => loading = true);
+
+    try {
+      final oldNotes = _lead.notes.trim();
+      final updatedNotes = oldNotes.isEmpty
+          ? note.trim()
+          : '$oldNotes\n\n${note.trim()}';
+
+      await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
+        'notes': updatedNotes,
+      });
+
+      if (!mounted) return;
+
+      await _reloadSilently();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Note added successfully')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -263,14 +297,18 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       ),
                       child: Text(loadError!),
                     ),
+
                   _headerCard(customerName),
                   const SizedBox(height: 14),
+
                   WorkflowStepper(
                     currentStatus: _lead.status.trim().isNotEmpty
                         ? _lead.status
                         : _lead.workflowStep,
                   ),
+
                   const SizedBox(height: 14),
+
                   if (auth.appRole == 'installation') ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _openInstallationForm,
@@ -283,6 +321,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
+
                   if (auth.appRole == 'support' &&
                       !_lead.hasRegistrationDetails) ...[
                     OutlinedButton(
@@ -291,6 +330,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
+
                   _section('Customer Details', [
                     _row('Full Name', _lead.fullName),
                     _row('Lead Code', _lead.leadCode),
@@ -301,6 +341,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('State', _lead.state),
                     _row('Pincode', _lead.pincode),
                   ]),
+
                   _section('Workflow', [
                     _row('Status', _lead.status),
                     _row('Department', _lead.currentDepartment),
@@ -308,6 +349,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('Priority', _lead.priority),
                     _row('Workflow Step', _lead.workflowStep),
                   ]),
+
                   _section('Connection & Bank', [
                     _row('CA Number', _lead.caNumber),
                     _row('K Number', _lead.kNumber),
@@ -316,82 +358,91 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('Account', _lead.accountNumber),
                     _row('IFSC', _lead.ifscCode),
                   ]),
+
                   if (_lead.hasRegistrationDetails)
                     _section('Registration', [
                       _row('Registration ID', _lead.registrationId),
                       _row('Registration Date', _lead.registrationDate),
                       _row('Registration Time', _lead.registrationTime),
                     ]),
+
                   if (_lead.hasInstallationDetails)
-  _section('Installation Details', [
-    _row('File No', _installationValue('file_no')),
-    _row('Capacity', _installationValue('capacity')),
+                    _section('Installation Details', [
+                      _row('File No', _installationValue('file_no')),
+                      _row('Capacity', _installationValue('capacity')),
+                      _row(
+                        'DCR Certificate No',
+                        _installationValue('dcr_certificate_no'),
+                      ),
+                      _row(
+                        'Application No',
+                        _installationValue('application_no'),
+                      ),
+                      _row(
+                        'Stamp Paper Rs.100',
+                        _installationValue('stamp_paper_rs_100'),
+                      ),
+                      _row(
+                        'Central Govt Subsidy Date',
+                        _installationValue('central_govt_subsidy_date'),
+                      ),
+                      _row(
+                        'State Govt Subsidy Date',
+                        _installationValue('state_govt_subsidy_date'),
+                      ),
+                      _row(
+                        'Solar Panel Brand',
+                        _installationValue('solar_panel_brand'),
+                      ),
+                      _row(
+                        'No. Of Solar Panels',
+                        _installationValue('number_of_solar_panel'),
+                      ),
+                      _row(
+                        'Install Net Meter Date',
+                        _installationValue('install_net_meter_date'),
+                      ),
+                      _row(
+                        'Inspect DISCOM Date',
+                        _installationValue('inspect_discom_date'),
+                      ),
+                      _row('Invoice No', _installationValue('invoice_no')),
+                      const Divider(),
+                      _row('S.P. No. 1', _installationValue('sp_no_1')),
+                      _row('S.P. No. 2', _installationValue('sp_no_2')),
+                      _row('S.P. No. 3', _installationValue('sp_no_3')),
+                      _row('S.P. No. 4', _installationValue('sp_no_4')),
+                      _row('S.P. No. 5', _installationValue('sp_no_5')),
+                    ]),
 
-    _row(
-      'DCR Certificate No',
-      _installationValue('dcr_certificate_no'),
-    ),
-
-    _row(
-      'Application No',
-      _installationValue('application_no'),
-    ),
-
-    _row(
-      'Stamp Paper Rs.100',
-      _installationValue('stamp_paper_rs_100'),
-    ),
-
-    _row(
-      'Central Govt Subsidy Date',
-      _installationValue('central_govt_subsidy_date'),
-    ),
-
-    _row(
-      'State Govt Subsidy Date',
-      _installationValue('state_govt_subsidy_date'),
-    ),
-
-    _row(
-      'Solar Panel Brand',
-      _installationValue('solar_panel_brand'),
-    ),
-
-    _row(
-      'No. Of Solar Panels',
-      _installationValue('number_of_solar_panel'),
-    ),
-
-    _row(
-      'Install Net Meter Date',
-      _installationValue('install_net_meter_date'),
-    ),
-
-    _row(
-      'Inspect DISCOM Date',
-      _installationValue('inspect_discom_date'),
-    ),
-
-    _row(
-      'Invoice No',
-      _installationValue('invoice_no'),
-    ),
-
-    const Divider(),
-
-    _row('S.P. No. 1', _installationValue('sp_no_1')),
-    _row('S.P. No. 2', _installationValue('sp_no_2')),
-    _row('S.P. No. 3', _installationValue('sp_no_3')),
-    _row('S.P. No. 4', _installationValue('sp_no_4')),
-    _row('S.P. No. 5', _installationValue('sp_no_5')),
-  ]),
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
                   ]),
+
                   if (_lead.notes.trim().isNotEmpty)
                     _section('Notes', [_row('Notes', _lead.notes)]),
+
+                  const SizedBox(height: 8),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: loading ? null : _addNote,
+                      icon: const Icon(Icons.note_add_outlined),
+                      label: const Text('Add Note'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: primaryColor,
+                        side: const BorderSide(color: primaryColor),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+
                   if (nextStatuses.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 14),
                     const Text(
                       'Status actions',
                       style: TextStyle(
@@ -428,12 +479,14 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       );
                     }),
                   ],
+
                   const SizedBox(height: 16),
                   const Text(
                     'Status history',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
+
                   if (history.isEmpty)
                     const Text(
                       'No history yet',
@@ -589,49 +642,46 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   }
 }
 
-/// Owns [TextEditingController] lifecycle so it is not disposed while the route pops.
-class _StatusRemarksDialog extends StatefulWidget {
-  final String nextStatus;
-
-  const _StatusRemarksDialog({required this.nextStatus});
+class _AddNoteDialog extends StatefulWidget {
+  const _AddNoteDialog();
 
   @override
-  State<_StatusRemarksDialog> createState() => _StatusRemarksDialogState();
+  State<_AddNoteDialog> createState() => _AddNoteDialogState();
 }
 
-class _StatusRemarksDialogState extends State<_StatusRemarksDialog> {
-  late final TextEditingController _remarksController;
+class _AddNoteDialogState extends State<_AddNoteDialog> {
+  late final TextEditingController _noteController;
 
   @override
   void initState() {
     super.initState();
-    _remarksController = TextEditingController();
+    _noteController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _remarksController.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
   void _submit() {
-    Navigator.of(context).pop(_remarksController.text.trim());
+    Navigator.of(context).pop(_noteController.text.trim());
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text('Update to "${widget.nextStatus}"?'),
+      title: const Text('Add Note'),
       content: TextField(
-        controller: _remarksController,
+        controller: _noteController,
         maxLines: 3,
         autofocus: true,
         textInputAction: TextInputAction.done,
         onSubmitted: (_) => _submit(),
         decoration: const InputDecoration(
-          labelText: 'Remarks / Comment',
-          hintText: 'Add a note for this status change (optional)',
+          labelText: 'Note / Comment',
+          hintText: 'Enter note',
           border: OutlineInputBorder(),
         ),
       ),
@@ -646,7 +696,7 @@ class _StatusRemarksDialogState extends State<_StatusRemarksDialog> {
             backgroundColor: _LeadDetailScreenState.primaryColor,
             foregroundColor: Colors.white,
           ),
-          child: const Text('Submit'),
+          child: const Text('Save'),
         ),
       ],
     );
