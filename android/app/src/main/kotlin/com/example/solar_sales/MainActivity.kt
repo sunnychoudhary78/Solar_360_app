@@ -2,13 +2,14 @@ package com.example.solar_sales
 
 import android.content.ContentValues
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
-import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
@@ -29,22 +30,22 @@ class MainActivity : FlutterActivity() {
 
             try {
                 val bytes = call.argument<ByteArray>("bytes")
-                val fileName = call.argument<String>("fileName")
+                val rawFileName = call.argument<String>("fileName")
                 val mimeType = call.argument<String>("mimeType")
                     ?: "application/octet-stream"
-                val openAfterSave = call.argument<Boolean>("openAfterSave")
-                    ?: false
+                val openAfterSave = call.argument<Boolean>("openAfterSave") ?: false
 
                 if (bytes == null || bytes.isEmpty()) {
                     result.error("EMPTY_FILE", "Downloaded file is empty", null)
                     return@setMethodCallHandler
                 }
 
-                if (fileName.isNullOrBlank()) {
+                if (rawFileName.isNullOrBlank()) {
                     result.error("INVALID_NAME", "File name is required", null)
                     return@setMethodCallHandler
                 }
 
+                val fileName = safeFileName(rawFileName)
                 val saved = saveToDownloads(bytes, fileName, mimeType)
 
                 if (openAfterSave) {
@@ -52,10 +53,18 @@ class MainActivity : FlutterActivity() {
                 }
 
                 result.success(saved.displayPath)
-            } catch (error: Exception) {
-                result.error("DOWNLOAD_FAILED", error.message, null)
+            } catch (e: Exception) {
+                result.error("DOWNLOAD_FAILED", e.message ?: "Download failed", null)
             }
         }
+    }
+
+    private fun safeFileName(name: String): String {
+        return name
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace(":", "_")
+            .trim()
     }
 
     private fun saveToDownloads(
@@ -76,32 +85,34 @@ class MainActivity : FlutterActivity() {
         mimeType: String
     ): SavedDownload {
         val resolver = applicationContext.contentResolver
+
         val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, mimeType)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
 
         val uri = resolver.insert(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
             values
-        ) ?: throw IllegalStateException("Could not create download file")
+        ) ?: throw IllegalStateException("Could not create file in Downloads")
 
         try {
             resolver.openOutputStream(uri)?.use { output ->
                 output.write(bytes)
-            } ?: throw IllegalStateException("Could not write download file")
+                output.flush()
+            } ?: throw IllegalStateException("Could not open output stream")
 
             values.clear()
-            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
-        } catch (error: Exception) {
-            resolver.delete(uri, null, null)
-            throw error
-        }
 
-        return SavedDownload(uri, "Downloads/$fileName")
+            return SavedDownload(uri, "Downloads/$fileName")
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
+        }
     }
 
     private fun saveLegacy(
@@ -109,13 +120,23 @@ class MainActivity : FlutterActivity() {
         fileName: String,
         mimeType: String
     ): SavedDownload {
-        val downloads = Environment.getExternalStoragePublicDirectory(
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(
             Environment.DIRECTORY_DOWNLOADS
         )
-        if (!downloads.exists()) downloads.mkdirs()
 
-        val file = File(downloads, fileName)
+        if (!downloadsDir.exists()) {
+            downloadsDir.mkdirs()
+        }
+
+        val file = File(downloadsDir, fileName)
         file.writeBytes(bytes)
+
+        MediaScannerConnection.scanFile(
+            this,
+            arrayOf(file.absolutePath),
+            arrayOf(mimeType),
+            null
+        )
 
         val uri = FileProvider.getUriForFile(
             this,

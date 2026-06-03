@@ -11,6 +11,7 @@ class LeadModel {
   final String city;
   final String state;
   final String pincode;
+  final String loadSectionKw;
 
   final String caNumber;
   final String kNumber;
@@ -85,6 +86,7 @@ class LeadModel {
     required this.city,
     required this.state,
     required this.pincode,
+    required this.loadSectionKw,
     required this.caNumber,
     required this.kNumber,
     required this.referenceNumber,
@@ -151,6 +153,7 @@ class LeadModel {
       city: _str(json['city']),
       state: _str(json['state']),
       pincode: _str(json['pincode']),
+      loadSectionKw: _str(json['load_section_kw'] ?? json['loadSectionKw']),
       caNumber: _str(json['ca_number'] ?? json['caNumber']),
       kNumber: _str(json['k_number'] ?? json['kNumber']),
       referenceNumber: _str(json['reference_number'] ?? json['referenceNumber']),
@@ -266,6 +269,7 @@ class LeadModel {
       'city': city,
       'state': state,
       'pincode': pincode,
+      'load_section_kw': loadSectionKw,
       'ca_number': caNumber,
       'k_number': kNumber,
       'reference_number': referenceNumber,
@@ -329,6 +333,7 @@ class LeadModel {
     String? city,
     String? state,
     String? pincode,
+    String? loadSectionKw,
     String? caNumber,
     String? kNumber,
     String? referenceNumber,
@@ -390,6 +395,7 @@ class LeadModel {
       city: city ?? this.city,
       state: state ?? this.state,
       pincode: pincode ?? this.pincode,
+      loadSectionKw: loadSectionKw ?? this.loadSectionKw,
       caNumber: caNumber ?? this.caNumber,
       kNumber: kNumber ?? this.kNumber,
       referenceNumber: referenceNumber ?? this.referenceNumber,

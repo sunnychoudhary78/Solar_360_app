@@ -502,6 +502,7 @@ registration_time=${result.regTime.trim()}
                     _row('City', _lead.city),
                     _row('State', _lead.state),
                     _row('Pincode', _lead.pincode),
+                    _row('KW', _lead.loadSectionKw),
                   ]),
                   _section('Workflow', [
                     _row('Status', _lead.status),
@@ -1580,7 +1581,7 @@ class _RegistrationDialogState extends State<_RegistrationDialog> {
             foregroundColor: Colors.white,
           ),
           child: const Text('Save'),
-        ),
+        ), 
       ],
     );
   }
