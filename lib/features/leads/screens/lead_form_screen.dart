@@ -4,6 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/utils/upload_url.dart';
@@ -143,13 +145,22 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   final ImagePicker _imagePicker = ImagePicker();
 
   String? roofPhotoPath;
-  String? bankClearPhotoPath;
   String? chequePassbookPath;
 
   final List<TitledLocalFile> additionalImages = [];
   final List<TitledLocalFile> additionalDocs = [];
 
   bool isLoading = false;
+  bool isFetchingLocation = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchCurrentLocation();
+    });
+  }
 
   @override
   void dispose() {
@@ -245,7 +256,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   String? _validateNumber(String? value, String label) {
     final v = value?.trim() ?? '';
     if (v.isEmpty) return null;
-    if (!RegExp(r'^\d+(\.\d+)?$').hasMatch(v)) {
+    if (!RegExp(r'^-?\d+(\.\d+)?$').hasMatch(v)) {
       return '$label valid number hona chahiye';
     }
     return null;
@@ -267,6 +278,89 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       return 'Valid IFSC code enter karo';
     }
     return null;
+  }
+
+  Future<void> _fetchCurrentLocation() async {
+    if (isFetchingLocation) return;
+
+    try {
+      setState(() => isFetchingLocation = true);
+
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enable location service')),
+        );
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission denied')),
+        );
+        return;
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location permission permanently denied. Please enable it from app settings.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      latitude.text = position.latitude.toString();
+      longitude.text = position.longitude.toString();
+
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+
+        geoLocation.text = [
+          place.name,
+          place.street,
+          place.subLocality,
+          place.locality,
+          place.subAdministrativeArea,
+          place.administrativeArea,
+          place.postalCode,
+          place.country,
+        ].where((e) => e != null && e.trim().isNotEmpty).join(', ');
+      }
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to fetch location: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => isFetchingLocation = false);
+      }
+    }
   }
 
   Future<void> saveLead() async {
@@ -319,8 +413,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         data,
         singleFilePaths: {
           if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
-          if (bankClearPhotoPath != null)
-            'bank_clear_photo': bankClearPhotoPath!,
           if (chequePassbookPath != null)
             'cheque_passbook_copy': chequePassbookPath!,
         },
@@ -364,12 +456,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     String? Function(String?)? validator,
     List<TextInputFormatter>? inputFormatters,
     TextCapitalization textCapitalization = TextCapitalization.none,
+    bool readOnly = false,
+    Widget? suffixIcon,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
         controller: controller,
         enabled: !isLoading,
+        readOnly: readOnly,
         keyboardType: keyboardType,
         maxLines: maxLines,
         validator: validator,
@@ -378,6 +473,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         autovalidateMode: AutovalidateMode.onUserInteraction,
         decoration: InputDecoration(
           labelText: label,
+          suffixIcon: suffixIcon,
           filled: true,
           fillColor: bgColor,
           errorMaxLines: 2,
@@ -424,9 +520,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
             ? null
             : (value) {
                 if (value == null) return;
-                setState(() {
-                  controller.text = value;
-                });
+                setState(() => controller.text = value);
               },
       ),
     );
@@ -532,6 +626,37 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
   }
 
+  Widget locationStatusBox() {
+    if (!isFetchingLocation) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF0F8),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE4E1EA)),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Fetching current location...',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _captureImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
 
@@ -618,9 +743,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                           if (path == null) return;
                           if (!mounted) return;
 
-                          setDialogState(() {
-                            selectedPath = path;
-                          });
+                          setDialogState(() => selectedPath = path);
                         },
                         borderRadius: BorderRadius.circular(14),
                         child: Container(
@@ -724,10 +847,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         );
       },
     );
-
-    // IMPORTANT:
-    // titleController.dispose(); yahan intentionally nahi lagaya hai.
-    // Dispose karne se title edit karke image/pdf pick karne par Flutter red screen aa rahi thi.
   }
 
   Widget _singleImagePicker({
@@ -1120,12 +1239,24 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               ),
 
               sectionTitle('Location'),
-              input('Geo Location', geoLocation),
+              locationStatusBox(),
+              input(
+                'Geo Location',
+                geoLocation,
+                suffixIcon: IconButton(
+                  tooltip: 'Use Current Location',
+                  onPressed: isLoading || isFetchingLocation
+                      ? null
+                      : _fetchCurrentLocation,
+                  icon: const Icon(Icons.my_location),
+                ),
+              ),
               input(
                 'Latitude',
                 latitude,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
+                  signed: true,
                 ),
                 validator: (v) => _validateNumber(v, 'Latitude'),
               ),
@@ -1134,8 +1265,19 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 longitude,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
+                  signed: true,
                 ),
                 validator: (v) => _validateNumber(v, 'Longitude'),
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isLoading || isFetchingLocation
+                      ? null
+                      : _fetchCurrentLocation,
+                  icon: const Icon(Icons.my_location),
+                  label: const Text('Use Current Location'),
+                ),
               ),
 
               sectionTitle('Bank Details'),
@@ -1266,11 +1408,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 title: 'Roof Photo',
                 value: roofPhotoPath,
                 onChanged: (v) => setState(() => roofPhotoPath = v),
-              ),
-              _singleImagePicker(
-                title: 'Bank Clear Photo',
-                value: bankClearPhotoPath,
-                onChanged: (v) => setState(() => bankClearPhotoPath = v),
               ),
               _singleImagePicker(
                 title: 'Cheque/Passbook Copy',
