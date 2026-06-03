@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/widgets/app_message.dart';
 import '../../../core/workflow/lead_workflow.dart';
+import '../screens/lead_form_screen.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../installation/screens/installation_form_screen.dart';
 import '../models/lead_model.dart';
@@ -90,6 +92,73 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     });
   }
 
+  Map<String, String> _registrationFromNotes() {
+    final match = RegExp(
+      r'\[REGISTRATION_DETAILS\]([\s\S]*?)\[/REGISTRATION_DETAILS\]',
+      multiLine: true,
+    ).firstMatch(_lead.notes);
+
+    if (match == null) return {};
+
+    final block = match.group(1) ?? '';
+    final data = <String, String>{};
+
+    for (final line in block.split('\n')) {
+      final index = line.indexOf('=');
+      if (index <= 0) continue;
+
+      final key = line.substring(0, index).trim();
+      final value = line.substring(index + 1).trim();
+
+      if (key.isNotEmpty && value.isNotEmpty) {
+        data[key] = value;
+      }
+    }
+
+    return data;
+  }
+
+  String _removeOldRegistrationBlock(String notes) {
+    return notes
+        .replaceAll(
+          RegExp(
+            r'\[REGISTRATION_DETAILS\][\s\S]*?\[/REGISTRATION_DETAILS\]',
+            multiLine: true,
+          ),
+          '',
+        )
+        .trim();
+  }
+
+  String _visibleNotes() {
+    return _removeOldRegistrationBlock(_lead.notes);
+  }
+
+  String get _displayRegistrationId {
+    if (_lead.registrationId.trim().isNotEmpty) return _lead.registrationId;
+    return _registrationFromNotes()['registration_id'] ?? '';
+  }
+
+  String get _displayRegistrationDate {
+    if (_lead.registrationDate.trim().isNotEmpty) {
+      return _lead.registrationDate;
+    }
+    return _registrationFromNotes()['registration_date'] ?? '';
+  }
+
+  String get _displayRegistrationTime {
+    if (_lead.registrationTime.trim().isNotEmpty) {
+      return _lead.registrationTime;
+    }
+    return _registrationFromNotes()['registration_time'] ?? '';
+  }
+
+  bool get _hasRegistrationDetailsFrontend {
+    return _displayRegistrationId.trim().isNotEmpty &&
+        _displayRegistrationDate.trim().isNotEmpty &&
+        _displayRegistrationTime.trim().isNotEmpty;
+  }
+
   List<String> _resolveNextStatuses(String roleName) {
     final localAllowed = LeadWorkflow.getAllowedNextStatuses(
       _lead.status,
@@ -113,6 +182,16 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   Future<void> _advanceStatus(String nextStatus) async {
     if (loading) return;
 
+    if (nextStatus == 'Documents Submitted' &&
+        !_hasRegistrationDetailsFrontend) {
+      showAppMessage(
+        context,
+        'Please add registration details first',
+        isError: true,
+      );
+      return;
+    }
+
     setState(() => loading = true);
 
     try {
@@ -127,19 +206,13 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Status updated to $nextStatus')),
-      );
+      showAppMessage(context, 'Status updated to $nextStatus');
     } catch (e) {
       if (!mounted) return;
 
       setState(() => loading = false);
 
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      showAppMessage(context, e.toString(), isError: true);
     }
   }
 
@@ -158,9 +231,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
     try {
       final oldNotes = _lead.notes.trim();
-      final updatedNotes = oldNotes.isEmpty
-          ? note.trim()
-          : '$oldNotes\n\n${note.trim()}';
+      final updatedNotes =
+          oldNotes.isEmpty ? note.trim() : '$oldNotes\n\n${note.trim()}';
 
       await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
         'notes': updatedNotes,
@@ -172,19 +244,12 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note added successfully')),
-      );
+      showAppMessage(context, 'Note added successfully');
     } catch (e) {
       if (!mounted) return;
 
       setState(() => loading = false);
-
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      showAppMessage(context, e.toString(), isError: true);
     }
   }
 
@@ -200,10 +265,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     if (result == null || !mounted) return;
 
     if (result.images.isEmpty && result.documents.isEmpty) {
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one file')),
-      );
+      showAppMessage(context, 'Please add at least one file', isError: true);
       return;
     }
 
@@ -224,19 +286,12 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Documents uploaded successfully')),
-      );
+      showAppMessage(context, 'Documents uploaded successfully');
     } catch (e) {
       if (!mounted) return;
 
       setState(() => loading = false);
-
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      showAppMessage(context, e.toString(), isError: true);
     }
   }
 
@@ -247,18 +302,21 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => _RegistrationDialog(
-        initialRegId: _lead.registrationId,
-        initialRegDate: _lead.registrationDate,
-        initialRegTime: _lead.registrationTime,
+        initialRegId: _displayRegistrationId,
+        initialRegDate: _displayRegistrationDate,
+        initialRegTime: _displayRegistrationTime,
       ),
     );
 
     if (result == null || !mounted) return;
 
-    if (result.regDate.trim().isEmpty) {
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select registration date')),
+    if (result.regId.trim().isEmpty ||
+        result.regDate.trim().isEmpty ||
+        result.regTime.trim().isEmpty) {
+      showAppMessage(
+        context,
+        'Please fill all registration details',
+        isError: true,
       );
       return;
     }
@@ -266,10 +324,25 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     setState(() => loading = true);
 
     try {
+      final oldNotes = _removeOldRegistrationBlock(_lead.notes);
+
+      final registrationBlock = '''
+[REGISTRATION_DETAILS]
+registration_id=${result.regId.trim()}
+registration_date=${result.regDate.trim()}
+registration_time=${result.regTime.trim()}
+[/REGISTRATION_DETAILS]
+''';
+
+      final updatedNotes = oldNotes.trim().isEmpty
+          ? registrationBlock.trim()
+          : '${oldNotes.trim()}\n\n${registrationBlock.trim()}';
+
       await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
-        'registration_id': result.regId,
-        'registration_date': result.regDate,
-        'registration_time': result.regTime,
+        'registration_id': result.regId.trim(),
+        'registration_date': result.regDate.trim(),
+        'registration_time': result.regTime.trim(),
+        'notes': updatedNotes,
       });
 
       if (!mounted) return;
@@ -278,20 +351,34 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registration details saved')),
-      );
+      showAppMessage(context, 'Registration details saved');
     } catch (e) {
       if (!mounted) return;
 
       setState(() => loading = false);
-
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      showAppMessage(context, e.toString(), isError: true);
     }
+  }
+
+  Future<void> _openCompleteLeadForm() async {
+    if (loading) return;
+
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => LeadFormScreen(
+          mode: LeadFormMode.completeDetails,
+          existingLead: _lead,
+        ),
+      ),
+    );
+
+    if (ok != true || !mounted) return;
+
+    setState(() => loading = true);
+    await _reloadSilently();
+
+    if (!mounted) return;
+    showAppMessage(context, 'Lead details saved successfully');
   }
 
   Future<void> _openInstallationForm() async {
@@ -306,15 +393,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     if (ok != true || !mounted) return;
 
     setState(() => loading = true);
-
     await _reloadSilently();
 
     if (!mounted) return;
-
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Installation details saved')),
-    );
+    showAppMessage(context, 'Installation details saved');
   }
 
   @override
@@ -324,9 +406,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     final nextStatuses = _resolveNextStatuses(roleName);
     final files = collectLeadFiles(_lead);
     final showUploadButton = _canUploadDocuments(nextStatuses);
-
     final customerName =
         _lead.fullName.trim().isEmpty ? 'Customer' : _lead.fullName;
+
+    final visibleNotes = _visibleNotes();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
@@ -362,18 +445,14 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       ),
                       child: Text(loadError!),
                     ),
-
                   _headerCard(customerName),
                   const SizedBox(height: 14),
-
                   WorkflowStepper(
                     currentStatus: _lead.status.trim().isNotEmpty
                         ? _lead.status
                         : _lead.workflowStep,
                   ),
-
                   const SizedBox(height: 14),
-
                   if (auth.appRole == 'installation') ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _openInstallationForm,
@@ -386,16 +465,34 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-
                   if (auth.appRole == 'support' &&
-                      !_lead.hasRegistrationDetails) ...[
+                      !_hasRegistrationDetailsFrontend) ...[
                     OutlinedButton(
                       onPressed: loading ? null : _saveRegistration,
                       child: const Text('Add registration details'),
                     ),
                     const SizedBox(height: 12),
                   ],
-
+                  if (auth.appRole == 'sales' &&
+                      LeadWorkflow.canSalesCompleteDetails(_lead.status)) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: loading ? null : _openCompleteLeadForm,
+                        icon: const Icon(Icons.edit_document),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        label: const Text(
+                          'Complete remaining lead details',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   _section('Customer Details', [
                     _row('Full Name', _lead.fullName),
                     _row('Lead Code', _lead.leadCode),
@@ -406,7 +503,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('State', _lead.state),
                     _row('Pincode', _lead.pincode),
                   ]),
-
                   _section('Workflow', [
                     _row('Status', _lead.status),
                     _row('Department', _lead.currentDepartment),
@@ -414,7 +510,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('Priority', _lead.priority),
                     _row('Workflow Step', _lead.workflowStep),
                   ]),
-
                   _section('Connection & Bank', [
                     _row('CA Number', _lead.caNumber),
                     _row('K Number', _lead.kNumber),
@@ -423,14 +518,21 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                     _row('Account', _lead.accountNumber),
                     _row('IFSC', _lead.ifscCode),
                   ]),
-
-                  if (_lead.hasRegistrationDetails)
+                  if (_hasRegistrationDetailsFrontend)
                     _section('Registration', [
-                      _row('Registration ID', _lead.registrationId),
-                      _row('Registration Date', _lead.registrationDate),
-                      _row('Registration Time', _lead.registrationTime),
+                      _row('Registration ID', _displayRegistrationId),
+                      _row('Registration Date', _displayRegistrationDate),
+                      _row('Registration Time', _displayRegistrationTime),
                     ]),
-
+                  if (_hasRegistrationDetailsFrontend &&
+                      auth.appRole == 'support') ...[
+                    OutlinedButton.icon(
+                      onPressed: loading ? null : _saveRegistration,
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Edit registration details'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (_lead.hasInstallationDetails)
                     _section('Installation Details', [
                       _row('File No', _installationValue('file_no')),
@@ -439,10 +541,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                         'DCR Certificate No',
                         _installationValue('dcr_certificate_no'),
                       ),
-                      _row(
-                        'Application No',
-                        _installationValue('application_no'),
-                      ),
+                      _row('Application No', _installationValue('application_no')),
                       _row(
                         'Stamp Paper Rs.100',
                         _installationValue('stamp_paper_rs_100'),
@@ -479,16 +578,12 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       _row('S.P. No. 4', _installationValue('sp_no_4')),
                       _row('S.P. No. 5', _installationValue('sp_no_5')),
                     ]),
-
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
                   ]),
-
-                  if (_lead.notes.trim().isNotEmpty)
-                    _section('Notes', [_row('Notes', _lead.notes)]),
-
+                  if (visibleNotes.trim().isNotEmpty)
+                    _section('Notes', [_row('Notes', visibleNotes)]),
                   const SizedBox(height: 8),
-
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -505,7 +600,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       ),
                     ),
                   ),
-
                   if (showUploadButton) ...[
                     const SizedBox(height: 10),
                     SizedBox(
@@ -525,7 +619,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       ),
                     ),
                   ],
-
                   if (nextStatuses.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     const Text(
@@ -564,14 +657,12 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
                       );
                     }),
                   ],
-
                   const SizedBox(height: 16),
                   const Text(
                     'Status history',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-
                   if (history.isEmpty)
                     const Text(
                       'No history yet',
@@ -636,7 +727,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   Widget _historyTile(Map<String, dynamic> h) {
     final status =
         h['new_status']?.toString() ?? h['status']?.toString() ?? 'Update';
-
     final old = h['old_status']?.toString();
     final remarks = h['remarks']?.toString() ?? h['notes']?.toString() ?? '';
     final when = h['created_at']?.toString() ?? '';
@@ -1055,9 +1145,7 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                 border: Border.all(color: const Color(0xFFE4E1EA)),
               ),
               child: Text(
-                imagesOnly
-                    ? 'No images added.'
-                    : 'No documents added.',
+                imagesOnly ? 'No images added.' : 'No documents added.',
                 style: const TextStyle(color: Colors.black45),
               ),
             ),
@@ -1485,7 +1573,14 @@ class _RegistrationDialogState extends State<_RegistrationDialog> {
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(onPressed: save, child: const Text('Save')),
+        ElevatedButton(
+          onPressed: save,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _LeadDetailScreenState.primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Save'),
+        ),
       ],
     );
   }

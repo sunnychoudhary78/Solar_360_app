@@ -5,6 +5,7 @@ class AuthUser {
   final String roleId;
   final String roleName;
   final String? companyName;
+  final String? profilePicture;
 
   const AuthUser({
     required this.id,
@@ -13,6 +14,7 @@ class AuthUser {
     required this.roleId,
     required this.roleName,
     this.companyName,
+    this.profilePicture,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -27,6 +29,11 @@ class AuthUser {
       roleName = role;
     }
 
+    final employee = json['employee_detail'];
+    final profileFromEmployee = employee is Map
+        ? employee['profile_picture']?.toString()
+        : null;
+
     return AuthUser(
       id: json['id']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
@@ -34,6 +41,10 @@ class AuthUser {
       roleId: roleId,
       roleName: roleName,
       companyName: json['companyName']?.toString(),
+      profilePicture:
+          json['profilePicture']?.toString() ??
+          json['profile_picture']?.toString() ??
+          profileFromEmployee,
     );
   }
 }

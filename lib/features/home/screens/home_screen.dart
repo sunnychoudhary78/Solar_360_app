@@ -7,7 +7,9 @@ import '../../auth/models/auth_user.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../leads/providers/lead_provider.dart';
 import '../../leads/screens/all_leads_screen.dart';
+import '../../../core/utils/profile_url.dart';
 import '../../leads/screens/lead_form_screen.dart';
+import '../../profile/screens/profile_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
 import '../../workflow/screens/finance_team_screen.dart';
 import '../../workflow/screens/workflow_team_screen.dart';
@@ -82,6 +84,14 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
       default:
         return 'Dashboard';
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authProvider.notifier).refreshProfile();
+    });
   }
 
   @override
@@ -204,7 +214,7 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
             const SizedBox(height: 14),
             _action(
               title: 'Create New Lead',
-              subtitle: 'Add customer, KYC and site details',
+              subtitle: 'Add basic details — Support will review first',
               icon: Icons.add_circle_outline_rounded,
               onTap: _openCreateLead,
             ),
@@ -578,6 +588,7 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
     required String roleName,
   }) {
     final initial = userName.isNotEmpty ? userName[0].toUpperCase() : 'U';
+    final photoUrl = resolveProfilePictureUrl(auth.user?.profilePicture);
 
     return Container(
       width: double.infinity,
@@ -598,28 +609,42 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            height: 62,
-            width: 62,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: HomeScreen.primaryColor,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
+          InkWell(
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ).then((_) => ref.read(authProvider.notifier).refreshProfile());
+            },
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              height: 62,
+              width: 62,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
+              clipBehavior: Clip.antiAlias,
+              child: photoUrl.isNotEmpty
+                  ? Image.network(photoUrl, fit: BoxFit.cover)
+                  : Center(
+                      child: Text(
+                        initial,
+                        style: const TextStyle(
+                          color: HomeScreen.primaryColor,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 16),

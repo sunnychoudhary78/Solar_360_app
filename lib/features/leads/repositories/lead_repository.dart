@@ -233,6 +233,43 @@ class LeadRepository {
     }
   }
 
+  Future<void> updateLeadWithFiles(
+    String leadId,
+    Map<String, dynamic> data, {
+    Map<String, String>? singleFilePaths,
+    List<Map<String, String>>? additionalImageEntries,
+    List<Map<String, String>>? additionalDocumentEntries,
+  }) async {
+    try {
+      final formDataMap = <String, dynamic>{...data};
+
+      if (singleFilePaths != null) {
+        for (final entry in singleFilePaths.entries) {
+          final filePath = entry.value.trim();
+          if (filePath.isEmpty) continue;
+          if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+            continue;
+          }
+
+          formDataMap[entry.key] = await MultipartFile.fromFile(
+            filePath,
+            filename: _fileName(filePath),
+          );
+        }
+      }
+
+      await _attachAdditionalFiles(
+        formDataMap,
+        additionalImageEntries: additionalImageEntries,
+        additionalDocumentEntries: additionalDocumentEntries,
+      );
+
+      await dio.put('/leads/$leadId', data: FormData.fromMap(formDataMap));
+    } on DioException catch (e) {
+      throw Exception(_handleDioError(e));
+    }
+  }
+
   Future<LeadModel?> updateLead(String leadId, Map<String, dynamic> data) async {
     try {
       final response = await dio.put('/leads/$leadId', data: data);

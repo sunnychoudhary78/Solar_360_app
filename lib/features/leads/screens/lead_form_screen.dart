@@ -9,7 +9,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/utils/upload_url.dart';
+import '../../../core/widgets/app_message.dart';
+import '../models/lead_model.dart';
 import '../providers/lead_provider.dart';
+
+enum LeadFormMode { basicCreate, completeDetails }
 
 class TitledLocalFile {
   final String title;
@@ -39,7 +43,14 @@ class TitledLocalFile {
 }
 
 class LeadFormScreen extends ConsumerStatefulWidget {
-  const LeadFormScreen({super.key});
+  final LeadFormMode mode;
+  final LeadModel? existingLead;
+
+  const LeadFormScreen({
+    super.key,
+    this.mode = LeadFormMode.basicCreate,
+    this.existingLead,
+  });
 
   @override
   ConsumerState<LeadFormScreen> createState() => _LeadFormScreenState();
@@ -112,6 +123,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   final city = TextEditingController();
   final state = TextEditingController();
   final pincode = TextEditingController();
+  final kw = TextEditingController();
 
   final caNumber = TextEditingController();
   final kNumber = TextEditingController();
@@ -145,6 +157,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   final ImagePicker _imagePicker = ImagePicker();
 
   String? roofPhotoPath;
+  String? bankClearPhotoPath;
   String? chequePassbookPath;
 
   final List<TitledLocalFile> additionalImages = [];
@@ -152,15 +165,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   bool isLoading = false;
   bool isFetchingLocation = false;
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchCurrentLocation();
-    });
-  }
 
   @override
   void dispose() {
@@ -171,6 +175,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     city.dispose();
     state.dispose();
     pincode.dispose();
+    kw.dispose();
 
     caNumber.dispose();
     kNumber.dispose();
@@ -363,13 +368,54 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
   }
 
+  bool get _isBasicCreate => widget.mode == LeadFormMode.basicCreate;
+  bool get _isCompleteDetails => widget.mode == LeadFormMode.completeDetails;
+
+  @override
+  void initState() {
+    super.initState();
+    final lead = widget.existingLead;
+    if (lead != null) {
+    fullName.text = lead.fullName;
+    mobile.text = lead.mobile;
+    email.text = lead.email;
+    address.text = lead.address;
+    city.text = lead.city;
+    state.text = lead.state;
+    pincode.text = lead.pincode;
+    caNumber.text = lead.caNumber;
+    kNumber.text = lead.kNumber;
+    referenceNumber.text = lead.referenceNumber;
+    discom.text = lead.discom;
+    geoLocation.text = lead.geoLocation;
+    latitude.text = lead.latitude;
+    longitude.text = lead.longitude;
+    bankAccountName.text = lead.bankAccountName;
+    bankName.text = lead.bankName;
+    accountNumber.text = lead.accountNumber;
+    ifscCode.text = lead.ifscCode;
+    availableShadowFreeArea.text = lead.availableShadowFreeArea;
+    quotationAmount.text = lead.quotationAmount;
+    visitedEmployeeName.text = lead.visitedEmployeeName;
+    visitedEmployeeContact.text = lead.visitedEmployeeContact;
+    notes.text = lead.notes;
+    projectType = lead.projectType.isNotEmpty ? lead.projectType : projectType;
+    source = lead.source.isNotEmpty ? lead.source : source;
+    priority = lead.priority.isNotEmpty ? lead.priority : priority;
+    }
+
+    if (_isBasicCreate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchCurrentLocation();
+      });
+    }
+  }
+
   Future<void> saveLead() async {
     FocusScope.of(context).unfocus();
 
     if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fix validation errors')),
-      );
+      showAppMessage(context, 'Please fix validation errors', isError: true);
       return;
     }
 
@@ -381,6 +427,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'city': _textOrNull(city),
       'state': _textOrNull(state),
       'pincode': _textOrNull(pincode),
+      'kw': _textOrNull(kw),
       'ca_number': _textOrNull(caNumber),
       'k_number': _textOrNull(kNumber),
       'reference_number': _textOrNull(referenceNumber),
@@ -409,18 +456,53 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     try {
       setState(() => isLoading = true);
 
-      await ref.read(leadRepositoryProvider).createLead(
-        data,
-        singleFilePaths: {
-          if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
-          if (chequePassbookPath != null)
-            'cheque_passbook_copy': chequePassbookPath!,
-        },
-        additionalImageEntries:
-            additionalImages.map((item) => item.toPayload()).toList(),
-        additionalDocumentEntries:
-            additionalDocs.map((item) => item.toPayload()).toList(),
-      );
+      final repo = ref.read(leadRepositoryProvider);
+
+      if (_isCompleteDetails && widget.existingLead != null) {
+        await repo.updateLeadWithFiles(
+          widget.existingLead!.id,
+          data,
+          singleFilePaths: {
+            if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
+            if (bankClearPhotoPath != null) 'bank_clear_photo': bankClearPhotoPath!,
+            if (chequePassbookPath != null)
+              'cheque_passbook_copy': chequePassbookPath!,
+          },
+          additionalImageEntries:
+              additionalImages.map((item) => item.toPayload()).toList(),
+          additionalDocumentEntries:
+              additionalDocs.map((item) => item.toPayload()).toList(),
+        );
+      } else if (_isBasicCreate) {
+        final basicData = <String, dynamic>{
+          'full_name': data['full_name'],
+          'mobile': data['mobile'],
+          'email': data['email'],
+          'address': data['address'],
+          'city': data['city'],
+          'state': data['state'],
+          'pincode': data['pincode'],
+          'kw': data['kw'],
+          'project_type': data['project_type'],
+          'source': data['source'],
+          'priority': data['priority'],
+          'notes': data['notes'],
+        };
+        await repo.createLead(basicData);
+      } else {
+        await repo.createLead(
+          data,
+          singleFilePaths: {
+            if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
+            if (chequePassbookPath != null)
+              'cheque_passbook_copy': chequePassbookPath!,
+          },
+          additionalImageEntries:
+              additionalImages.map((item) => item.toPayload()).toList(),
+          additionalDocumentEntries:
+              additionalDocs.map((item) => item.toPayload()).toList(),
+        );
+      }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -430,17 +512,18 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lead created successfully')),
+      showAppMessage(
+        context,
+        _isCompleteDetails
+            ? 'Lead details saved successfully'
+            : 'Lead created and sent to Support for approval',
       );
 
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create lead: $e')),
-      );
+      showAppMessage(context, 'Failed to save lead: $e', isError: true);
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -1159,9 +1242,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       appBar: AppBar(
         backgroundColor: bgColor,
         elevation: 0,
-        title: const Text(
-          'Create Lead',
-          style: TextStyle(
+        title: Text(
+          _isCompleteDetails
+              ? 'Complete Lead Details'
+              : 'Create Lead (Basic)',
+          style: const TextStyle(
             color: textColor,
             fontWeight: FontWeight.bold,
           ),
@@ -1226,7 +1311,19 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   LengthLimitingTextInputFormatter(6),
                 ],
               ),
+              input(
+                'KW',
+                kw,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                validator: (v) => _validateNumber(v, 'KW'),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+              ),
 
+              if (!_isBasicCreate) ...[
               sectionTitle('Connection Details'),
               input('CA Number', caNumber),
               input('K Number', kNumber),
@@ -1446,6 +1543,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 onReplace: (i) =>
                     _replaceFileAt(additionalDocs, i, imageOnly: false),
               ),
+              ],
 
               const SizedBox(height: 24),
 
@@ -1470,9 +1568,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                             strokeWidth: 3,
                           ),
                         )
-                      : const Text(
-                          'Save Lead',
-                          style: TextStyle(
+                      : Text(
+                          _isCompleteDetails
+                              ? 'Save Details'
+                              : _isBasicCreate
+                                  ? 'Submit to Support'
+                                  : 'Save Lead',
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),

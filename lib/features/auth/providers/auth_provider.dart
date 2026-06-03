@@ -75,4 +75,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
       initialized: true,
     );
   }
+
+  Future<void> refreshProfile() async {
+    try {
+      final result = await _repository.restoreSession();
+      if (result.user != null) {
+        state = state.copyWith(user: result.user);
+      }
+    } catch (_) {}
+  }
+
+  void updateProfilePicture(String filename) {
+    final user = state.user;
+    if (user == null) return;
+    state = state.copyWith(
+      user: AuthUser(
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        roleId: user.roleId,
+        roleName: user.roleName,
+        companyName: user.companyName,
+        profilePicture: filename,
+      ),
+    );
+  }
 }

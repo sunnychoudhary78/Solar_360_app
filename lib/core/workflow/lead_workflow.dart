@@ -1,14 +1,31 @@
 class LeadWorkflow {
   LeadWorkflow._();
 
+  /// High-level pipeline steps shown in the workflow progress UI.
+  static const pipelineSteps = [
+    'Lead Created (Basic)',
+    'Support Approval / Rejection',
+    'Lead Approved (Complete Details)',
+    'KYC Collected',
+    'Support Team Processing',
+    'Liaison Process',
+    'Finance',
+    'Installation',
+    'Final Verification',
+    'Completed',
+  ];
+
   static const statusFlow = <String, List<String>>{
     'Sales': [
       'New Lead',
+      'Support Approved',
       'KYC Collected',
       'Sent To Support',
     ],
 
     'Support': [
+      'Support Approved',
+      'Support Rejected',
       'Documents Verification Started',
       'Portal Processing Started',
       'Loan Application Initiated',
@@ -38,7 +55,9 @@ class LeadWorkflow {
   };
 
   static const nextStatus = <String, List<String>>{
-    'New Lead': ['KYC Collected'],
+    'New Lead': [],
+    'Support Approved': ['KYC Collected'],
+    'Support Rejected': [],
     'KYC Collected': ['Sent To Support'],
     'Sent To Support': ['Documents Verification Started'],
 
@@ -64,7 +83,6 @@ class LeadWorkflow {
 
     'Government Approval Completed': ['Lead Completed'],
 
-    // Final status: no action button after this.
     'Lead Completed': [],
     'Lead Closed': [],
   };
@@ -72,10 +90,44 @@ class LeadWorkflow {
   static const finalStatuses = <String>{
     'Lead Completed',
     'Lead Closed',
+    'Support Rejected',
   };
 
   static bool isFinalStatus(String? status) {
     return finalStatuses.contains((status ?? '').trim());
+  }
+
+  static bool canSalesCompleteDetails(String? status) {
+    return (status ?? '').trim() == 'Support Approved';
+  }
+
+  static int pipelineIndexForStatus(String status) {
+    final s = status.trim();
+    const map = {
+      'New Lead': 0,
+      'Support Approved': 2,
+      'Support Rejected': 1,
+      'Lead Closed': 1,
+      'KYC Collected': 3,
+      'Sent To Support': 4,
+      'Documents Verification Started': 4,
+      'Portal Processing Started': 4,
+      'Loan Application Initiated': 5,
+      'Documents Submitted': 5,
+      'Liaison Process Started': 6,
+      'Bank Coordination In Progress': 6,
+      'Liaison Completed': 6,
+      'Finance Verification Started': 7,
+      'Loan Approved': 7,
+      'Installation In Progress': 8,
+      'Installation Done': 8,
+      'Final Verification Started': 9,
+      'Sent For Final Liaison': 9,
+      'Meter Process Started': 9,
+      'Government Approval Completed': 9,
+      'Lead Completed': 9,
+    };
+    return map[s] ?? 0;
   }
 
   static String resolveRoleKey(String? role) {
@@ -111,7 +163,7 @@ class LeadWorkflow {
   ) {
     final cleanStatus = currentStatus.trim();
 
-    if (isFinalStatus(cleanStatus)) {
+    if (isFinalStatus(cleanStatus) || cleanStatus == 'Lead Closed') {
       return [];
     }
 
@@ -135,7 +187,7 @@ class LeadWorkflow {
     final cleanStatus = currentStatus.trim();
 
     const labels = {
-      'New Lead': 'Mark KYC Collected',
+      'Support Approved': 'Mark KYC Collected',
       'KYC Collected': 'Send to Support',
       'Sent To Support': 'Start Document Verification',
       'Documents Verification Started': 'Start Portal Processing',
