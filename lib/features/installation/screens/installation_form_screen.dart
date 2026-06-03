@@ -8,7 +8,10 @@ import '../providers/installation_provider.dart';
 class InstallationFormScreen extends ConsumerStatefulWidget {
   final LeadModel lead;
 
-  const InstallationFormScreen({super.key, required this.lead});
+  const InstallationFormScreen({
+    super.key,
+    required this.lead,
+  });
 
   @override
   ConsumerState<InstallationFormScreen> createState() =>
@@ -25,6 +28,9 @@ class _InstallationFormScreenState
   final panelCount = TextEditingController();
   final invoiceNo = TextEditingController();
 
+  final inverterSerialNumber = TextEditingController();
+  final batterySerialNumber = TextEditingController();
+
   final dcrCertificateNo = TextEditingController();
   final applicationNo = TextEditingController();
   final stampPaperRs100 = TextEditingController();
@@ -34,16 +40,13 @@ class _InstallationFormScreenState
   final installNetMeterDate = TextEditingController();
   final inspectDiscomDate = TextEditingController();
 
-  final spNo1 = TextEditingController();
-  final spNo2 = TextEditingController();
-  final spNo3 = TextEditingController();
-  final spNo4 = TextEditingController();
-  final spNo5 = TextEditingController();
+  final List<TextEditingController> spControllers = [
+    TextEditingController(),
+  ];
 
   bool loading = false;
   String? existingId;
-
-  int selectedSpCount = 1;
+  String panelType = 'DCR';
 
   @override
   void initState() {
@@ -63,6 +66,13 @@ class _InstallationFormScreenState
     panelCount.text = d['number_of_solar_panel']?.toString() ?? '';
     invoiceNo.text = d['invoice_no']?.toString() ?? '';
 
+    panelType = d['panel_type']?.toString() == 'NON_DCR' ? 'NON_DCR' : 'DCR';
+
+    inverterSerialNumber.text =
+        d['inverter_serial_number']?.toString() ?? '';
+    batterySerialNumber.text =
+        d['battery_serial_number']?.toString() ?? '';
+
     dcrCertificateNo.text = d['dcr_certificate_no']?.toString() ?? '';
     applicationNo.text = d['application_no']?.toString() ?? '';
     stampPaperRs100.text = d['stamp_paper_rs_100']?.toString() ?? '';
@@ -76,17 +86,22 @@ class _InstallationFormScreenState
     inspectDiscomDate.text =
         _dateOnly(d['inspect_discom_date']?.toString());
 
-    spNo1.text = d['sp_no_1']?.toString() ?? '';
-    spNo2.text = d['sp_no_2']?.toString() ?? '';
-    spNo3.text = d['sp_no_3']?.toString() ?? '';
-    spNo4.text = d['sp_no_4']?.toString() ?? '';
-    spNo5.text = d['sp_no_5']?.toString() ?? '';
+    final rawSpNumbers = d['sp_numbers'];
 
-    final filled = [spNo1, spNo2, spNo3, spNo4, spNo5]
-        .where((c) => c.text.trim().isNotEmpty)
-        .length;
+    if (rawSpNumbers is List && rawSpNumbers.isNotEmpty) {
+      for (final controller in spControllers) {
+        controller.dispose();
+      }
 
-    if (filled > 0) selectedSpCount = filled;
+      spControllers.clear();
+
+      for (final item in rawSpNumbers) {
+        final controller = TextEditingController(
+          text: item?.toString() ?? '',
+        );
+        spControllers.add(controller);
+      }
+    }
   }
 
   String _dateOnly(String? value) {
@@ -102,6 +117,9 @@ class _InstallationFormScreenState
     panelCount.dispose();
     invoiceNo.dispose();
 
+    inverterSerialNumber.dispose();
+    batterySerialNumber.dispose();
+
     dcrCertificateNo.dispose();
     applicationNo.dispose();
     stampPaperRs100.dispose();
@@ -111,11 +129,9 @@ class _InstallationFormScreenState
     installNetMeterDate.dispose();
     inspectDiscomDate.dispose();
 
-    spNo1.dispose();
-    spNo2.dispose();
-    spNo3.dispose();
-    spNo4.dispose();
-    spNo5.dispose();
+    for (final controller in spControllers) {
+      controller.dispose();
+    }
 
     super.dispose();
   }
@@ -142,6 +158,21 @@ class _InstallationFormScreenState
     });
   }
 
+  void _addSpField() {
+    setState(() {
+      spControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeSpField(int index) {
+    if (spControllers.length <= 1) return;
+
+    setState(() {
+      final controller = spControllers.removeAt(index);
+      controller.dispose();
+    });
+  }
+
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
 
@@ -153,12 +184,22 @@ class _InstallationFormScreenState
       return;
     }
 
+    final spNumbers = spControllers
+        .map((controller) => controller.text.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+
     final body = {
       'file_no': fileNo.text.trim(),
       'capacity': capacity.text.trim(),
       'solar_panel_brand': panelBrand.text.trim(),
-      'number_of_solar_panel': panelCount.text.trim(),
+      'number_of_solar_panel': int.tryParse(panelCount.text.trim()) ?? 0,
       'invoice_no': invoiceNo.text.trim(),
+
+      'panel_type': panelType,
+
+      'inverter_serial_number': inverterSerialNumber.text.trim(),
+      'battery_serial_number': batterySerialNumber.text.trim(),
 
       'dcr_certificate_no': dcrCertificateNo.text.trim(),
       'application_no': applicationNo.text.trim(),
@@ -167,11 +208,7 @@ class _InstallationFormScreenState
       'central_govt_subsidy_date': centralGovtSubsidyDate.text.trim(),
       'state_govt_subsidy_date': stateGovtSubsidyDate.text.trim(),
 
-      'sp_no_1': spNo1.text.trim(),
-      'sp_no_2': spNo2.text.trim(),
-      'sp_no_3': spNo3.text.trim(),
-      'sp_no_4': spNo4.text.trim(),
-      'sp_no_5': spNo5.text.trim(),
+      'sp_numbers': spNumbers,
 
       'install_net_meter_date': installNetMeterDate.text.trim(),
       'inspect_discom_date': inspectDiscomDate.text.trim(),
@@ -227,6 +264,7 @@ class _InstallationFormScreenState
           ),
 
           const SizedBox(height: 20),
+
           _sectionTitle('Basic Details'),
           _field('File No *', fileNo),
           _field('Capacity *', capacity),
@@ -240,7 +278,9 @@ class _InstallationFormScreenState
           _field('Invoice No *', invoiceNo),
 
           const SizedBox(height: 12),
-          _sectionTitle('DCR Panel Subsidy'),
+
+          _sectionTitle('DCR / Non DCR Panel Subsidy'),
+          _panelTypeDropdown(),
           _field('DCR Certificate No.', dcrCertificateNo),
           _field('Application No.', applicationNo),
           _field('Stamp Paper Rs.100', stampPaperRs100),
@@ -248,14 +288,20 @@ class _InstallationFormScreenState
           _dateField('State Govt Subsidy Date', stateGovtSubsidyDate),
 
           const SizedBox(height: 12),
+
+          _sectionTitle('Installation Serial Numbers'),
+          _field('Inverter Serial Number', inverterSerialNumber),
+          _field('Battery Serial Number', batterySerialNumber),
           _spSection(),
 
           const SizedBox(height: 12),
+
           _sectionTitle('Meter / DISCOM'),
           _dateField('Install Net Meter Date', installNetMeterDate),
           _dateField('Inspect of DISCOM Date', inspectDiscomDate),
 
           const SizedBox(height: 24),
+
           SizedBox(
             width: double.infinity,
             height: 54,
@@ -302,9 +348,40 @@ class _InstallationFormScreenState
     );
   }
 
-  Widget _spSection() {
-    final controllers = [spNo1, spNo2, spNo3, spNo4, spNo5];
+  Widget _panelTypeDropdown() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DropdownButtonFormField<String>(
+        value: panelType,
+        decoration: InputDecoration(
+          labelText: 'Panel Type *',
+          filled: true,
+          fillColor: const Color(0xFFFAF8FF),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        items: const [
+          DropdownMenuItem(
+            value: 'DCR',
+            child: Text('DCR'),
+          ),
+          DropdownMenuItem(
+            value: 'NON_DCR',
+            child: Text('Non DCR'),
+          ),
+        ],
+        onChanged: loading
+            ? null
+            : (value) {
+                if (value == null) return;
+                setState(() => panelType = value);
+              },
+      ),
+    );
+  }
 
+  Widget _spSection() {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -324,44 +401,38 @@ class _InstallationFormScreenState
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  value: selectedSpCount,
-                  decoration: InputDecoration(
-                    labelText: 'How many S.P. No?',
-                    filled: true,
-                    fillColor: const Color(0xFFFAF8FF),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+
+          for (int i = 0; i < spControllers.length; i++)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _field(
+                    'S.P. No. ${i + 1}',
+                    spControllers[i],
+                    bottom: 10,
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 1, child: Text('1 S.P. No')),
-                    DropdownMenuItem(value: 2, child: Text('2 S.P. No')),
-                    DropdownMenuItem(value: 3, child: Text('3 S.P. No')),
-                    DropdownMenuItem(value: 4, child: Text('4 S.P. No')),
-                    DropdownMenuItem(value: 5, child: Text('5 S.P. No')),
-                  ],
-                  onChanged: loading
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-                          setState(() {
-                            selectedSpCount = value;
-                            for (int i = value; i < controllers.length; i++) {
-                              controllers[i].clear();
-                            }
-                          });
-                        },
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: IconButton(
+                    onPressed: loading || spControllers.length <= 1
+                        ? null
+                        : () => _removeSpField(i),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ),
+              ],
+            ),
+
+          const SizedBox(height: 4),
+
+          OutlinedButton.icon(
+            onPressed: loading ? null : _addSpField,
+            icon: const Icon(Icons.add),
+            label: const Text('Add More S.P. No.'),
           ),
-          const SizedBox(height: 12),
-          for (int i = 0; i < selectedSpCount; i++)
-            _field('S.P. No. ${i + 1}', controllers[i]),
         ],
       ),
     );
@@ -372,9 +443,10 @@ class _InstallationFormScreenState
     TextEditingController controller, {
     TextInputType keyboard = TextInputType.text,
     bool digitsOnly = false,
+    double bottom = 14,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: EdgeInsets.only(bottom: bottom),
       child: TextField(
         controller: controller,
         enabled: !loading,

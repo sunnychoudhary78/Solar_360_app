@@ -1,7 +1,6 @@
 class LeadWorkflow {
   LeadWorkflow._();
 
-  /// High-level pipeline steps shown in the workflow progress UI.
   static const pipelineSteps = [
     'Lead Created (Basic)',
     'Support Approval / Rejection',
@@ -45,7 +44,7 @@ class LeadWorkflow {
 
     'Finance': [
       'Finance Verification Started',
-      'Loan Approved',
+      'Amount Received',
     ],
 
     'Installation': [
@@ -70,9 +69,9 @@ class LeadWorkflow {
     'Bank Coordination In Progress': ['Liaison Completed'],
 
     'Liaison Completed': ['Finance Verification Started'],
-    'Finance Verification Started': ['Loan Approved'],
+    'Finance Verification Started': ['Amount Received'],
 
-    'Loan Approved': ['Installation In Progress'],
+    'Amount Received': ['Installation In Progress'],
     'Installation In Progress': ['Installation Done'],
 
     'Installation Done': ['Final Verification Started'],
@@ -103,30 +102,39 @@ class LeadWorkflow {
 
   static int pipelineIndexForStatus(String status) {
     final s = status.trim();
+
     const map = {
       'New Lead': 0,
       'Support Approved': 2,
       'Support Rejected': 1,
       'Lead Closed': 1,
+
       'KYC Collected': 3,
       'Sent To Support': 4,
+
       'Documents Verification Started': 4,
       'Portal Processing Started': 4,
-      'Loan Application Initiated': 5,
-      'Documents Submitted': 5,
-      'Liaison Process Started': 6,
-      'Bank Coordination In Progress': 6,
-      'Liaison Completed': 6,
-      'Finance Verification Started': 7,
-      'Loan Approved': 7,
-      'Installation In Progress': 8,
-      'Installation Done': 8,
-      'Final Verification Started': 9,
-      'Sent For Final Liaison': 9,
-      'Meter Process Started': 9,
-      'Government Approval Completed': 9,
+      'Loan Application Initiated': 4,
+      'Documents Submitted': 4,
+
+      'Liaison Process Started': 5,
+      'Bank Coordination In Progress': 5,
+      'Liaison Completed': 5,
+
+      'Finance Verification Started': 6,
+      'Amount Received': 6,
+
+      'Installation In Progress': 7,
+      'Installation Done': 7,
+
+      'Final Verification Started': 8,
+      'Sent For Final Liaison': 8,
+      'Meter Process Started': 8,
+      'Government Approval Completed': 8,
+
       'Lead Completed': 9,
     };
+
     return map[s] ?? 0;
   }
 
@@ -163,7 +171,7 @@ class LeadWorkflow {
   ) {
     final cleanStatus = currentStatus.trim();
 
-    if (isFinalStatus(cleanStatus) || cleanStatus == 'Lead Closed') {
+    if (isFinalStatus(cleanStatus)) {
       return [];
     }
 
@@ -197,8 +205,10 @@ class LeadWorkflow {
       'Liaison Process Started': 'Bank Coordination',
       'Bank Coordination In Progress': 'Complete Liaison',
       'Liaison Completed': 'Start Finance Verification',
-      'Finance Verification Started': 'Approve Loan',
-      'Loan Approved': 'Start Installation',
+
+      'Finance Verification Started': 'Amount Received',
+
+      'Amount Received': 'Start Installation',
       'Installation In Progress': 'Mark Installation Done',
       'Installation Done': 'Start Final Verification',
       'Final Verification Started': 'Send for Final Liaison',
