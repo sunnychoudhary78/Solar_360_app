@@ -63,7 +63,7 @@ class _InstallationFormScreenState
     fileNo.text = d['file_no']?.toString() ?? '';
     capacity.text = d['capacity']?.toString() ?? '';
     panelBrand.text = d['solar_panel_brand']?.toString() ?? '';
-    panelCount.text = d['number_of_solar_panel']?.toString() ?? '';
+    panelCount.text = d['number_of_solar_panels']?.toString() ?? '';
     invoiceNo.text = d['invoice_no']?.toString() ?? '';
 
     panelType = d['panel_type']?.toString() == 'NON_DCR' ? 'NON_DCR' : 'DCR';
@@ -96,10 +96,11 @@ class _InstallationFormScreenState
       spControllers.clear();
 
       for (final item in rawSpNumbers) {
-        final controller = TextEditingController(
-          text: item?.toString() ?? '',
+        spControllers.add(
+          TextEditingController(
+            text: item?.toString() ?? '',
+          ),
         );
-        spControllers.add(controller);
       }
     }
   }
@@ -139,11 +140,9 @@ class _InstallationFormScreenState
   Future<void> _pickDate(TextEditingController controller) async {
     FocusScope.of(context).unfocus();
 
-    final now = DateTime.now();
-
     final picked = await showDatePicker(
       context: context,
-      initialDate: now,
+      initialDate: DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -193,23 +192,17 @@ class _InstallationFormScreenState
       'file_no': fileNo.text.trim(),
       'capacity': capacity.text.trim(),
       'solar_panel_brand': panelBrand.text.trim(),
-      'number_of_solar_panel': int.tryParse(panelCount.text.trim()) ?? 0,
+      'number_of_solar_panels': int.tryParse(panelCount.text.trim()) ?? 0,
       'invoice_no': invoiceNo.text.trim(),
-
       'panel_type': panelType,
-
       'inverter_serial_number': inverterSerialNumber.text.trim(),
       'battery_serial_number': batterySerialNumber.text.trim(),
-
       'dcr_certificate_no': dcrCertificateNo.text.trim(),
       'application_no': applicationNo.text.trim(),
       'stamp_paper_rs_100': stampPaperRs100.text.trim(),
-
       'central_govt_subsidy_date': centralGovtSubsidyDate.text.trim(),
       'state_govt_subsidy_date': stateGovtSubsidyDate.text.trim(),
-
       'sp_numbers': spNumbers,
-
       'install_net_meter_date': installNetMeterDate.text.trim(),
       'inspect_discom_date': inspectDiscomDate.text.trim(),
     };
@@ -262,7 +255,6 @@ class _InstallationFormScreenState
               fontWeight: FontWeight.bold,
             ),
           ),
-
           const SizedBox(height: 20),
 
           _sectionTitle('Basic Details'),
@@ -401,7 +393,6 @@ class _InstallationFormScreenState
             ),
           ),
           const SizedBox(height: 12),
-
           for (int i = 0; i < spControllers.length; i++)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,9 +416,7 @@ class _InstallationFormScreenState
                 ),
               ],
             ),
-
           const SizedBox(height: 4),
-
           OutlinedButton.icon(
             onPressed: loading ? null : _addSpField,
             icon: const Icon(Icons.add),

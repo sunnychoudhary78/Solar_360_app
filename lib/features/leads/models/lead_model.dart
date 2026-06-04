@@ -140,8 +140,9 @@ class LeadModel {
   });
 
   factory LeadModel.fromJson(Map<String, dynamic> json) {
-    final installationRaw =
-        json['installationDetails'] ?? json['installation_details'];
+    final installationRaw = json['installationDetails'] ??
+        json['installation_details'] ??
+        json['InstallationDetails'];
 
     return LeadModel(
       id: _str(json['id']),
@@ -161,16 +162,14 @@ class LeadModel {
       geoLocation: _str(json['geo_location'] ?? json['geoLocation']),
       latitude: _str(json['latitude']),
       longitude: _str(json['longitude']),
-      bankAccountName:
-          _str(json['bank_account_name'] ?? json['bankAccountName']),
+      bankAccountName: _str(json['bank_account_name'] ?? json['bankAccountName']),
       bankName: _str(json['bank_name'] ?? json['bankName']),
       accountNumber: _str(json['account_number'] ?? json['accountNumber']),
       ifscCode: _str(json['ifsc_code'] ?? json['ifscCode']),
       projectType: _str(json['project_type'] ?? json['projectType']),
       source: _str(json['source']),
       status: _str(json['status']),
-      currentDepartment:
-          _str(json['current_department'] ?? json['currentDepartment']),
+      currentDepartment: _str(json['current_department'] ?? json['currentDepartment']),
       workflowStep: _str(json['workflow_step'] ?? json['workflowStep']),
       leadStage: _str(json['lead_stage'] ?? json['leadStage']),
       assignedTo: _str(json['assigned_to'] ?? json['assignedTo']),
@@ -179,56 +178,31 @@ class LeadModel {
       updatedBy: _str(json['updated_by'] ?? json['updatedBy']),
       priority: _str(json['priority']),
       notes: _str(json['notes']),
-      roofPhotoStatus:
-          _str(json['roof_photo_status'] ?? json['roofPhotoStatus']),
-      availableShadowFreeArea: _str(
-        json['available_shadow_free_area'] ?? json['availableShadowFreeArea'],
-      ),
-      quotationAmount:
-          _str(json['quotation_amount'] ?? json['quotationAmount']),
-      visitedEmployeeName: _str(
-        json['visited_employee_name'] ?? json['visitedEmployeeName'],
-      ),
-      visitedEmployeeContact: _str(
-        json['visited_employee_contact'] ?? json['visitedEmployeeContact'],
-      ),
+      roofPhotoStatus: _str(json['roof_photo_status'] ?? json['roofPhotoStatus']),
+      availableShadowFreeArea: _str(json['available_shadow_free_area'] ?? json['availableShadowFreeArea']),
+      quotationAmount: _str(json['quotation_amount'] ?? json['quotationAmount']),
+      visitedEmployeeName: _str(json['visited_employee_name'] ?? json['visitedEmployeeName']),
+      visitedEmployeeContact: _str(json['visited_employee_contact'] ?? json['visitedEmployeeContact']),
       followUpDate: _str(json['follow_up_date'] ?? json['followUpDate']),
-      lastContactedAt:
-          _str(json['last_contacted_at'] ?? json['lastContactedAt']),
-      roofLoadBearingCapacity: _bool(
-        json['roof_load_bearing_capacity'] ?? json['roofLoadBearingCapacity'],
-      ),
-      shadowFreeRoof:
-          _bool(json['shadow_free_roof'] ?? json['shadowFreeRoof']),
-      vendorVisitedSite:
-          _bool(json['vendor_visited_site'] ?? json['vendorVisitedSite']),
+      lastContactedAt: _str(json['last_contacted_at'] ?? json['lastContactedAt']),
+      roofLoadBearingCapacity: _bool(json['roof_load_bearing_capacity'] ?? json['roofLoadBearingCapacity']),
+      shadowFreeRoof: _bool(json['shadow_free_roof'] ?? json['shadowFreeRoof']),
+      vendorVisitedSite: _bool(json['vendor_visited_site'] ?? json['vendorVisitedSite']),
       isActive: _bool(json['is_active'] ?? json['isActive']),
-      additionalDocuments:
-          _str(json['additional_documents'] ?? json['additionalDocuments']),
-      additionalImages:
-          _str(json['additional_images'] ?? json['additionalImages']),
-      chequePassbookCopy:
-          _str(json['cheque_passbook_copy'] ?? json['chequePassbookCopy']),
-      bankClearPhoto:
-          _str(json['bank_clear_photo'] ?? json['bankClearPhoto']),
+      additionalDocuments: _str(json['additional_documents'] ?? json['additionalDocuments']),
+      additionalImages: _str(json['additional_images'] ?? json['additionalImages']),
+      chequePassbookCopy: _str(json['cheque_passbook_copy'] ?? json['chequePassbookCopy']),
+      bankClearPhoto: _str(json['bank_clear_photo'] ?? json['bankClearPhoto']),
       roofPhoto: _str(json['roof_photo'] ?? json['roofPhoto']),
-      preInstallationPhoto:
-          _str(json['pre_installation_photo'] ?? json['preInstallationPhoto']),
-      quotationDocument:
-          _str(json['quotation_document'] ?? json['quotationDocument']),
-      installationReport:
-          _str(json['installation_report'] ?? json['installationReport']),
-      installationImages:
-          _str(json['installation_images'] ?? json['installationImages']),
+      preInstallationPhoto: _str(json['pre_installation_photo'] ?? json['preInstallationPhoto']),
+      quotationDocument: _str(json['quotation_document'] ?? json['quotationDocument']),
+      installationReport: _str(json['installation_report'] ?? json['installationReport']),
+      installationImages: _str(json['installation_images'] ?? json['installationImages']),
       statusRemarks: _str(json['status_remarks'] ?? json['statusRemarks']),
       registrationId: _str(json['registration_id'] ?? json['registrationId']),
-      registrationDate:
-          _str(json['registration_date'] ?? json['registrationDate']),
-      registrationTime:
-          _str(json['registration_time'] ?? json['registrationTime']),
-      installationDetails: installationRaw is Map
-          ? Map<String, dynamic>.from(installationRaw)
-          : null,
+      registrationDate: _str(json['registration_date'] ?? json['registrationDate']),
+      registrationTime: _str(json['registration_time'] ?? json['registrationTime']),
+      installationDetails: installationRaw is Map ? Map<String, dynamic>.from(installationRaw) : null,
       createdAt: _str(json['created_at'] ?? json['createdAt']),
       updatedAt: _str(json['updated_at'] ?? json['updatedAt']),
     );
@@ -236,20 +210,19 @@ class LeadModel {
 
   bool get hasInstallationDetails {
     final d = installationDetails;
-    if (d == null) return false;
+    if (d == null || d.isEmpty) return false;
 
-    const requiredKeys = [
-      'file_no',
-      'capacity',
-      'solar_panel_brand',
-      'number_of_solar_panel',
-      'invoice_no',
-    ];
+    final spNumbers = d['sp_numbers'];
 
-    return requiredKeys.every((key) {
-      final value = d[key];
-      return value != null && value.toString().trim().isNotEmpty;
-    });
+    return _mapValue(d, ['file_no']).isNotEmpty ||
+        _mapValue(d, ['capacity']).isNotEmpty ||
+        _mapValue(d, ['solar_panel_brand']).isNotEmpty ||
+        _mapValue(d, ['number_of_solar_panels', 'number_of_solar_panel']).isNotEmpty ||
+        _mapValue(d, ['invoice_no']).isNotEmpty ||
+        _mapValue(d, ['panel_type']).isNotEmpty ||
+        _mapValue(d, ['inverter_serial_number']).isNotEmpty ||
+        _mapValue(d, ['battery_serial_number']).isNotEmpty ||
+        (spNumbers is List && spNumbers.isNotEmpty);
   }
 
   bool get hasRegistrationDetails {
@@ -420,16 +393,13 @@ class LeadModel {
       priority: priority ?? this.priority,
       notes: notes ?? this.notes,
       roofPhotoStatus: roofPhotoStatus ?? this.roofPhotoStatus,
-      availableShadowFreeArea:
-          availableShadowFreeArea ?? this.availableShadowFreeArea,
+      availableShadowFreeArea: availableShadowFreeArea ?? this.availableShadowFreeArea,
       quotationAmount: quotationAmount ?? this.quotationAmount,
       visitedEmployeeName: visitedEmployeeName ?? this.visitedEmployeeName,
-      visitedEmployeeContact:
-          visitedEmployeeContact ?? this.visitedEmployeeContact,
+      visitedEmployeeContact: visitedEmployeeContact ?? this.visitedEmployeeContact,
       followUpDate: followUpDate ?? this.followUpDate,
       lastContactedAt: lastContactedAt ?? this.lastContactedAt,
-      roofLoadBearingCapacity:
-          roofLoadBearingCapacity ?? this.roofLoadBearingCapacity,
+      roofLoadBearingCapacity: roofLoadBearingCapacity ?? this.roofLoadBearingCapacity,
       shadowFreeRoof: shadowFreeRoof ?? this.shadowFreeRoof,
       vendorVisitedSite: vendorVisitedSite ?? this.vendorVisitedSite,
       isActive: isActive ?? this.isActive,
@@ -438,8 +408,7 @@ class LeadModel {
       chequePassbookCopy: chequePassbookCopy ?? this.chequePassbookCopy,
       bankClearPhoto: bankClearPhoto ?? this.bankClearPhoto,
       roofPhoto: roofPhoto ?? this.roofPhoto,
-      preInstallationPhoto:
-          preInstallationPhoto ?? this.preInstallationPhoto,
+      preInstallationPhoto: preInstallationPhoto ?? this.preInstallationPhoto,
       quotationDocument: quotationDocument ?? this.quotationDocument,
       installationReport: installationReport ?? this.installationReport,
       installationImages: installationImages ?? this.installationImages,
@@ -451,6 +420,16 @@ class LeadModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  static String _mapValue(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString().trim();
+      }
+    }
+    return '';
   }
 
   static String _str(dynamic value) {
