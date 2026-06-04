@@ -1,16 +1,20 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/utils/role_utils.dart';
 import '../../auth/auth_session.dart';
 import '../../auth/models/auth_user.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../leads/providers/lead_provider.dart';
 import '../../leads/screens/all_leads_screen.dart';
-import '../../../core/utils/profile_url.dart';
 import '../../leads/screens/lead_form_screen.dart';
-import '../../profile/screens/profile_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
+import '../../profile/screens/profile_screen.dart';
 import '../../workflow/screens/finance_team_screen.dart';
 import '../../workflow/screens/workflow_team_screen.dart';
 
@@ -20,8 +24,10 @@ class HomeScreen extends ConsumerWidget {
   static const bgColor = Color(0xFFF7F8FC);
   static const drawerBgColor = Color(0xFFF9F7FF);
   static const cardColor = Colors.white;
-  static const primaryColor = Color(0xFF5663A0);
-  static const teamAccent = Color(0xFF18A999);
+
+  static const primaryColor = Color(0xFF4E5FAE);
+  static const teamAccent = Color(0xFF22B8A8);
+
   static const textColor = Color(0xFF1F2028);
 
   @override
@@ -120,7 +126,13 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
           centerTitle: true,
           leading: Builder(
             builder: (context) => IconButton(
-              icon: const Icon(Icons.menu_rounded, size: 34),
+              splashColor: HomeScreen.primaryColor.withOpacity(0.14),
+              highlightColor: Colors.transparent,
+              icon: const Icon(
+                Icons.menu_rounded,
+                size: 34,
+                color: HomeScreen.primaryColor,
+              ),
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
@@ -134,14 +146,22 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
           ),
           actions: [
             IconButton(
+              splashColor: HomeScreen.primaryColor.withOpacity(0.14),
+              highlightColor: Colors.transparent,
               onPressed: _refreshLeads,
-              icon: const Icon(Icons.refresh),
-              color: HomeScreen.textColor,
+              icon: const Icon(
+                Icons.refresh,
+                color: HomeScreen.primaryColor,
+              ),
             ),
             IconButton(
+              splashColor: HomeScreen.primaryColor.withOpacity(0.14),
+              highlightColor: Colors.transparent,
               onPressed: () => setState(() => selectedPage = 1),
-              icon: const Icon(Icons.notifications_none_rounded),
-              color: HomeScreen.textColor,
+              icon: const Icon(
+                Icons.notifications_none_rounded,
+                color: HomeScreen.primaryColor,
+              ),
             ),
           ],
         ),
@@ -172,7 +192,6 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
         children: [
           _salesHeroCard(),
           const SizedBox(height: 20),
-
           if (_canReadLeads)
             Row(
               children: [
@@ -193,15 +212,12 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
                 ),
               ],
             ),
-
           const SizedBox(height: 24),
-
           if (!_canReadLeads)
             const Text(
               'Your account does not have lead permissions yet. Ask an admin to assign lead.read / lead.create.',
               style: TextStyle(color: Colors.black54, height: 1.4),
             ),
-
           if (_canCreateLead) ...[
             const Text(
               'Lead Actions',
@@ -219,7 +235,6 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
               onTap: _openCreateLead,
             ),
           ],
-
           if (_canReadLeads) ...[
             const SizedBox(height: 14),
             _action(
@@ -229,7 +244,6 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
               onTap: _openAllLeads,
             ),
           ],
-
           if (auth.appRole == 'admin' && _canReadLeads) ...[
             const SizedBox(height: 14),
             _action(
@@ -428,59 +442,65 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return Material(
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(24),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: HomeScreen.cardColor,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 26,
-              backgroundColor: HomeScreen.primaryColor.withOpacity(0.12),
-              child: Icon(icon, color: HomeScreen.primaryColor, size: 28),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: HomeScreen.textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: Colors.black45,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        splashColor: HomeScreen.primaryColor.withOpacity(0.12),
+        highlightColor: HomeScreen.primaryColor.withOpacity(0.04),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: HomeScreen.cardColor,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
               ),
-            ),
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
-              color: HomeScreen.primaryColor,
-            ),
-          ],
+            ],
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: HomeScreen.primaryColor.withOpacity(0.12),
+                child: Icon(icon, color: HomeScreen.primaryColor, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: HomeScreen.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Colors.black45,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: HomeScreen.primaryColor,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -588,7 +608,6 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
     required String roleName,
   }) {
     final initial = userName.isNotEmpty ? userName[0].toUpperCase() : 'U';
-    final photoUrl = resolveProfilePictureUrl(auth.user?.profilePicture);
 
     return Container(
       width: double.infinity,
@@ -599,7 +618,7 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
           end: Alignment.bottomRight,
           colors: [
             HomeScreen.primaryColor,
-            Color(0xFFBFC6FF),
+            HomeScreen.teamAccent,
           ],
         ),
         borderRadius: BorderRadius.only(
@@ -610,12 +629,16 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
+            splashColor: HomeScreen.primaryColor.withOpacity(0.12),
+            highlightColor: Colors.white24,
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              ).then((_) => ref.read(authProvider.notifier).refreshProfile());
+              ).then((_) {
+                ref.read(authProvider.notifier).refreshProfile();
+              });
             },
             borderRadius: BorderRadius.circular(18),
             child: Container(
@@ -633,18 +656,10 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: photoUrl.isNotEmpty
-                  ? Image.network(photoUrl, fit: BoxFit.cover)
-                  : Center(
-                      child: Text(
-                        initial,
-                        style: const TextStyle(
-                          color: HomeScreen.primaryColor,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+              child: _ProfilePhotoBox(
+                rawProfilePicture: auth.user?.profilePicture,
+                initial: initial,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -711,6 +726,8 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
             : Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
+          splashColor: HomeScreen.primaryColor.withOpacity(0.12),
+          highlightColor: HomeScreen.primaryColor.withOpacity(0.04),
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(
@@ -735,6 +752,180 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfilePhotoBox extends StatefulWidget {
+  final String? rawProfilePicture;
+  final String initial;
+
+  const _ProfilePhotoBox({
+    required this.rawProfilePicture,
+    required this.initial,
+  });
+
+  @override
+  State<_ProfilePhotoBox> createState() => _ProfilePhotoBoxState();
+}
+
+class _ProfilePhotoBoxState extends State<_ProfilePhotoBox> {
+  List<String> _urls = [];
+  int _index = 0;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _preparePhoto();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfilePhotoBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.rawProfilePicture != widget.rawProfilePicture) {
+      _preparePhoto();
+    }
+  }
+
+  Future<void> _preparePhoto() async {
+    setState(() {
+      _loading = true;
+      _index = 0;
+      _urls = _candidateUrls(widget.rawProfilePicture);
+    });
+
+    if (_urls.isEmpty) {
+      final fetched = await _fetchMyPhotoFilename();
+      if (!mounted) return;
+
+      setState(() {
+        _urls = _candidateUrls(fetched);
+      });
+    }
+
+    if (!mounted) return;
+    setState(() => _loading = false);
+  }
+
+  Future<String?> _fetchMyPhotoFilename() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(AppConfig.tokenKey);
+
+      if (token == null || token.trim().isEmpty) {
+        debugPrint('Profile photo: token missing');
+        return null;
+      }
+
+      final uri = Uri.parse('${AppConfig.apiBaseUrl}/photo');
+
+      final res = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      debugPrint('Profile photo GET ${res.statusCode}: ${res.body}');
+
+      if (res.statusCode != 200) return null;
+
+      final data = jsonDecode(res.body);
+      if (data is! Map<String, dynamic>) return null;
+
+      final value = data['profile_picture'] ??
+          data['profilePicture'] ??
+          data['filename'];
+
+      return value?.toString();
+    } catch (e, st) {
+      debugPrint('Profile photo fetch failed: $e\n$st');
+      return null;
+    }
+  }
+
+  List<String> _candidateUrls(String? value) {
+    if (value == null || value.trim().isEmpty) return [];
+
+    final raw = value.trim().replaceAll('\\', '/');
+
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return [raw];
+    }
+
+    final baseWithoutApi =
+        AppConfig.apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
+
+    var path = raw.replaceFirst(RegExp(r'^/+'), '');
+
+    if (path.startsWith('api/uploads/')) {
+      path = path.replaceFirst('api/', '');
+    }
+
+    if (!path.startsWith('uploads/')) {
+      path = 'uploads/$path';
+    }
+
+    return [
+      '$baseWithoutApi/$path',
+      '${AppConfig.apiBaseUrl}/$path',
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(
+        child: SizedBox(
+          height: 22,
+          width: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: HomeScreen.primaryColor,
+          ),
+        ),
+      );
+    }
+
+    if (_urls.isEmpty || _index >= _urls.length) {
+      return _initialBox();
+    }
+
+    final url = _urls[_index];
+
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      headers: const {
+        'Accept': 'image/*',
+      },
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('Profile image failed URL: $url');
+        debugPrint('Profile image error: $error');
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() => _index++);
+        });
+
+        return _initialBox();
+      },
+    );
+  }
+
+  Widget _initialBox() {
+    return Center(
+      child: Text(
+        widget.initial,
+        style: const TextStyle(
+          color: HomeScreen.primaryColor,
+          fontSize: 28,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );
