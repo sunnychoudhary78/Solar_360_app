@@ -215,7 +215,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 20),
 
                     const Text(
-                      'IMT Green Energy',
+                      'IMT Green_Energy',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Color(0xFF1F2028),

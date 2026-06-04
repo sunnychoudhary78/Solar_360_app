@@ -17,11 +17,9 @@ class LeadWorkflow {
   static const statusFlow = <String, List<String>>{
     'Sales': [
       'New Lead',
-      'Support Approved',
       'KYC Collected',
       'Sent To Support',
     ],
-
     'Support': [
       'Support Approved',
       'Support Rejected',
@@ -31,9 +29,10 @@ class LeadWorkflow {
       'Documents Submitted',
       'Final Verification Started',
       'Sent For Final Liaison',
+      'Support Closure Pending',
       'Lead Completed',
+      'Lead Closed',
     ],
-
     'Liaising': [
       'Liaison Process Started',
       'Bank Coordination In Progress',
@@ -41,12 +40,10 @@ class LeadWorkflow {
       'Meter Process Started',
       'Government Approval Completed',
     ],
-
     'Finance': [
       'Finance Verification Started',
       'Amount Received',
     ],
-
     'Installation': [
       'Installation In Progress',
       'Installation Done',
@@ -54,9 +51,11 @@ class LeadWorkflow {
   };
 
   static const nextStatus = <String, List<String>>{
-    'New Lead': [],
+    'New Lead': ['Support Approved', 'Support Rejected'],
+
     'Support Approved': ['KYC Collected'],
     'Support Rejected': [],
+
     'KYC Collected': ['Sent To Support'],
     'Sent To Support': ['Documents Verification Started'],
 
@@ -80,14 +79,14 @@ class LeadWorkflow {
     'Sent For Final Liaison': ['Meter Process Started'],
     'Meter Process Started': ['Government Approval Completed'],
 
-    'Government Approval Completed': ['Lead Completed'],
+    'Government Approval Completed': ['Support Closure Pending'],
+    'Support Closure Pending': ['Lead Completed'],
+    'Lead Completed': ['Lead Closed'],
 
-    'Lead Completed': [],
     'Lead Closed': [],
   };
 
   static const finalStatuses = <String>{
-    'Lead Completed',
     'Lead Closed',
     'Support Rejected',
   };
@@ -105,9 +104,9 @@ class LeadWorkflow {
 
     const map = {
       'New Lead': 0,
+
       'Support Approved': 2,
       'Support Rejected': 1,
-      'Lead Closed': 1,
 
       'KYC Collected': 3,
       'Sent To Support': 4,
@@ -131,8 +130,10 @@ class LeadWorkflow {
       'Sent For Final Liaison': 8,
       'Meter Process Started': 8,
       'Government Approval Completed': 8,
+      'Support Closure Pending': 8,
 
       'Lead Completed': 9,
+      'Lead Closed': 9,
     };
 
     return map[s] ?? 0;
@@ -195,26 +196,35 @@ class LeadWorkflow {
     final cleanStatus = currentStatus.trim();
 
     const labels = {
+      'New Lead': 'Approve / Reject Lead',
+
       'Support Approved': 'Mark KYC Collected',
       'KYC Collected': 'Send to Support',
+
       'Sent To Support': 'Start Document Verification',
       'Documents Verification Started': 'Start Portal Processing',
       'Portal Processing Started': 'Start Loan Application',
       'Loan Application Initiated': 'Submit Documents',
+
       'Documents Submitted': 'Start Liaison Process',
       'Liaison Process Started': 'Bank Coordination',
       'Bank Coordination In Progress': 'Complete Liaison',
-      'Liaison Completed': 'Start Finance Verification',
 
+      'Liaison Completed': 'Start Finance Verification',
       'Finance Verification Started': 'Amount Received',
 
       'Amount Received': 'Start Installation',
       'Installation In Progress': 'Mark Installation Done',
+
       'Installation Done': 'Start Final Verification',
       'Final Verification Started': 'Send for Final Liaison',
+
       'Sent For Final Liaison': 'Start Meter Process',
       'Meter Process Started': 'Government Approval Done',
-      'Government Approval Completed': 'Complete Lead',
+
+      'Government Approval Completed': 'Send to Support Closure',
+      'Support Closure Pending': 'Complete Lead',
+      'Lead Completed': 'Close Lead',
     };
 
     return labels[cleanStatus] ?? 'Advance status';
