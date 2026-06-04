@@ -7,7 +7,7 @@ class AppConfig {
   AppConfig._();
 static const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://greenenergy.immortalgroup.in/api',
+  defaultValue: 'http://192.168.1.16:3011/api',
 );
 // http://192.168.1.16:3011/api'
 // https://greenenergy.immortalgroup.in/api
