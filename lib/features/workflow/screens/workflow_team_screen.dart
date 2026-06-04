@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/role_utils.dart';
+import '../../../core/widgets/profile_photo_box.dart';
 import '../../../core/workflow/lead_workflow.dart';
 import '../../auth/auth_session.dart';
 import '../../auth/models/auth_user.dart';
@@ -29,6 +30,15 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
   static const textColor = Color(0xFF1F2028);
 
   int selectedPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authProvider.notifier).refreshProfile();
+    });
+  }
 
   String get _title {
     final auth = ref.read(authProvider);
@@ -59,7 +69,10 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
           leading: Builder(
             builder: (context) => IconButton(
               icon: const Icon(Icons.menu_rounded, size: 34),
-              onPressed: () => Scaffold.of(context).openDrawer(),
+              onPressed: () {
+                ref.read(authProvider.notifier).refreshProfile();
+                Scaffold.of(context).openDrawer();
+              },
             ),
           ),
           title: Text(
@@ -553,14 +566,11 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                 ),
               ],
             ),
-            alignment: Alignment.center,
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: primaryColor,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
+            clipBehavior: Clip.antiAlias,
+            child: ProfilePhotoBox(
+              rawProfilePicture: ref.watch(authProvider).user?.profilePicture,
+              initial: initial,
+              textColor: primaryColor,
             ),
           ),
           const SizedBox(height: 16),

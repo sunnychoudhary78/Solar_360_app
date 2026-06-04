@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
-import '../../../core/utils/profile_url.dart';
 import '../../../core/widgets/app_message.dart';
+import '../../../core/widgets/profile_photo_box.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../repositories/profile_repository.dart';
 
@@ -53,7 +53,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final user = auth.user;
-    final photoUrl = resolveProfilePictureUrl(user?.profilePicture);
     final initial =
         (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : 'U';
 
@@ -91,31 +90,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ],
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: photoUrl.isNotEmpty
-                      ? Image.network(
-                          photoUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Center(
-                            child: Text(
-                              initial,
-                              style: const TextStyle(
-                                fontSize: 42,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF5663A0),
-                              ),
-                            ),
-                          ),
-                        )
-                      : Center(
-                          child: Text(
-                            initial,
-                            style: const TextStyle(
-                              fontSize: 42,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF5663A0),
-                            ),
-                          ),
-                        ),
+                  child: ProfilePhotoBox(
+                    rawProfilePicture: user?.profilePicture,
+                    initial: initial,
+                    textColor: const Color(0xFF5663A0),
+                    fontSize: 42,
+                  ),
                 ),
                 if (_uploading)
                   const Positioned.fill(

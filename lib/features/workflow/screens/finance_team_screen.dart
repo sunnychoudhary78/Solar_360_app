@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/profile_photo_box.dart';
 import '../../auth/auth_session.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../leads/models/lead_model.dart';
@@ -25,6 +26,15 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
 
   int selectedPage = 0;
   bool actionLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authProvider.notifier).refreshProfile();
+    });
+  }
 
   List<LeadModel> _financeLeads(List<LeadModel> leads) {
     return leads.where((lead) {
@@ -55,7 +65,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
             status: status,
           );
 
-      _refreshLeads();
+      ref.invalidate(allLeadsProvider);
 
       if (!mounted) return;
 
@@ -128,7 +138,10 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                   color: textColor,
                   size: 34,
                 ),
-                onPressed: () => Scaffold.of(context).openDrawer(),
+                onPressed: () {
+                  ref.read(authProvider.notifier).refreshProfile();
+                  Scaffold.of(context).openDrawer();
+                },
               );
             },
           ),
@@ -329,14 +342,11 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                 ),
               ],
             ),
-            alignment: Alignment.center,
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: primaryColor,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
+            clipBehavior: Clip.antiAlias,
+            child: ProfilePhotoBox(
+              rawProfilePicture: ref.watch(authProvider).user?.profilePicture,
+              initial: initial,
+              textColor: primaryColor,
             ),
           ),
           const SizedBox(height: 16),

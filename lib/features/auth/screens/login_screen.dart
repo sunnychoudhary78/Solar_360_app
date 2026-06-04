@@ -138,6 +138,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  Widget _logoWidget() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Image.asset(
+        'assets/images/logo.jpeg',
+        height: 130,
+        width: 130,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return const Icon(
+            Icons.image_not_supported_outlined,
+            size: 78,
+            color: primaryColor,
+          );
+        },
+      ),
+    );
+  }
+
   Widget _errorBox(String message) {
     return Container(
       width: double.infinity,
@@ -191,28 +210,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.solar_power,
-                      size: 78,
-                      color: primaryColor,
-                    ),
-                    const SizedBox(height: 24),
+                    _logoWidget(),
+
+                    const SizedBox(height: 20),
+
                     const Text(
                       'IMT Green Energy',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Color(0xFF1F2028),
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+
                     const SizedBox(height: 8),
+
                     const Text(
                       'Sign in with your CSPL account',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.black45,
                         fontSize: 16,
                       ),
                     ),
+
                     const SizedBox(height: 28),
 
                     if (_loginError != null) ...[
@@ -231,6 +253,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 8),
 
                     TextFormField(
@@ -258,6 +281,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 8),
 
                     TextFormField(

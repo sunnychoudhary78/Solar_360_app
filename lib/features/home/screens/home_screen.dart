@@ -1,12 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../../core/utils/role_utils.dart';
+import '../../../core/widgets/profile_photo_box.dart';
 import '../../auth/auth_session.dart';
 import '../../auth/models/auth_user.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -133,7 +129,10 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
                 size: 34,
                 color: HomeScreen.primaryColor,
               ),
-              onPressed: () => Scaffold.of(context).openDrawer(),
+              onPressed: () {
+                ref.read(authProvider.notifier).refreshProfile();
+                Scaffold.of(context).openDrawer();
+              },
             ),
           ),
           title: Text(
@@ -656,9 +655,10 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: _ProfilePhotoBox(
+              child: ProfilePhotoBox(
                 rawProfilePicture: auth.user?.profilePicture,
                 initial: initial,
+                textColor: HomeScreen.primaryColor,
               ),
             ),
           ),
@@ -752,180 +752,6 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfilePhotoBox extends StatefulWidget {
-  final String? rawProfilePicture;
-  final String initial;
-
-  const _ProfilePhotoBox({
-    required this.rawProfilePicture,
-    required this.initial,
-  });
-
-  @override
-  State<_ProfilePhotoBox> createState() => _ProfilePhotoBoxState();
-}
-
-class _ProfilePhotoBoxState extends State<_ProfilePhotoBox> {
-  List<String> _urls = [];
-  int _index = 0;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _preparePhoto();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ProfilePhotoBox oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.rawProfilePicture != widget.rawProfilePicture) {
-      _preparePhoto();
-    }
-  }
-
-  Future<void> _preparePhoto() async {
-    setState(() {
-      _loading = true;
-      _index = 0;
-      _urls = _candidateUrls(widget.rawProfilePicture);
-    });
-
-    if (_urls.isEmpty) {
-      final fetched = await _fetchMyPhotoFilename();
-      if (!mounted) return;
-
-      setState(() {
-        _urls = _candidateUrls(fetched);
-      });
-    }
-
-    if (!mounted) return;
-    setState(() => _loading = false);
-  }
-
-  Future<String?> _fetchMyPhotoFilename() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(AppConfig.tokenKey);
-
-      if (token == null || token.trim().isEmpty) {
-        debugPrint('Profile photo: token missing');
-        return null;
-      }
-
-      final uri = Uri.parse('${AppConfig.apiBaseUrl}/photo');
-
-      final res = await http.get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      debugPrint('Profile photo GET ${res.statusCode}: ${res.body}');
-
-      if (res.statusCode != 200) return null;
-
-      final data = jsonDecode(res.body);
-      if (data is! Map<String, dynamic>) return null;
-
-      final value = data['profile_picture'] ??
-          data['profilePicture'] ??
-          data['filename'];
-
-      return value?.toString();
-    } catch (e, st) {
-      debugPrint('Profile photo fetch failed: $e\n$st');
-      return null;
-    }
-  }
-
-  List<String> _candidateUrls(String? value) {
-    if (value == null || value.trim().isEmpty) return [];
-
-    final raw = value.trim().replaceAll('\\', '/');
-
-    if (raw.startsWith('http://') || raw.startsWith('https://')) {
-      return [raw];
-    }
-
-    final baseWithoutApi =
-        AppConfig.apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
-
-    var path = raw.replaceFirst(RegExp(r'^/+'), '');
-
-    if (path.startsWith('api/uploads/')) {
-      path = path.replaceFirst('api/', '');
-    }
-
-    if (!path.startsWith('uploads/')) {
-      path = 'uploads/$path';
-    }
-
-    return [
-      '$baseWithoutApi/$path',
-      '${AppConfig.apiBaseUrl}/$path',
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(
-        child: SizedBox(
-          height: 22,
-          width: 22,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: HomeScreen.primaryColor,
-          ),
-        ),
-      );
-    }
-
-    if (_urls.isEmpty || _index >= _urls.length) {
-      return _initialBox();
-    }
-
-    final url = _urls[_index];
-
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      headers: const {
-        'Accept': 'image/*',
-      },
-      errorBuilder: (context, error, stackTrace) {
-        debugPrint('Profile image failed URL: $url');
-        debugPrint('Profile image error: $error');
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          setState(() => _index++);
-        });
-
-        return _initialBox();
-      },
-    );
-  }
-
-  Widget _initialBox() {
-    return Center(
-      child: Text(
-        widget.initial,
-        style: const TextStyle(
-          color: HomeScreen.primaryColor,
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
         ),
       ),
     );

@@ -202,6 +202,12 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
+      setState(() {
+        _lead = _lead.copyWith(status: nextStatus);
+        allowedNext = [];
+      });
+      ref.invalidate(allLeadsProvider);
+
       await _reloadSilently();
 
       if (!mounted) return;
