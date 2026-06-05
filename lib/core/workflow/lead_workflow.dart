@@ -20,6 +20,7 @@ class LeadWorkflow {
       'KYC Collected',
       'Sent To Support',
     ],
+
     'Support': [
       'Support Approved',
       'Support Rejected',
@@ -29,10 +30,10 @@ class LeadWorkflow {
       'Documents Submitted',
       'Final Verification Started',
       'Sent For Final Liaison',
-      'Support Closure Pending',
       'Lead Completed',
       'Lead Closed',
     ],
+
     'Liaising': [
       'Liaison Process Started',
       'Bank Coordination In Progress',
@@ -40,10 +41,12 @@ class LeadWorkflow {
       'Meter Process Started',
       'Government Approval Completed',
     ],
+
     'Finance': [
       'Finance Verification Started',
       'Amount Received',
     ],
+
     'Installation': [
       'Installation In Progress',
       'Installation Done',
@@ -79,8 +82,7 @@ class LeadWorkflow {
     'Sent For Final Liaison': ['Meter Process Started'],
     'Meter Process Started': ['Government Approval Completed'],
 
-    'Government Approval Completed': ['Support Closure Pending'],
-    'Support Closure Pending': ['Lead Completed'],
+    'Government Approval Completed': ['Lead Completed'],
     'Lead Completed': ['Lead Closed'],
 
     'Lead Closed': [],
@@ -130,7 +132,6 @@ class LeadWorkflow {
       'Sent For Final Liaison': 8,
       'Meter Process Started': 8,
       'Government Approval Completed': 8,
-      'Support Closure Pending': 8,
 
       'Lead Completed': 9,
       'Lead Closed': 9,
@@ -222,8 +223,7 @@ class LeadWorkflow {
       'Sent For Final Liaison': 'Start Meter Process',
       'Meter Process Started': 'Government Approval Done',
 
-      'Government Approval Completed': 'Send to Support Closure',
-      'Support Closure Pending': 'Complete Lead',
+      'Government Approval Completed': 'Complete Lead',
       'Lead Completed': 'Close Lead',
     };
 

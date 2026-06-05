@@ -134,7 +134,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   final latitude = TextEditingController();
   final longitude = TextEditingController();
 
-  final bankAccountName = TextEditingController();
   final bankName = TextEditingController();
   final accountNumber = TextEditingController();
   final ifscCode = TextEditingController();
@@ -149,6 +148,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   String projectType = 'Residential';
   String source = 'Website';
   String priority = 'Medium';
+  String bankAccountType = 'Saving';
 
   bool roofLoadBearingCapacity = false;
   bool shadowFreeRoof = false;
@@ -165,6 +165,60 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   bool isLoading = false;
   bool isFetchingLocation = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final lead = widget.existingLead;
+
+    if (lead != null) {
+      fullName.text = lead.fullName;
+      mobile.text = lead.mobile;
+      email.text = lead.email;
+      address.text = lead.address;
+      city.text = lead.city;
+      state.text = lead.state;
+      pincode.text = lead.pincode;
+      kw.text = lead.loadSectionKw;
+
+      caNumber.text = lead.caNumber;
+      kNumber.text = lead.kNumber;
+      referenceNumber.text = lead.referenceNumber;
+      discom.text = lead.discom;
+
+      geoLocation.text = lead.geoLocation;
+      latitude.text = lead.latitude;
+      longitude.text = lead.longitude;
+
+      bankName.text = lead.bankName;
+      accountNumber.text = lead.accountNumber;
+      ifscCode.text = lead.ifscCode;
+
+      availableShadowFreeArea.text = lead.availableShadowFreeArea;
+      quotationAmount.text = lead.quotationAmount;
+      visitedEmployeeName.text = lead.visitedEmployeeName;
+      visitedEmployeeContact.text = lead.visitedEmployeeContact;
+
+      notes.text = lead.notes;
+
+      projectType = lead.projectType.isNotEmpty ? lead.projectType : projectType;
+      source = lead.source.isNotEmpty ? lead.source : source;
+      priority = lead.priority.isNotEmpty ? lead.priority : priority;
+
+      if (lead.bankAccountName.trim().toLowerCase() == 'current') {
+        bankAccountType = 'Current';
+      } else if (lead.bankAccountName.trim().toLowerCase() == 'saving') {
+        bankAccountType = 'Saving';
+      }
+    }
+
+    if (_isBasicCreate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchCurrentLocation();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -186,7 +240,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     latitude.dispose();
     longitude.dispose();
 
-    bankAccountName.dispose();
     bankName.dispose();
     accountNumber.dispose();
     ifscCode.dispose();
@@ -197,8 +250,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     visitedEmployeeContact.dispose();
 
     notes.dispose();
+
     super.dispose();
   }
+
+  bool get _isBasicCreate => widget.mode == LeadFormMode.basicCreate;
+  bool get _isCompleteDetails => widget.mode == LeadFormMode.completeDetails;
 
   String? _textOrNull(TextEditingController controller) {
     final value = controller.text.trim();
@@ -208,20 +265,26 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   String? _validateFullName(String? value) {
     final v = value?.trim() ?? '';
+
     if (v.isEmpty) return 'Full name is required';
     if (v.length < 3) return 'Full name minimum 3 letters hona chahiye';
+
     if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
       return 'Full name me sirf alphabets allowed hain';
     }
+
     return null;
   }
 
   String? _validateMobile(String? value) {
     final v = value?.trim() ?? '';
+
     if (v.isEmpty) return 'Mobile number is required';
+
     if (!RegExp(r'^[6-9]\d{9}$').hasMatch(v)) {
       return 'Valid 10 digit mobile number enter karo';
     }
+
     return null;
   }
 
@@ -233,55 +296,93 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   String? _validateEmail(String? value) {
     final v = value?.trim() ?? '';
+
     if (v.isEmpty) return null;
+
     if (!RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$').hasMatch(v)) {
       return 'Email sirf @gmail.com hona chahiye';
     }
+
     return null;
   }
 
   String? _validateOptionalAlpha(String? value, String label) {
     final v = value?.trim() ?? '';
+
     if (v.isEmpty) return null;
+
     if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
       return '$label me sirf alphabets allowed hain';
     }
+
     return null;
   }
 
   String? _validatePincode(String? value) {
     final v = value?.trim() ?? '';
+
     if (v.isEmpty) return null;
+
     if (!RegExp(r'^\d{6}$').hasMatch(v)) {
       return 'Pincode 6 digits ka hona chahiye';
     }
+
     return null;
   }
 
   String? _validateNumber(String? value, String label) {
     final v = value?.trim() ?? '';
+
     if (v.isEmpty) return null;
+
     if (!RegExp(r'^-?\d+(\.\d+)?$').hasMatch(v)) {
       return '$label valid number hona chahiye';
     }
+
+    return null;
+  }
+
+  String? _validateMaxDigitNumber(
+    String? value,
+    String label,
+    int maxLength,
+  ) {
+    final v = value?.trim() ?? '';
+
+    if (v.isEmpty) return null;
+
+    if (!RegExp(r'^\d+$').hasMatch(v)) {
+      return '$label only numeric hona chahiye';
+    }
+
+    if (v.length > maxLength) {
+      return '$label max $maxLength digits ka hona chahiye';
+    }
+
     return null;
   }
 
   String? _validateAccount(String? value) {
     final v = value?.trim() ?? '';
+
     if (v.isEmpty) return null;
+
     if (!RegExp(r'^\d{9,18}$').hasMatch(v)) {
       return 'Account number 9 to 18 digits hona chahiye';
     }
+
     return null;
   }
 
   String? _validateIfsc(String? value) {
     final v = value?.trim().toUpperCase() ?? '';
+
     if (v.isEmpty) return null;
+
     if (!RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(v)) {
       return 'Valid IFSC code enter karo';
     }
+
     return null;
   }
 
@@ -295,6 +396,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       if (!serviceEnabled) {
         if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please enable location service')),
         );
@@ -309,6 +411,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       if (permission == LocationPermission.denied) {
         if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Location permission denied')),
         );
@@ -317,6 +420,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       if (permission == LocationPermission.deniedForever) {
         if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -368,49 +472,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
   }
 
-  bool get _isBasicCreate => widget.mode == LeadFormMode.basicCreate;
-  bool get _isCompleteDetails => widget.mode == LeadFormMode.completeDetails;
-
-  @override
-  void initState() {
-    super.initState();
-    final lead = widget.existingLead;
-    if (lead != null) {
-    fullName.text = lead.fullName;
-    mobile.text = lead.mobile;
-    email.text = lead.email;
-    address.text = lead.address;
-    city.text = lead.city;
-    state.text = lead.state;
-    pincode.text = lead.pincode;
-    caNumber.text = lead.caNumber;
-    kNumber.text = lead.kNumber;
-    referenceNumber.text = lead.referenceNumber;
-    discom.text = lead.discom;
-    geoLocation.text = lead.geoLocation;
-    latitude.text = lead.latitude;
-    longitude.text = lead.longitude;
-    bankAccountName.text = lead.bankAccountName;
-    bankName.text = lead.bankName;
-    accountNumber.text = lead.accountNumber;
-    ifscCode.text = lead.ifscCode;
-    availableShadowFreeArea.text = lead.availableShadowFreeArea;
-    quotationAmount.text = lead.quotationAmount;
-    visitedEmployeeName.text = lead.visitedEmployeeName;
-    visitedEmployeeContact.text = lead.visitedEmployeeContact;
-    notes.text = lead.notes;
-    projectType = lead.projectType.isNotEmpty ? lead.projectType : projectType;
-    source = lead.source.isNotEmpty ? lead.source : source;
-    priority = lead.priority.isNotEmpty ? lead.priority : priority;
-    }
-
-    if (_isBasicCreate) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _fetchCurrentLocation();
-      });
-    }
-  }
-
   Future<void> saveLead() async {
     FocusScope.of(context).unfocus();
 
@@ -427,7 +488,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'city': _textOrNull(city),
       'state': _textOrNull(state),
       'pincode': _textOrNull(pincode),
-     'load_section_kw': _textOrNull(kw),
+      'load_section_kw': _textOrNull(kw),
       'ca_number': _textOrNull(caNumber),
       'k_number': _textOrNull(kNumber),
       'reference_number': _textOrNull(referenceNumber),
@@ -435,7 +496,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'geo_location': _textOrNull(geoLocation),
       'latitude': _textOrNull(latitude),
       'longitude': _textOrNull(longitude),
-      'bank_account_name': _textOrNull(bankAccountName),
+      'bank_account_name': bankAccountType,
       'bank_name': _textOrNull(bankName),
       'account_number': _textOrNull(accountNumber),
       'ifsc_code': _textOrNull(ifscCode)?.toUpperCase(),
@@ -464,7 +525,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           data,
           singleFilePaths: {
             if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
-            if (bankClearPhotoPath != null) 'bank_clear_photo': bankClearPhotoPath!,
+            if (bankClearPhotoPath != null)
+              'bank_clear_photo': bankClearPhotoPath!,
             if (chequePassbookPath != null)
               'cheque_passbook_copy': chequePassbookPath!,
           },
@@ -488,6 +550,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           'priority': data['priority'],
           'notes': data['notes'],
         };
+
         await repo.createLead(basicData);
       } else {
         await repo.createLead(
@@ -1243,9 +1306,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         backgroundColor: bgColor,
         elevation: 0,
         title: Text(
-          _isCompleteDetails
-              ? 'Complete Lead Details'
-              : 'Create Lead (Basic)',
+          _isCompleteDetails ? 'Complete Lead Details' : 'Create Lead (Basic)',
           style: const TextStyle(
             color: textColor,
             fontWeight: FontWeight.bold,
@@ -1322,231 +1383,276 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
               ),
-
               if (!_isBasicCreate) ...[
-              sectionTitle('Connection Details'),
-              input('CA Number', caNumber),
-              input('K Number', kNumber),
-              input('Reference Number', referenceNumber),
-              controllerDropdown(
-                label: 'DISCOM',
-                controller: discom,
-                items: discomOptions,
-                hintText: 'Select DISCOM',
-              ),
-
-              sectionTitle('Location'),
-              locationStatusBox(),
-              input(
-                'Geo Location',
-                geoLocation,
-                suffixIcon: IconButton(
-                  tooltip: 'Use Current Location',
-                  onPressed: isLoading || isFetchingLocation
-                      ? null
-                      : _fetchCurrentLocation,
-                  icon: const Icon(Icons.my_location),
+                sectionTitle('Connection Details'),
+                input(
+                  'CA Number',
+                  caNumber,
+                  keyboardType: TextInputType.number,
+                  validator: (v) => _validateMaxDigitNumber(
+                    v,
+                    'CA Number',
+                    10,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
                 ),
-              ),
-              input(
-                'Latitude',
-                latitude,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
+                input(
+                  'K Number',
+                  kNumber,
+                  keyboardType: TextInputType.number,
+                  validator: (v) => _validateMaxDigitNumber(
+                    v,
+                    'K Number',
+                    20,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(20),
+                  ],
                 ),
-                validator: (v) => _validateNumber(v, 'Latitude'),
-              ),
-              input(
-                'Longitude',
-                longitude,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
+                input(
+                  'Reference Number',
+                  referenceNumber,
+                  keyboardType: TextInputType.number,
+                  validator: (v) => _validateMaxDigitNumber(
+                    v,
+                    'Reference Number',
+                    10,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
                 ),
-                validator: (v) => _validateNumber(v, 'Longitude'),
-              ),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: isLoading || isFetchingLocation
-                      ? null
-                      : _fetchCurrentLocation,
-                  icon: const Icon(Icons.my_location),
-                  label: const Text('Use Current Location'),
+                controllerDropdown(
+                  label: 'DISCOM',
+                  controller: discom,
+                  items: discomOptions,
+                  hintText: 'Select DISCOM',
                 ),
-              ),
-
-              sectionTitle('Bank Details'),
-              input('Bank Account Name', bankAccountName),
-              input('Bank Name', bankName),
-              input(
-                'Account Number',
-                accountNumber,
-                keyboardType: TextInputType.number,
-                validator: _validateAccount,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(18),
-                ],
-              ),
-              input(
-                'IFSC Code',
-                ifscCode,
-                validator: _validateIfsc,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
-                  LengthLimitingTextInputFormatter(11),
-                  TextInputFormatter.withFunction((oldValue, newValue) {
-                    return newValue.copyWith(
-                      text: newValue.text.toUpperCase(),
-                      selection: newValue.selection,
-                    );
-                  }),
-                ],
-              ),
-
-              sectionTitle('Project Details'),
-              dropdown(
-                label: 'Project Type',
-                value: projectType,
-                items: const ['Residential', 'Commercial', 'Industrial'],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => projectType = value);
-                },
-              ),
-              dropdown(
-                label: 'Source',
-                value: source,
-                items: const [
-                  'Website',
-                  'Referral',
-                  'Walk-in',
-                  'Call',
-                  'Other',
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => source = value);
-                },
-              ),
-              dropdown(
-                label: 'Priority',
-                value: priority,
-                items: const ['Low', 'Medium', 'High'],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => priority = value);
-                },
-              ),
-
-              sectionTitle('Site Checklist'),
-              input(
-                'Available Shadow Free Area',
-                availableShadowFreeArea,
-                keyboardType: TextInputType.number,
-                validator: (v) =>
-                    _validateNumber(v, 'Available Shadow Free Area'),
-              ),
-              input(
-                'Quotation Amount',
-                quotationAmount,
-                keyboardType: TextInputType.number,
-                validator: (v) => _validateNumber(v, 'Quotation Amount'),
-              ),
-              input(
-                'Visited Employee Name',
-                visitedEmployeeName,
-                validator: (v) =>
-                    _validateOptionalAlpha(v, 'Visited Employee Name'),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                ],
-                textCapitalization: TextCapitalization.words,
-              ),
-              input(
-                'Visited Employee Contact',
-                visitedEmployeeContact,
-                keyboardType: TextInputType.phone,
-                validator: _validateOptionalMobile,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(10),
-                ],
-              ),
-              switchTile(
-                title: 'Roof Load Bearing Capacity',
-                value: roofLoadBearingCapacity,
-                onChanged: (value) {
-                  setState(() => roofLoadBearingCapacity = value);
-                },
-              ),
-              switchTile(
-                title: 'Shadow Free Roof',
-                value: shadowFreeRoof,
-                onChanged: (value) {
-                  setState(() => shadowFreeRoof = value);
-                },
-              ),
-              switchTile(
-                title: 'Vendor Visited Site',
-                value: vendorVisitedSite,
-                onChanged: (value) {
-                  setState(() => vendorVisitedSite = value);
-                },
-              ),
-
-              sectionTitle('Notes'),
-              input('Notes', notes, maxLines: 4),
-
-              sectionTitle('Images & Documents'),
-              _singleImagePicker(
-                title: 'Roof Photo',
-                value: roofPhotoPath,
-                onChanged: (v) => setState(() => roofPhotoPath = v),
-              ),
-              _singleImagePicker(
-                title: 'Cheque/Passbook Copy',
-                value: chequePassbookPath,
-                onChanged: (v) => setState(() => chequePassbookPath = v),
-              ),
-              _multiFilePicker(
-                title: 'Additional Images',
-                files: additionalImages,
-                imagesOnly: true,
-                onAdd: () => _showAddTitledFileDialog(
-                  dialogTitle: 'Add Additional Image',
-                  titleLabel: 'Image title',
-                  uploadLabel: 'Choose Image',
-                  defaultTitlePrefix: 'Image',
-                  imageOnly: true,
-                  target: additionalImages,
+                sectionTitle('Location'),
+                locationStatusBox(),
+                input(
+                  'Geo Location',
+                  geoLocation,
+                  suffixIcon: IconButton(
+                    tooltip: 'Use Current Location',
+                    onPressed: isLoading || isFetchingLocation
+                        ? null
+                        : _fetchCurrentLocation,
+                    icon: const Icon(Icons.my_location),
+                  ),
                 ),
-                onRemove: (i) => setState(() => additionalImages.removeAt(i)),
-                onReplace: (i) =>
-                    _replaceFileAt(additionalImages, i, imageOnly: true),
-              ),
-              _multiFilePicker(
-                title: 'Additional Documents',
-                files: additionalDocs,
-                imagesOnly: false,
-                onAdd: () => _showAddTitledFileDialog(
-                  dialogTitle: 'Add Additional Document',
-                  titleLabel: 'Document title',
-                  uploadLabel: 'Choose File',
-                  defaultTitlePrefix: 'Document',
-                  imageOnly: false,
-                  target: additionalDocs,
+                input(
+                  'Latitude',
+                  latitude,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  validator: (v) => _validateNumber(v, 'Latitude'),
                 ),
-                onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
-                onReplace: (i) =>
-                    _replaceFileAt(additionalDocs, i, imageOnly: false),
-              ),
+                input(
+                  'Longitude',
+                  longitude,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  validator: (v) => _validateNumber(v, 'Longitude'),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: isLoading || isFetchingLocation
+                        ? null
+                        : _fetchCurrentLocation,
+                    icon: const Icon(Icons.my_location),
+                    label: const Text('Use Current Location'),
+                  ),
+                ),
+                sectionTitle('Bank Details'),
+                dropdown(
+                  label: 'Bank Account Type',
+                  value: bankAccountType,
+                  items: const ['Saving', 'Current'],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => bankAccountType = value);
+                  },
+                ),
+                input('Bank Name', bankName),
+                input(
+                  'Account Number',
+                  accountNumber,
+                  keyboardType: TextInputType.number,
+                  validator: _validateAccount,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(18),
+                  ],
+                ),
+                input(
+                  'IFSC Code',
+                  ifscCode,
+                  validator: _validateIfsc,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+                    LengthLimitingTextInputFormatter(11),
+                    TextInputFormatter.withFunction((oldValue, newValue) {
+                      return newValue.copyWith(
+                        text: newValue.text.toUpperCase(),
+                        selection: newValue.selection,
+                      );
+                    }),
+                  ],
+                ),
+                sectionTitle('Project Details'),
+                dropdown(
+                  label: 'Project Type',
+                  value: projectType,
+                  items: const ['Residential', 'Commercial', 'Industrial'],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => projectType = value);
+                  },
+                ),
+                dropdown(
+                  label: 'Source',
+                  value: source,
+                  items: const [
+                    'Website',
+                    'Referral',
+                    'Walk-in',
+                    'Call',
+                    'Other',
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => source = value);
+                  },
+                ),
+                dropdown(
+                  label: 'Priority',
+                  value: priority,
+                  items: const ['Low', 'Medium', 'High'],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => priority = value);
+                  },
+                ),
+                sectionTitle('Site Checklist'),
+                input(
+                  'Available Shadow Free Area',
+                  availableShadowFreeArea,
+                  keyboardType: TextInputType.number,
+                  validator: (v) => _validateMaxDigitNumber(
+                    v,
+                    'Available Shadow Free Area',
+                    5,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(5),
+                  ],
+                ),
+                input(
+                  'Quotation Amount',
+                  quotationAmount,
+                  keyboardType: TextInputType.number,
+                  validator: (v) => _validateNumber(v, 'Quotation Amount'),
+                ),
+                input(
+                  'Visited Employee Name',
+                  visitedEmployeeName,
+                  validator: (v) =>
+                      _validateOptionalAlpha(v, 'Visited Employee Name'),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                  ],
+                  textCapitalization: TextCapitalization.words,
+                ),
+                input(
+                  'Visited Employee Contact',
+                  visitedEmployeeContact,
+                  keyboardType: TextInputType.phone,
+                  validator: _validateOptionalMobile,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                ),
+                switchTile(
+                  title: 'Roof Load Bearing Capacity',
+                  value: roofLoadBearingCapacity,
+                  onChanged: (value) {
+                    setState(() => roofLoadBearingCapacity = value);
+                  },
+                ),
+                switchTile(
+                  title: 'Shadow Free Roof',
+                  value: shadowFreeRoof,
+                  onChanged: (value) {
+                    setState(() => shadowFreeRoof = value);
+                  },
+                ),
+                switchTile(
+                  title: 'Vendor Visited Site',
+                  value: vendorVisitedSite,
+                  onChanged: (value) {
+                    setState(() => vendorVisitedSite = value);
+                  },
+                ),
+                sectionTitle('Notes'),
+                input('Notes', notes, maxLines: 4),
+                sectionTitle('Images & Documents'),
+                _singleImagePicker(
+                  title: 'Roof Photo',
+                  value: roofPhotoPath,
+                  onChanged: (v) => setState(() => roofPhotoPath = v),
+                ),
+                _singleImagePicker(
+                  title: 'Cheque/Passbook Copy',
+                  value: chequePassbookPath,
+                  onChanged: (v) => setState(() => chequePassbookPath = v),
+                ),
+                _multiFilePicker(
+                  title: 'Additional Images',
+                  files: additionalImages,
+                  imagesOnly: true,
+                  onAdd: () => _showAddTitledFileDialog(
+                    dialogTitle: 'Add Additional Image',
+                    titleLabel: 'Image title',
+                    uploadLabel: 'Choose Image',
+                    defaultTitlePrefix: 'Image',
+                    imageOnly: true,
+                    target: additionalImages,
+                  ),
+                  onRemove: (i) => setState(() => additionalImages.removeAt(i)),
+                  onReplace: (i) =>
+                      _replaceFileAt(additionalImages, i, imageOnly: true),
+                ),
+                _multiFilePicker(
+                  title: 'Additional Documents',
+                  files: additionalDocs,
+                  imagesOnly: false,
+                  onAdd: () => _showAddTitledFileDialog(
+                    dialogTitle: 'Add Additional Document',
+                    titleLabel: 'Document title',
+                    uploadLabel: 'Choose File',
+                    defaultTitlePrefix: 'Document',
+                    imageOnly: false,
+                    target: additionalDocs,
+                  ),
+                  onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
+                  onReplace: (i) =>
+                      _replaceFileAt(additionalDocs, i, imageOnly: false),
+                ),
               ],
-
               const SizedBox(height: 24),
-
               SizedBox(
                 width: double.infinity,
                 height: 60,

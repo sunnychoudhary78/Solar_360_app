@@ -479,8 +479,9 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (auth.appRole == 'sales' &&
-                      LeadWorkflow.canSalesCompleteDetails(_lead.status)) ...[
+                  if (auth.appRole == 'support' ||
+                      (auth.appRole == 'sales' &&
+                          LeadWorkflow.canSalesCompleteDetails(_lead.status))) ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -491,9 +492,11 @@ registration_time=${result.regTime.trim()}
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        label: const Text(
-                          'Complete remaining lead details',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        label: Text(
+                          auth.appRole == 'support'
+                              ? 'Edit lead basic details'
+                              : 'Complete remaining lead details',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
