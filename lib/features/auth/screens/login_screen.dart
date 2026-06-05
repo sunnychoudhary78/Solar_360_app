@@ -50,8 +50,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (value == null || value.trim().isEmpty) {
       return 'Password is required';
     }
-
     return null;
+  }
+
+  void _showDashboardSuccessMessage(BuildContext dashboardContext) {
+    ScaffoldMessenger.of(dashboardContext).clearSnackBars();
+    ScaffoldMessenger.of(dashboardContext).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.white),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Login successful',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+      ),
+    );
   }
 
   Future<void> loginUser() async {
@@ -59,9 +88,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     setState(() => _loginError = null);
 
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSubmitting = true);
 
@@ -77,6 +104,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         '/home',
         (route) => false,
       );
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final rootContext =
+            Navigator.of(context, rootNavigator: true).context;
+
+        _showDashboardSuccessMessage(rootContext);
+      });
     } catch (e) {
       if (!mounted) return;
 
@@ -215,7 +249,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 20),
 
                     const Text(
-                      'IMT Green_Energy',
+                      'IMT Green Energy',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Color(0xFF1F2028),

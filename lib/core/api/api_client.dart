@@ -20,17 +20,22 @@ final dioProvider = Provider<Dio>((ref) {
 
   dio.interceptors.add(
     InterceptorsWrapper(
-      onRequest: (options, handler) {
-        final token = TokenStorage.token;
-        if (token != null && token.isNotEmpty) {
-          options.headers['Authorization'] = 'Bearer $token';
+      onRequest: (options, handler) async {
+        final token = await TokenStorage.load();
+
+        if (token != null && token.trim().isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer ${token.trim()}';
+        } else {
+          options.headers.remove('Authorization');
         }
+
         handler.next(options);
       },
-      onError: (error, handler) {
+      onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          TokenStorage.clear();
+          await TokenStorage.clear();
         }
+
         handler.next(error);
       },
     ),

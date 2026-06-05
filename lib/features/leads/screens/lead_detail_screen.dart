@@ -417,6 +417,38 @@ registration_time=${result.regTime.trim()}
 
     final visibleNotes = _visibleNotes();
 
+    final normalizedAppRole = auth.appRole.trim().toLowerCase();
+    final normalizedRoleName = roleName.trim().toLowerCase();
+    final normalizedDepartment = _lead.currentDepartment.trim().toLowerCase();
+    final normalizedStatus = _lead.status.trim().toLowerCase();
+
+    final isSalesUser =
+        normalizedAppRole == 'sales' || normalizedRoleName == 'sales';
+
+    final isLeadStillWithSales =
+        normalizedDepartment.isEmpty || normalizedDepartment == 'sales';
+
+    final isNotSentToSupport = normalizedStatus != 'sent to support';
+
+    final canSalesEditLeadDetails = isSalesUser &&
+        isLeadStillWithSales &&
+        isNotSentToSupport &&
+        LeadWorkflow.canSalesCompleteDetails(_lead.status);
+
+    final isSupportUser =
+        normalizedAppRole == 'support' || normalizedRoleName == 'support';
+
+    final isLeadWithSupport = normalizedDepartment == 'support';
+
+    final canSupportManageRegistration =
+        isSupportUser && isLeadWithSupport && normalizedStatus != 'new lead';
+
+    final showAddRegistrationButton =
+        canSupportManageRegistration && !_hasRegistrationDetailsFrontend;
+
+    final showEditRegistrationButton =
+        canSupportManageRegistration && _hasRegistrationDetailsFrontend;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
       appBar: AppBar(
@@ -471,17 +503,14 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (auth.appRole == 'support' &&
-                      !_hasRegistrationDetailsFrontend) ...[
+                  if (showAddRegistrationButton) ...[
                     OutlinedButton(
                       onPressed: loading ? null : _saveRegistration,
                       child: const Text('Add registration details'),
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (auth.appRole == 'support' ||
-                      (auth.appRole == 'sales' &&
-                          LeadWorkflow.canSalesCompleteDetails(_lead.status))) ...[
+                  if (canSalesEditLeadDetails) ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -492,11 +521,9 @@ registration_time=${result.regTime.trim()}
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        label: Text(
-                          auth.appRole == 'support'
-                              ? 'Edit lead basic details'
-                              : 'Complete remaining lead details',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        label: const Text(
+                          'Edit / Complete Lead Details',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -534,8 +561,7 @@ registration_time=${result.regTime.trim()}
                       _row('Registration Date', _displayRegistrationDate),
                       _row('Registration Time', _displayRegistrationTime),
                     ]),
-                  if (_hasRegistrationDetailsFrontend &&
-                      auth.appRole == 'support') ...[
+                  if (showEditRegistrationButton) ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _saveRegistration,
                       icon: const Icon(Icons.edit),
