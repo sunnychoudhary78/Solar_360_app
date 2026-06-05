@@ -8,6 +8,7 @@ import '../../leads/models/lead_model.dart';
 import '../../leads/providers/lead_provider.dart';
 import '../../leads/widgets/leads_table.dart';
 import '../../notifications/screens/notifications_screen.dart';
+import '../../profile/screens/profile_screen.dart';
 
 class FinanceTeamScreen extends ConsumerStatefulWidget {
   const FinanceTeamScreen({super.key});
@@ -17,14 +18,14 @@ class FinanceTeamScreen extends ConsumerStatefulWidget {
 }
 
 class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
-  static const bgColor = Color(0xfff4f7fb);
+  static const bgColor = Color(0xFFF7F8FC);
   static const drawerBgColor = Color(0xFFF9F7FF);
   static const cardColor = Colors.white;
   static const primaryColor = Color(0xFF5663A0);
   static const accentColor = Color(0xFF18A999);
   static const textColor = Color(0xFF1F2028);
 
-  int selectedPage = 0;
+  int selectedPage = 0; // 0 Dashboard, 1 Profile, 2 Liaison, 3 Notifications
   bool actionLoading = false;
 
   @override
@@ -36,10 +37,119 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     });
   }
 
+  @override
+  Widget build(BuildContext context) {
+    final leadsAsync = ref.watch(allLeadsProvider);
+
+    return WillPopScope(
+      onWillPop: () async {
+        if (selectedPage != 0) {
+          setState(() => selectedPage = 0);
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        drawer: selectedPage == 1 ? null : _drawer(),
+        appBar: selectedPage == 1
+            ? null
+            : AppBar(
+                backgroundColor: bgColor,
+                foregroundColor: textColor,
+                elevation: 0,
+                centerTitle: true,
+                leading: Builder(
+                  builder: (context) {
+                    return IconButton(
+                      icon: const Icon(Icons.menu_rounded, size: 34),
+                      onPressed: () {
+                        ref.read(authProvider.notifier).refreshProfile();
+                        Scaffold.of(context).openDrawer();
+                      },
+                    );
+                  },
+                ),
+                title: Text(
+                  _pageTitle(),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    onPressed: _refreshLeads,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => selectedPage = 3),
+                    icon: const Icon(Icons.notifications_none_rounded),
+                  ),
+                ],
+              ),
+        body: selectedPage == 1
+            ? const ProfileScreen()
+            : leadsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        error.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                data: (allLeads) {
+                  final leads = _financeLeads(allLeads);
+                  final liaisonLeads = _liaisonTeamLeads(allLeads);
+
+                  return IndexedStack(
+                    index: selectedPage == 3 ? 2 : selectedPage == 2 ? 1 : 0,
+                    children: [
+                      _dashboard(leads),
+                      LeadsTable(
+                        leads: liaisonLeads,
+                        emptyMessage: 'No leads received from Liaison Team yet',
+                      ),
+                      const NotificationsScreen(),
+                    ],
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+  String _pageTitle() {
+    switch (selectedPage) {
+      case 2:
+        return 'Liaison Team';
+      case 3:
+        return 'Notifications';
+      default:
+        return 'Finance Team';
+    }
+  }
+
+  void _refreshLeads() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.invalidate(allLeadsProvider);
+    });
+  }
+
   List<LeadModel> _financeLeads(List<LeadModel> leads) {
     return leads.where((lead) {
-      final dept = lead.currentDepartment.toLowerCase();
-      final status = lead.status.toLowerCase();
+      final dept = lead.currentDepartment.trim().toLowerCase();
+      final status = lead.status.trim().toLowerCase();
 
       return dept == 'finance' ||
           status == 'liaison completed' ||
@@ -50,7 +160,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
 
   List<LeadModel> _liaisonTeamLeads(List<LeadModel> leads) {
     return _financeLeads(leads).where((lead) {
-      final status = lead.status.toLowerCase();
+      final status = lead.status.trim().toLowerCase();
       return status == 'liaison completed' ||
           status == 'finance verification started';
     }).toList();
@@ -85,18 +195,6 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     }
   }
 
-  void _refreshLeads() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      try {
-        ref.invalidate(allLeadsProvider);
-      } catch (err, st) {
-        debugPrint('invalidate failed: $err\n$st');
-      }
-    });
-  }
-
   Color _statusColor(String status) {
     switch (status) {
       case 'Liaison Completed':
@@ -107,109 +205,6 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
         return Colors.green;
       default:
         return primaryColor;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final leadsAsync = ref.watch(allLeadsProvider);
-
-    return WillPopScope(
-      onWillPop: () async {
-        if (selectedPage != 0) {
-          setState(() => selectedPage = 0);
-          return false;
-        }
-        return true;
-      },
-      child: Scaffold(
-        backgroundColor: bgColor,
-        drawer: _drawer(),
-        appBar: AppBar(
-          backgroundColor: bgColor,
-          foregroundColor: textColor,
-          elevation: 0,
-          centerTitle: true,
-          leading: Builder(
-            builder: (context) {
-              return IconButton(
-                icon: const Icon(
-                  Icons.menu_rounded,
-                  color: textColor,
-                  size: 34,
-                ),
-                onPressed: () {
-                  ref.read(authProvider.notifier).refreshProfile();
-                  Scaffold.of(context).openDrawer();
-                },
-              );
-            },
-          ),
-          title: Text(
-            _pageTitle(),
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 24,
-            ),
-          ),
-          actions: [
-            IconButton(
-              onPressed: _refreshLeads,
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              onPressed: () => setState(() => selectedPage = 2),
-              icon: const Icon(Icons.notifications_none_rounded),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
-        body: leadsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Text(
-                  error.toString(),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            );
-          },
-          data: (allLeads) {
-            final leads = _financeLeads(allLeads);
-            final liaisonLeads = _liaisonTeamLeads(allLeads);
-
-            return IndexedStack(
-              index: selectedPage,
-              children: [
-                _dashboard(leads),
-                LeadsTable(
-                  leads: liaisonLeads,
-                  emptyMessage: 'No leads received from Liaison Team yet',
-                ),
-                const NotificationsScreen(),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  String _pageTitle() {
-    switch (selectedPage) {
-      case 1:
-        return 'Liaison Team';
-      case 2:
-        return 'Notifications';
-      default:
-        return 'Finance Team';
     }
   }
 
@@ -236,10 +231,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
       child: SafeArea(
         child: Column(
           children: [
-            _drawerHeader(
-              userName: userName,
-              roleName: roleName,
-            ),
+            _drawerHeader(userName: userName, roleName: roleName),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
@@ -254,20 +246,29 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                       setState(() => selectedPage = 0);
                     },
                   ),
-                  _drawerSectionTitle('WORK'),
                   _drawerItem(
-                    icon: Icons.account_tree_rounded,
-                    title: 'Liaison Team',
+                    icon: Icons.person_outline_rounded,
+                    title: 'Profile',
                     selected: selectedPage == 1,
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => selectedPage = 1);
                     },
                   ),
+                  _drawerSectionTitle('WORK'),
+                  _drawerItem(
+                    icon: Icons.account_tree_rounded,
+                    title: 'Liaison Team',
+                    selected: selectedPage == 2,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => selectedPage = 2);
+                    },
+                  ),
                   _drawerItem(
                     icon: Icons.notifications_none_rounded,
                     title: 'Notifications',
-                    selected: selectedPage == 2,
+                    selected: selectedPage == 3,
                     trailing: Container(
                       height: 8,
                       width: 8,
@@ -278,7 +279,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() => selectedPage = 2);
+                      setState(() => selectedPage = 3);
                     },
                   ),
                 ],
@@ -316,14 +317,9 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            primaryColor,
-            Color(0xFFBFC6FF),
-          ],
+          colors: [primaryColor, accentColor],
         ),
-        borderRadius: BorderRadius.only(
-          topRight: Radius.circular(26),
-        ),
+        borderRadius: BorderRadius.only(topRight: Radius.circular(26)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,30 +516,8 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
       ),
       child: Stack(
         children: [
-          Positioned(
-            right: -18,
-            top: -24,
-            child: Container(
-              height: 112,
-              width: 112,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.07),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 40,
-            bottom: -46,
-            child: Container(
-              height: 96,
-              width: 96,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.06),
-              ),
-            ),
-          ),
+          Positioned(right: -18, top: -24, child: _circle(112)),
+          Positioned(right: 40, bottom: -46, child: _circle(96)),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -609,6 +583,17 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     );
   }
 
+  Widget _circle(double size) {
+    return Container(
+      height: size,
+      width: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white.withOpacity(0.07),
+      ),
+    );
+  }
+
   Widget _metricCard(String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -647,209 +632,6 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
             style: const TextStyle(
               color: Colors.black54,
               fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _valueCard(double quotationTotal) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE7EAF2)),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.green.withOpacity(0.12),
-            child: const Icon(
-              Icons.currency_rupee_rounded,
-              color: Colors.green,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Quotation Value',
-                  style: TextStyle(
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Rs ${quotationTotal.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    color: textColor,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _emptyState(String title, String subtitle) {
-    return Container(
-      margin: const EdgeInsets.only(top: 18),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE7EAF2)),
-      ),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 34,
-            backgroundColor: primaryColor.withOpacity(0.10),
-            child: const Icon(
-              Icons.inbox_rounded,
-              color: primaryColor,
-              size: 34,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.black54, height: 1.4),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _leadCard(LeadModel lead) {
-    final color = _statusColor(lead.status);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          ),
-        ],
-        border: Border.all(color: const Color(0xFFE7EAF2)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: primaryColor.withOpacity(0.12),
-                child: const Icon(Icons.person, color: primaryColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  lead.fullName.isEmpty ? 'Customer Lead' : lead.fullName,
-                  style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                lead.status.isEmpty ? 'No Status' : lead.status,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          _shortInfo(Icons.confirmation_number, 'Lead Code: ${lead.leadCode}'),
-          _shortInfo(Icons.phone, 'Mobile: ${lead.mobile}'),
-          _shortInfo(Icons.email_outlined, 'Email: ${lead.email}'),
-          _shortInfo(Icons.confirmation_number, 'CA: ${lead.caNumber}'),
-          _shortInfo(Icons.numbers, 'K No: ${lead.kNumber}'),
-          _shortInfo(Icons.business, 'Discom: ${lead.discom}'),
-          _shortInfo(
-            Icons.currency_rupee,
-            'Quotation: ${lead.quotationAmount}',
-          ),
-          _shortInfo(Icons.account_balance, 'Bank: ${lead.bankName}'),
-          _shortInfo(Icons.flag, 'Stage: ${lead.leadStage}'),
-          _shortInfo(Icons.business_center, 'Dept: ${lead.currentDepartment}'),
-          if (lead.notes.trim().isNotEmpty)
-            _shortInfo(Icons.edit_note_rounded, 'Notes: ${lead.notes}'),
-          const SizedBox(height: 14),
-          _actionButton(lead),
-        ],
-      ),
-    );
-  }
-
-  Widget _shortInfo(IconData icon, String value) {
-    final cleanValue = value.trim();
-
-    if (cleanValue.isEmpty ||
-        cleanValue.endsWith(':') ||
-        cleanValue.endsWith(': ')) {
-      return const SizedBox.shrink();
-    }
-
-    final parts = cleanValue.split(':');
-    if (parts.length > 1 && parts.sublist(1).join(':').trim().isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: primaryColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              cleanValue,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],

@@ -9,14 +9,28 @@ class ProfileRepository {
   Future<String?> fetchProfilePictureFilename() async {
     try {
       final response = await dio.get('/employee-photo');
+
       final data = response.data;
+
       if (data is Map) {
-        return data['profile_picture']?.toString();
+        final value = data['profile_picture'] ??
+            data['profilePicture'] ??
+            data['filename'] ??
+            data['photo'];
+
+        if (value == null) return null;
+
+        final clean = value.toString().trim();
+        return clean.isEmpty ? null : clean;
       }
+
       return null;
     } on DioException catch (e) {
+      if (e.response?.statusCode == 401) return null;
       if (e.response?.statusCode == 404) return null;
-      rethrow;
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -34,8 +48,16 @@ class ProfileRepository {
     );
 
     final data = response.data;
-    if (data is Map && data['filename'] != null) {
-      return data['filename'].toString();
+
+    if (data is Map) {
+      final value = data['filename'] ??
+          data['profile_picture'] ??
+          data['profilePicture'] ??
+          data['photo'];
+
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString().trim();
+      }
     }
 
     throw Exception('Upload failed');

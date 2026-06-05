@@ -5,12 +5,12 @@ import '../../../core/utils/role_utils.dart';
 import '../../../core/widgets/profile_photo_box.dart';
 import '../../../core/workflow/lead_workflow.dart';
 import '../../auth/auth_session.dart';
-import '../../auth/models/auth_user.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../leads/models/lead_model.dart';
 import '../../leads/providers/lead_provider.dart';
 import '../../leads/widgets/leads_table.dart';
 import '../../notifications/screens/notifications_screen.dart';
+import '../../profile/screens/profile_screen.dart';
 
 class WorkflowTeamScreen extends ConsumerStatefulWidget {
   final String? titleOverride;
@@ -29,7 +29,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
   static const teamAccent = Color(0xFF18A999);
   static const textColor = Color(0xFF1F2028);
 
-  int selectedPage = 0;
+  int selectedPage = 0; // 0 Dashboard, 1 Profile, 2 Notifications
 
   @override
   void initState() {
@@ -43,6 +43,11 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
   String get _title {
     final auth = ref.read(authProvider);
     return widget.titleOverride ?? RoleUtils.displayTitle(auth.appRole);
+  }
+
+  String get _pageTitle {
+    if (selectedPage == 2) return 'Notifications';
+    return _title;
   }
 
   @override
@@ -60,64 +65,69 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
       },
       child: Scaffold(
         backgroundColor: bgColor,
-        drawer: _drawer(auth),
-        appBar: AppBar(
-          backgroundColor: bgColor,
-          foregroundColor: textColor,
-          elevation: 0,
-          centerTitle: true,
-          leading: Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu_rounded, size: 34),
-              onPressed: () {
-                ref.read(authProvider.notifier).refreshProfile();
-                Scaffold.of(context).openDrawer();
-              },
-            ),
-          ),
-          title: Text(
-            selectedPage == 1 ? 'Notifications' : _title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 22,
-            ),
-          ),
-          actions: [
-            IconButton(
-              onPressed: _refreshLeads,
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              onPressed: () => setState(() => selectedPage = 1),
-              icon: const Icon(Icons.notifications_none_rounded),
-            ),
-          ],
-        ),
-        body: selectedPage == 1
-            ? const NotificationsScreen()
-            : leadsAsync.when(
-                loading: () => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-                error: (e, _) => Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Text(
-                      e.toString(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+        drawer: selectedPage == 1 ? null : _drawer(),
+        appBar: selectedPage == 1
+            ? null
+            : AppBar(
+                backgroundColor: bgColor,
+                foregroundColor: textColor,
+                elevation: 0,
+                centerTitle: true,
+                leading: Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu_rounded, size: 34),
+                    onPressed: () {
+                      ref.read(authProvider.notifier).refreshProfile();
+                      Scaffold.of(context).openDrawer();
+                    },
                   ),
                 ),
-                data: (leads) {
-                  final roleName = auth.user?.roleName ?? '';
-                  final filteredLeads = _filterLeadsForRole(leads, roleName);
-                  return _dashboard(filteredLeads, roleName);
-                },
+                title: Text(
+                  _pageTitle,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    onPressed: _refreshLeads,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => selectedPage = 2),
+                    icon: const Icon(Icons.notifications_none_rounded),
+                  ),
+                ],
               ),
+        body: selectedPage == 1
+            ? const ProfileScreen()
+            : selectedPage == 2
+                ? const NotificationsScreen()
+                : leadsAsync.when(
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                    error: (e, _) => Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          e.toString(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    data: (leads) {
+                      final roleName = auth.user?.roleName ?? '';
+                      final filteredLeads =
+                          _filterLeadsForRole(leads, roleName);
+                      return _dashboard(filteredLeads, roleName);
+                    },
+                  ),
       ),
     );
   }
@@ -125,19 +135,12 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
   void _refreshLeads() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
-      try {
-        ref.invalidate(allLeadsProvider);
-      } catch (err, st) {
-        debugPrint('invalidate failed: $err\n$st');
-      }
+      ref.invalidate(allLeadsProvider);
     });
   }
 
   List<LeadModel> _filterLeadsForRole(List<LeadModel> leads, String roleName) {
-    if (LeadWorkflow.isAdminRole(roleName)) {
-      return leads;
-    }
+    if (LeadWorkflow.isAdminRole(roleName)) return leads;
 
     final roleKey = LeadWorkflow.resolveRoleKey(roleName);
     final department = _departmentForRole(roleKey);
@@ -283,10 +286,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-             Color(0xFF5663A0),
-             Color(0xFF18A999),
-          ],
+          colors: [primaryColor, teamAccent],
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
@@ -299,30 +299,8 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
       ),
       child: Stack(
         children: [
-          Positioned(
-            right: -18,
-            top: -24,
-            child: Container(
-              height: 112,
-              width: 112,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.07),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 40,
-            bottom: -46,
-            child: Container(
-              height: 96,
-              width: 96,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.06),
-              ),
-            ),
-          ),
+          Positioned(right: -18, top: -24, child: _bgCircle(112)),
+          Positioned(right: 40, bottom: -46, child: _bgCircle(96)),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -335,11 +313,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                       color: Colors.white.withOpacity(0.16),
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: Icon(
-                      roleIcon,
-                      color: Colors.white,
-                      size: 32,
-                    ),
+                    child: Icon(roleIcon, color: Colors.white, size: 32),
                   ),
                   const Spacer(),
                   Container(
@@ -369,7 +343,6 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                   color: Colors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: -0.3,
                 ),
               ),
               const SizedBox(height: 10),
@@ -381,18 +354,20 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(height: 7),
-              Text(
-                'Role: $resolvedRole',
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _bgCircle(double size) {
+    return Container(
+      height: size,
+      width: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white.withOpacity(0.07),
       ),
     );
   }
@@ -427,16 +402,15 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
               color: textColor,
             ),
           ),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.black54),
-          ),
+          Text(label, style: const TextStyle(color: Colors.black54)),
         ],
       ),
     );
   }
 
-  Widget _drawer(AuthState auth) {
+  Widget _drawer() {
+    final auth = ref.watch(authProvider);
+
     final userName = auth.user?.name?.trim().isNotEmpty == true
         ? auth.user!.name!.trim()
         : 'User';
@@ -461,10 +435,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
       child: SafeArea(
         child: Column(
           children: [
-            _drawerHeader(
-              userName: userName,
-              roleName: roleName,
-            ),
+            _drawerHeader(userName: userName, roleName: roleName),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
@@ -479,11 +450,20 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                       setState(() => selectedPage = 0);
                     },
                   ),
+                  _drawerItem(
+                    icon: Icons.person_outline_rounded,
+                    title: 'Profile',
+                    selected: selectedPage == 1,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => selectedPage = 1);
+                    },
+                  ),
                   _drawerSectionTitle('WORK'),
                   _drawerItem(
                     icon: Icons.notifications_none_rounded,
                     title: 'Notifications',
-                    selected: selectedPage == 1,
+                    selected: selectedPage == 2,
                     trailing: Container(
                       height: 8,
                       width: 8,
@@ -494,12 +474,13 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() => selectedPage = 1);
+                      setState(() => selectedPage = 2);
                     },
                   ),
                   _drawerItem(
                     icon: deskIcon,
                     title: deskLabel,
+                    selected: selectedPage == 0,
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => selectedPage = 0);
@@ -540,14 +521,9 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF5663A0),
-           Color(0xFF18A999),
-          ],
+          colors: [primaryColor, teamAccent],
         ),
-        borderRadius: BorderRadius.only(
-          topRight: Radius.circular(26),
-        ),
+        borderRadius: BorderRadius.only(topRight: Radius.circular(26)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -558,13 +534,6 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
             ),
             clipBehavior: Clip.antiAlias,
             child: ProfilePhotoBox(
@@ -649,9 +618,8 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                     style: TextStyle(
                       color: color,
                       fontSize: 16,
-                      fontWeight: selected || isLogout
-                          ? FontWeight.bold
-                          : FontWeight.w500,
+                      fontWeight:
+                          selected || isLogout ? FontWeight.bold : FontWeight.w500,
                     ),
                   ),
                 ),
