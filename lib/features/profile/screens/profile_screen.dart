@@ -22,6 +22,19 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _uploading = false;
 
+  static const bgColor = Color(0xFFF7F8FC);
+  static const primaryColor = Color(0xFF4E5FAE);
+  static const teamAccent = Color(0xFF22B8A8);
+  static const textColor = Color(0xFF1F2028);
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(authProvider.notifier).refreshProfile();
+    });
+  }
+
   Future<void> _pickAndUpload() async {
     final picker = ImagePicker();
     final file = await picker.pickImage(
@@ -37,6 +50,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       final filename =
           await ref.read(profileRepositoryProvider).uploadProfilePhoto(file);
+
       ref.read(authProvider.notifier).updateProfilePicture(filename);
 
       if (!mounted) return;
@@ -51,104 +65,211 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
-    final user = auth.user;
-    final initial =
-        (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : 'U';
+    final user = ref.watch(authProvider).user;
+
+    final name = user?.name.trim().isNotEmpty == true ? user!.name.trim() : 'User';
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF7F8FC),
+        backgroundColor: bgColor,
         elevation: 0,
-        foregroundColor: const Color(0xFF1F2028),
+        foregroundColor: textColor,
         title: const Text(
-          'My Profile',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          'Profile',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                Container(
-                  height: 120,
-                  width: 120,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: const Color(0xFFE4E1EA)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(authProvider.notifier).refreshProfile(),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [primaryColor, teamAccent],
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: ProfilePhotoBox(
-                    rawProfilePicture: user?.profilePicture,
-                    initial: initial,
-                    textColor: const Color(0xFF5663A0),
-                    fontSize: 42,
-                  ),
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryColor.withOpacity(0.22),
+                      blurRadius: 22,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
                 ),
-                if (_uploading)
-                  const Positioned.fill(
-                    child: ColoredBox(
-                      color: Color(0x66000000),
-                      child: Center(
-                        child: CircularProgressIndicator(color: Colors.white),
+                child: Column(
+                  children: [
+                    Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        Container(
+                          height: 112,
+                          width: 112,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: ProfilePhotoBox(
+                            rawProfilePicture: user?.profilePicture,
+                            initial: initial,
+                            textColor: primaryColor,
+                            fontSize: 40,
+                          ),
+                        ),
+                        InkWell(
+                          onTap: _uploading ? null : _pickAndUpload,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            height: 42,
+                            width: 42,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.18),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: _uploading
+                                ? const Padding(
+                                    padding: EdgeInsets.all(10),
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.edit_rounded, color: primaryColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Text(
-              user?.name ?? 'User',
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              user?.roleName ?? '',
-              style: const TextStyle(color: Colors.black54),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              user?.email ?? '',
-              style: const TextStyle(color: Colors.black45, fontSize: 13),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _uploading ? null : _pickAndUpload,
-                icon: const Icon(Icons.camera_alt_outlined),
-                label: const Text('Change profile picture'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5663A0),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                    const SizedBox(height: 6),
+                    Text(
+                      user?.roleName ?? '—',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+
+              const SizedBox(height: 22),
+
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(26),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.07),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    _infoTile(Icons.badge_outlined, 'User ID', user?.id),
+                    _infoTile(Icons.person_outline_rounded, 'Full Name', user?.name),
+                    _infoTile(Icons.work_outline_rounded, 'Role Name', user?.roleName),
+                    _infoTile(Icons.email_outlined, 'Email', user?.email),
+                    _infoTile(Icons.business_outlined, 'Company', user?.companyName),
+                    _infoTile(Icons.location_on_outlined, 'Work Location', null),
+                    _infoTile(Icons.phone_outlined, 'Contact', null, showDivider: false),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              const Text(
+                'Profile picture changes sync with the web portal automatically.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.black45, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _infoTile(
+    IconData icon,
+    String title,
+    String? value, {
+    bool showDivider = true,
+  }) {
+    final displayValue =
+        value == null || value.trim().isEmpty ? 'Not specified' : value.trim();
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Container(
+              height: 46,
+              width: 46,
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: primaryColor, size: 24),
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Changes sync with the web portal automatically.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.black45),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(color: Colors.black45, fontSize: 14),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    displayValue,
+                    style: const TextStyle(
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-      ),
+        if (showDivider)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 14),
+            child: Divider(height: 1),
+          ),
+      ],
     );
   }
 }

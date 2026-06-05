@@ -283,6 +283,15 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
     );
   }
 
+  void _openProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+    ).then((_) {
+      ref.read(authProvider.notifier).refreshProfile();
+    });
+  }
+
   Widget _salesHeroCard() {
     return Container(
       width: double.infinity,
@@ -506,12 +515,12 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
   }
 
   Widget _drawer(BuildContext context) {
-    final userName = auth.user?.name?.trim().isNotEmpty == true
-        ? auth.user!.name!.trim()
+    final userName = auth.user?.name.trim().isNotEmpty == true
+        ? auth.user!.name.trim()
         : 'User';
 
-    final roleName = auth.user?.roleName?.trim().isNotEmpty == true
-        ? auth.user!.roleName!.trim()
+    final roleName = auth.user?.roleName.trim().isNotEmpty == true
+        ? auth.user!.roleName.trim()
         : _title;
 
     return Drawer(
@@ -542,6 +551,14 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => selectedPage = 0);
+                    },
+                  ),
+                  _drawerItem(
+                    icon: Icons.person_outline_rounded,
+                    title: 'Profile',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openProfile();
                     },
                   ),
                   _drawerSectionTitle('WORK'),
@@ -632,12 +649,7 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
             highlightColor: Colors.white24,
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              ).then((_) {
-                ref.read(authProvider.notifier).refreshProfile();
-              });
+              _openProfile();
             },
             borderRadius: BorderRadius.circular(18),
             child: Container(
@@ -742,9 +754,8 @@ class _SalesAdminShellState extends ConsumerState<_SalesAdminShell> {
                     style: TextStyle(
                       color: color,
                       fontSize: 16,
-                      fontWeight: selected || isLogout
-                          ? FontWeight.bold
-                          : FontWeight.w500,
+                      fontWeight:
+                          selected || isLogout ? FontWeight.bold : FontWeight.w500,
                     ),
                   ),
                 ),
