@@ -14,47 +14,79 @@ class NotificationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final leadsAsync = ref.watch(allLeadsProvider);
 
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final bgColor = theme.scaffoldBackgroundColor;
+    final textColor = theme.colorScheme.onSurface;
+    final cardColor = theme.cardColor;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
+      backgroundColor: bgColor,
       appBar: showAppBar
           ? AppBar(
               title: const Text('Notifications'),
-              backgroundColor: const Color(0xFFF7F8FC),
+              backgroundColor: bgColor,
               elevation: 0,
-              foregroundColor: const Color(0xFF1F2028),
+              foregroundColor: textColor,
             )
           : null,
       body: leadsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.toString())),
+        error: (e, _) => Center(
+          child: Text(
+            e.toString(),
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
         data: (leads) {
           final recent = List<LeadModel>.from(leads)
             ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
           if (recent.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'No recent lead activity',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
               ),
             );
           }
 
+          final items = recent.take(20).toList();
+
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: recent.take(20).length,
+            itemCount: items.length,
             itemBuilder: (context, index) {
-              final lead = recent[index];
+              final lead = items[index];
+
               return Card(
+                color: cardColor,
                 margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
-                  leading: const Icon(Icons.solar_power, color: Color(0xFF5663A0)),
+                  leading: Icon(
+                    Icons.solar_power,
+                    color: primaryColor,
+                  ),
                   title: Text(
                     lead.fullName.isEmpty ? lead.leadCode : lead.fullName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
                   ),
-                  subtitle: Text('${lead.status} · ${lead.currentDepartment}'),
-                  trailing: const Icon(Icons.chevron_right),
+                  subtitle: Text(
+                    '${lead.status} · ${lead.currentDepartment}',
+                    style: TextStyle(
+                      color: textColor.withOpacity(0.65),
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.chevron_right,
+                    color: primaryColor,
+                  ),
                   onTap: () {
                     Navigator.push(
                       context,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/role_utils.dart';
 import '../../../core/widgets/profile_photo_box.dart';
 import '../../../core/workflow/lead_workflow.dart';
+import '../../../screens/theme/theme_settings_screen.dart';
 import '../../auth/auth_session.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../leads/models/lead_model.dart';
@@ -22,14 +23,19 @@ class WorkflowTeamScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
-  static const bgColor = Color(0xFFF7F8FC);
-  static const drawerBgColor = Color(0xFFF9F7FF);
-  static const cardColor = Colors.white;
-  static const primaryColor = Color(0xFF5663A0);
   static const teamAccent = Color(0xFF18A999);
-  static const textColor = Color(0xFF1F2028);
 
   int selectedPage = 0; // 0 Dashboard, 1 Profile, 2 Notifications
+
+  Color get _primaryColor => Theme.of(context).colorScheme.primary;
+  Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
+  Color get _cardColor => Theme.of(context).cardColor;
+  Color get _textColor => Theme.of(context).colorScheme.onSurface;
+
+  Color get _drawerBgColor {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF9F7FF);
+  }
 
   @override
   void initState() {
@@ -64,18 +70,22 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
         return true;
       },
       child: Scaffold(
-        backgroundColor: bgColor,
+        backgroundColor: _bgColor,
         drawer: selectedPage == 1 ? null : _drawer(),
         appBar: selectedPage == 1
             ? null
             : AppBar(
-                backgroundColor: bgColor,
-                foregroundColor: textColor,
+                backgroundColor: _bgColor,
+                foregroundColor: _textColor,
                 elevation: 0,
                 centerTitle: true,
                 leading: Builder(
                   builder: (context) => IconButton(
-                    icon: const Icon(Icons.menu_rounded, size: 34),
+                    icon: Icon(
+                      Icons.menu_rounded,
+                      size: 34,
+                      color: _primaryColor,
+                    ),
                     onPressed: () {
                       ref.read(authProvider.notifier).refreshProfile();
                       Scaffold.of(context).openDrawer();
@@ -84,7 +94,8 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                 ),
                 title: Text(
                   _pageTitle,
-                  style: const TextStyle(
+                  style: TextStyle(
+                    color: _textColor,
                     fontWeight: FontWeight.bold,
                     fontSize: 22,
                   ),
@@ -92,11 +103,14 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                 actions: [
                   IconButton(
                     onPressed: _refreshLeads,
-                    icon: const Icon(Icons.refresh),
+                    icon: Icon(Icons.refresh, color: _primaryColor),
                   ),
                   IconButton(
                     onPressed: () => setState(() => selectedPage = 2),
-                    icon: const Icon(Icons.notifications_none_rounded),
+                    icon: Icon(
+                      Icons.notifications_none_rounded,
+                      color: _primaryColor,
+                    ),
                   ),
                 ],
               ),
@@ -246,8 +260,8 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
             ],
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -255,7 +269,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: textColor,
+                color: _textColor,
               ),
             ),
           ),
@@ -283,15 +297,15 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [primaryColor, teamAccent],
+          colors: [_primaryColor, teamAccent],
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.24),
+            color: _primaryColor.withOpacity(0.24),
             blurRadius: 22,
             offset: const Offset(0, 12),
           ),
@@ -380,7 +394,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -392,17 +406,22 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
       ),
       child: Column(
         children: [
-          Icon(icon, color: primaryColor),
+          Icon(icon, color: _primaryColor),
           const SizedBox(height: 10),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: textColor,
+              color: _textColor,
             ),
           ),
-          Text(label, style: const TextStyle(color: Colors.black54)),
+          Text(
+            label,
+            style: TextStyle(
+              color: _textColor.withOpacity(0.55),
+            ),
+          ),
         ],
       ),
     );
@@ -411,21 +430,17 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
   Widget _drawer() {
     final auth = ref.watch(authProvider);
 
-    final userName = auth.user?.name?.trim().isNotEmpty == true
-        ? auth.user!.name!.trim()
+    final userName = auth.user?.name.trim().isNotEmpty == true
+        ? auth.user!.name.trim()
         : 'User';
 
-    final roleName = auth.user?.roleName?.trim().isNotEmpty == true
-        ? auth.user!.roleName!.trim()
-        : 'Team';
-
-    final roleKey = LeadWorkflow.resolveRoleKey(roleName);
-    final deskLabel = _roleDeskLabel(roleKey);
-    final deskIcon = _roleIcon(roleKey);
+    final roleName = auth.user?.roleName.trim().isNotEmpty == true
+        ? auth.user!.roleName.trim()
+        : _title;
 
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.78,
-      backgroundColor: drawerBgColor,
+      backgroundColor: _drawerBgColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topRight: Radius.circular(26),
@@ -459,6 +474,19 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                       setState(() => selectedPage = 1);
                     },
                   ),
+                  _drawerItem(
+                    icon: Icons.palette_outlined,
+                    title: 'Theme',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ThemeSettingsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   _drawerSectionTitle('WORK'),
                   _drawerItem(
                     icon: Icons.notifications_none_rounded,
@@ -475,15 +503,6 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => selectedPage = 2);
-                    },
-                  ),
-                  _drawerItem(
-                    icon: deskIcon,
-                    title: deskLabel,
-                    selected: selectedPage == 0,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => selectedPage = 0);
                     },
                   ),
                 ],
@@ -517,13 +536,15 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [primaryColor, teamAccent],
+          colors: [_primaryColor, teamAccent],
         ),
-        borderRadius: BorderRadius.only(topRight: Radius.circular(26)),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(26),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -539,7 +560,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
             child: ProfilePhotoBox(
               rawProfilePicture: ref.watch(authProvider).user?.profilePicture,
               initial: initial,
-              textColor: primaryColor,
+              textColor: _primaryColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -575,7 +596,7 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
       child: Text(
         title,
         style: TextStyle(
-          color: Colors.black.withOpacity(0.55),
+          color: _textColor.withOpacity(0.55),
           fontSize: 12,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.2,
@@ -595,15 +616,17 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
     final color = isLogout
         ? const Color(0xFFD32F2F)
         : selected
-            ? primaryColor
-            : textColor;
+            ? _primaryColor
+            : _textColor;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Material(
-        color: selected ? primaryColor.withOpacity(0.10) : Colors.transparent,
+        color: selected ? _primaryColor.withOpacity(0.10) : Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
+          splashColor: _primaryColor.withOpacity(0.12),
+          highlightColor: _primaryColor.withOpacity(0.04),
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(

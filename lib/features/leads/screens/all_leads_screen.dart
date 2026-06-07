@@ -14,13 +14,8 @@ class AllLeadsScreen extends ConsumerStatefulWidget {
 }
 
 class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
-  static const bgColor = Color(0xFFF7F8FC);
-  static const primaryColor = Color(0xFF5663A0);
-  static const textColor = Color(0xFF1F2028);
-
   Future<void> _refreshLeads() async {
     if (!mounted) return;
-
     await ref.refresh(allLeadsProvider.future);
   }
 
@@ -30,7 +25,6 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
     );
 
     if (!mounted) return;
-
     await _refreshLeads();
   }
 
@@ -39,19 +33,24 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
     final leadsAsync = ref.watch(allLeadsProvider);
     final canCreate = ref.watch(authProvider).hasPermission('lead.create');
 
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final bgColor = theme.scaffoldBackgroundColor;
+    final textColor = theme.colorScheme.onSurface;
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
         backgroundColor: bgColor,
         elevation: 0,
-        title: const Text(
+        foregroundColor: textColor,
+        title: Text(
           'All Leads',
           style: TextStyle(
             color: textColor,
             fontWeight: FontWeight.bold,
           ),
         ),
-        iconTheme: const IconThemeData(color: textColor),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -85,15 +84,18 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
         ),
         data: (leads) {
           return RefreshIndicator(
+            color: primaryColor,
             onRefresh: _refreshLeads,
             child: leads.isEmpty
                 ? ListView(
-                    children: const [
-                      SizedBox(height: 220),
+                    children: [
+                      const SizedBox(height: 220),
                       Center(
                         child: Text(
                           'No leads found',
-                          style: TextStyle(color: Colors.black54),
+                          style: TextStyle(
+                            color: textColor.withOpacity(0.55),
+                          ),
                         ),
                       ),
                     ],

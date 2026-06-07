@@ -142,7 +142,13 @@ class LeadModel {
   factory LeadModel.fromJson(Map<String, dynamic> json) {
     final installationRaw = json['installationDetails'] ??
         json['installation_details'] ??
-        json['InstallationDetails'];
+        json['InstallationDetails'] ??
+        json['installation'] ??
+        json['Installation'] ??
+        json['lead_installation'] ??
+        json['leadInstallation'];
+
+    final parsedInstallationDetails = _mapFromDynamic(installationRaw);
 
     return LeadModel(
       id: _str(json['id']),
@@ -202,7 +208,7 @@ class LeadModel {
       registrationId: _str(json['registration_id'] ?? json['registrationId']),
       registrationDate: _str(json['registration_date'] ?? json['registrationDate']),
       registrationTime: _str(json['registration_time'] ?? json['registrationTime']),
-      installationDetails: installationRaw is Map ? Map<String, dynamic>.from(installationRaw) : null,
+      installationDetails: parsedInstallationDetails,
       createdAt: _str(json['created_at'] ?? json['createdAt']),
       updatedAt: _str(json['updated_at'] ?? json['updatedAt']),
     );
@@ -212,16 +218,24 @@ class LeadModel {
     final d = installationDetails;
     if (d == null || d.isEmpty) return false;
 
-    final spNumbers = d['sp_numbers'];
+    final spNumbers = d['sp_numbers'] ?? d['spNumbers'] ?? d['solar_panel_serial_numbers'];
 
-    return _mapValue(d, ['file_no']).isNotEmpty ||
+    return _mapValue(d, ['id', '_id']).isNotEmpty ||
+        _mapValue(d, ['file_no', 'fileNo']).isNotEmpty ||
         _mapValue(d, ['capacity']).isNotEmpty ||
-        _mapValue(d, ['solar_panel_brand']).isNotEmpty ||
-        _mapValue(d, ['number_of_solar_panels', 'number_of_solar_panel']).isNotEmpty ||
-        _mapValue(d, ['invoice_no']).isNotEmpty ||
-        _mapValue(d, ['panel_type']).isNotEmpty ||
-        _mapValue(d, ['inverter_serial_number']).isNotEmpty ||
-        _mapValue(d, ['battery_serial_number']).isNotEmpty ||
+        _mapValue(d, ['solar_panel_brand', 'solarPanelBrand']).isNotEmpty ||
+        _mapValue(d, [
+          'number_of_solar_panels',
+          'number_of_solar_panel',
+          'numberOfSolarPanels',
+          'panel_count',
+          'panelCount',
+        ]).isNotEmpty ||
+        _mapValue(d, ['invoice_no', 'invoiceNo']).isNotEmpty ||
+        _mapValue(d, ['panel_type', 'panelType']).isNotEmpty ||
+        _mapValue(d, ['inverter_serial_number', 'inverterSerialNumber']).isNotEmpty ||
+        _mapValue(d, ['battery_serial_number', 'batterySerialNumber']).isNotEmpty ||
+        _mapValue(d, ['installation_status', 'installationStatus']).isNotEmpty ||
         (spNumbers is List && spNumbers.isNotEmpty);
   }
 
@@ -420,6 +434,30 @@ class LeadModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  static Map<String, dynamic>? _mapFromDynamic(dynamic value) {
+    if (value == null) return null;
+
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return null;
+
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+
+    return null;
   }
 
   static String _mapValue(Map<String, dynamic> map, List<String> keys) {

@@ -22,11 +22,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _uploading = false;
 
-  static const bgColor = Color(0xFFF7F8FC);
-  static const cardColor = Colors.white;
-  static const primaryColor = Color(0xFF4E5FAE);
   static const teamAccent = Color(0xFF22B8A8);
-  static const textColor = Color(0xFF1F2028);
 
   @override
   void initState() {
@@ -69,6 +65,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final auth = ref.watch(authProvider);
     final user = auth.user;
 
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final bgColor = theme.scaffoldBackgroundColor;
+    final cardColor = theme.cardColor;
+    final textColor = theme.colorScheme.onSurface;
+
     final name =
         user?.name.trim().isNotEmpty == true ? user!.name.trim() : 'User';
 
@@ -86,7 +88,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         backgroundColor: bgColor,
         elevation: 0,
         foregroundColor: primaryColor,
-        title: const Text(
+        title: Text(
           'Profile',
           style: TextStyle(
             color: textColor,
@@ -96,6 +98,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
       body: RefreshIndicator(
+        color: primaryColor,
         onRefresh: () => ref.read(authProvider.notifier).refreshProfile(),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 10, 18, 26),
@@ -105,9 +108,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               role: role,
               initial: initial,
               photo: user?.profilePicture,
+              primaryColor: primaryColor,
             ),
             const SizedBox(height: 22),
-            const Text(
+            Text(
               'Profile Information',
               style: TextStyle(
                 color: textColor,
@@ -166,11 +170,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            const Text(
+            Text(
               'Pull down to refresh profile details.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.black45,
+                color: textColor.withOpacity(0.45),
                 fontSize: 12,
               ),
             ),
@@ -185,12 +189,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     required String role,
     required String initial,
     required String? photo,
+    required Color primaryColor,
   }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 26, 20, 26),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [primaryColor, teamAccent],
@@ -243,11 +248,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ],
                   ),
                   child: _uploading
-                      ? const Padding(
-                          padding: EdgeInsets.all(10),
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                      ? Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: primaryColor,
+                          ),
                         )
-                      : const Icon(
+                      : Icon(
                           Icons.edit_rounded,
                           color: primaryColor,
                         ),
@@ -286,6 +294,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     required String? value,
     bool showDivider = true,
   }) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+    final textColor = theme.colorScheme.onSurface;
+
     final displayValue =
         value == null || value.trim().isEmpty ? 'Not specified' : value.trim();
 
@@ -313,8 +325,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.black45,
+                    style: TextStyle(
+                      color: textColor.withOpacity(0.45),
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
@@ -322,7 +334,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 4),
                   Text(
                     displayValue,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: textColor,
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -334,9 +346,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ],
         ),
         if (showDivider)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 14),
-            child: Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Divider(
+              height: 1,
+              color: textColor.withOpacity(0.12),
+            ),
           ),
       ],
     );

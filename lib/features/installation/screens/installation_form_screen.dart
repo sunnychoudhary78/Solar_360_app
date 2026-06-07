@@ -21,6 +21,9 @@ class InstallationFormScreen extends ConsumerStatefulWidget {
 class _InstallationFormScreenState
     extends ConsumerState<InstallationFormScreen> {
   static const primaryColor = Color(0xFF5663A0);
+  static const bgColor = Color(0xFFF7F8FC);
+  static const fieldColor = Color(0xFFFAF8FF);
+  static const textColor = Color(0xFF1F2028);
 
   final fileNo = TextEditingController();
   final capacity = TextEditingController();
@@ -97,9 +100,7 @@ class _InstallationFormScreenState
 
       for (final item in rawSpNumbers) {
         spControllers.add(
-          TextEditingController(
-            text: item?.toString() ?? '',
-          ),
+          TextEditingController(text: item?.toString() ?? ''),
         );
       }
     }
@@ -172,13 +173,33 @@ class _InstallationFormScreenState
     });
   }
 
+  bool _requiredMissing() {
+    return [
+      fileNo,
+      capacity,
+      panelBrand,
+      panelCount,
+      invoiceNo,
+    ].any((controller) => controller.text.trim().isEmpty);
+  }
+
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
 
-    if ([fileNo, capacity, panelBrand, panelCount, invoiceNo]
-        .any((c) => c.text.trim().isEmpty)) {
+    if (_requiredMissing()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill all required fields')),
+      );
+      return;
+    }
+
+    final panelCountValue = int.tryParse(panelCount.text.trim());
+
+    if (panelCountValue == null || panelCountValue <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid number of panels'),
+        ),
       );
       return;
     }
@@ -192,9 +213,15 @@ class _InstallationFormScreenState
       'file_no': fileNo.text.trim(),
       'capacity': capacity.text.trim(),
       'solar_panel_brand': panelBrand.text.trim(),
-      'number_of_solar_panels': int.tryParse(panelCount.text.trim()) ?? 0,
+      'number_of_solar_panels': panelCountValue,
       'invoice_no': invoiceNo.text.trim(),
       'panel_type': panelType,
+
+      // IMPORTANT:
+      // Backend uses this value to auto-update lead status:
+      // Installation In Progress -> Installation Done -> Support
+      'installation_status': 'Completed',
+
       'inverter_serial_number': inverterSerialNumber.text.trim(),
       'battery_serial_number': batterySerialNumber.text.trim(),
       'dcr_certificate_no': dcrCertificateNo.text.trim(),
@@ -219,6 +246,13 @@ class _InstallationFormScreenState
       }
 
       if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Installation details saved successfully'),
+        ),
+      );
+
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -238,11 +272,11 @@ class _InstallationFormScreenState
         : widget.lead.fullName;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: const Text('Installation Details'),
-        backgroundColor: const Color(0xFFF7F8FC),
-        foregroundColor: const Color(0xFF1F2028),
+        backgroundColor: bgColor,
+        foregroundColor: textColor,
         elevation: 0,
       ),
       body: ListView(
@@ -253,6 +287,7 @@ class _InstallationFormScreenState
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 20),
@@ -334,7 +369,7 @@ class _InstallationFormScreenState
         style: const TextStyle(
           fontSize: 17,
           fontWeight: FontWeight.bold,
-          color: Color(0xFF1F2028),
+          color: textColor,
         ),
       ),
     );
@@ -348,7 +383,7 @@ class _InstallationFormScreenState
         decoration: InputDecoration(
           labelText: 'Panel Type *',
           filled: true,
-          fillColor: const Color(0xFFFAF8FF),
+          fillColor: fieldColor,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
           ),
@@ -389,7 +424,7 @@ class _InstallationFormScreenState
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1F2028),
+              color: textColor,
             ),
           ),
           const SizedBox(height: 12),
@@ -445,9 +480,16 @@ class _InstallationFormScreenState
         decoration: InputDecoration(
           labelText: label,
           filled: true,
-          fillColor: const Color(0xFFFAF8FF),
+          fillColor: fieldColor,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(
+              color: primaryColor,
+              width: 1.3,
+            ),
           ),
         ),
       ),
@@ -466,9 +508,16 @@ class _InstallationFormScreenState
           labelText: label,
           suffixIcon: const Icon(Icons.calendar_month_outlined),
           filled: true,
-          fillColor: const Color(0xFFFAF8FF),
+          fillColor: fieldColor,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(
+              color: primaryColor,
+              width: 1.3,
+            ),
           ),
         ),
       ),

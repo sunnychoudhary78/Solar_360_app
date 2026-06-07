@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/profile_photo_box.dart';
+import '../../../screens/theme/theme_settings_screen.dart';
 import '../../auth/auth_session.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../leads/models/lead_model.dart';
@@ -18,15 +19,20 @@ class FinanceTeamScreen extends ConsumerStatefulWidget {
 }
 
 class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
-  static const bgColor = Color(0xFFF7F8FC);
-  static const drawerBgColor = Color(0xFFF9F7FF);
-  static const cardColor = Colors.white;
-  static const primaryColor = Color(0xFF5663A0);
   static const accentColor = Color(0xFF18A999);
-  static const textColor = Color(0xFF1F2028);
 
-  int selectedPage = 0; // 0 Dashboard, 1 Profile, 2 Liaison, 3 Notifications
+  int selectedPage = 0;
   bool actionLoading = false;
+
+  Color get _primaryColor => Theme.of(context).colorScheme.primary;
+  Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
+  Color get _cardColor => Theme.of(context).cardColor;
+  Color get _textColor => Theme.of(context).colorScheme.onSurface;
+
+  Color get _drawerBgColor {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF9F7FF);
+  }
 
   @override
   void initState() {
@@ -50,19 +56,23 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
         return true;
       },
       child: Scaffold(
-        backgroundColor: bgColor,
+        backgroundColor: _bgColor,
         drawer: selectedPage == 1 ? null : _drawer(),
         appBar: selectedPage == 1
             ? null
             : AppBar(
-                backgroundColor: bgColor,
-                foregroundColor: textColor,
+                backgroundColor: _bgColor,
+                foregroundColor: _textColor,
                 elevation: 0,
                 centerTitle: true,
                 leading: Builder(
                   builder: (context) {
                     return IconButton(
-                      icon: const Icon(Icons.menu_rounded, size: 34),
+                      icon: Icon(
+                        Icons.menu_rounded,
+                        size: 34,
+                        color: _primaryColor,
+                      ),
                       onPressed: () {
                         ref.read(authProvider.notifier).refreshProfile();
                         Scaffold.of(context).openDrawer();
@@ -72,7 +82,8 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                 ),
                 title: Text(
                   _pageTitle(),
-                  style: const TextStyle(
+                  style: TextStyle(
+                    color: _textColor,
                     fontWeight: FontWeight.bold,
                     fontSize: 22,
                   ),
@@ -80,11 +91,17 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                 actions: [
                   IconButton(
                     onPressed: _refreshLeads,
-                    icon: const Icon(Icons.refresh_rounded),
+                    icon: Icon(
+                      Icons.refresh_rounded,
+                      color: _primaryColor,
+                    ),
                   ),
                   IconButton(
                     onPressed: () => setState(() => selectedPage = 3),
-                    icon: const Icon(Icons.notifications_none_rounded),
+                    icon: Icon(
+                      Icons.notifications_none_rounded,
+                      color: _primaryColor,
+                    ),
                   ),
                 ],
               ),
@@ -204,7 +221,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
       case 'Loan Approved':
         return Colors.green;
       default:
-        return primaryColor;
+        return _primaryColor;
     }
   }
 
@@ -221,7 +238,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
 
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.78,
-      backgroundColor: drawerBgColor,
+      backgroundColor: _drawerBgColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topRight: Radius.circular(26),
@@ -253,6 +270,19 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => selectedPage = 1);
+                    },
+                  ),
+                  _drawerItem(
+                    icon: Icons.palette_outlined,
+                    title: 'Theme',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ThemeSettingsScreen(),
+                        ),
+                      );
                     },
                   ),
                   _drawerSectionTitle('WORK'),
@@ -313,13 +343,13 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [primaryColor, accentColor],
+          colors: [_primaryColor, accentColor],
         ),
-        borderRadius: BorderRadius.only(topRight: Radius.circular(26)),
+        borderRadius: const BorderRadius.only(topRight: Radius.circular(26)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,7 +372,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
             child: ProfilePhotoBox(
               rawProfilePicture: ref.watch(authProvider).user?.profilePicture,
               initial: initial,
-              textColor: primaryColor,
+              textColor: _primaryColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -378,7 +408,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
       child: Text(
         title,
         style: TextStyle(
-          color: Colors.black.withOpacity(0.55),
+          color: _textColor.withOpacity(0.55),
           fontSize: 12,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.2,
@@ -398,15 +428,17 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     final color = isLogout
         ? const Color(0xFFD32F2F)
         : selected
-            ? primaryColor
-            : textColor;
+            ? _primaryColor
+            : _textColor;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Material(
-        color: selected ? primaryColor.withOpacity(0.10) : Colors.transparent,
+        color: selected ? _primaryColor.withOpacity(0.10) : Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
+          splashColor: _primaryColor.withOpacity(0.12),
+          highlightColor: _primaryColor.withOpacity(0.04),
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(
@@ -464,7 +496,7 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
                       'Pipeline',
                       leads.length.toString(),
                       Icons.groups_rounded,
-                      primaryColor,
+                      _primaryColor,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -500,15 +532,15 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [primaryColor, accentColor],
+          colors: [_primaryColor, accentColor],
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.24),
+            color: _primaryColor.withOpacity(0.24),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -598,9 +630,9 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE7EAF2)),
+        border: Border.all(color: _textColor.withOpacity(0.10)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -620,17 +652,17 @@ class _FinanceTeamScreenState extends ConsumerState<FinanceTeamScreen> {
           const SizedBox(height: 14),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 27,
               fontWeight: FontWeight.bold,
-              color: textColor,
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 3),
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.black54,
+            style: TextStyle(
+              color: _textColor.withOpacity(0.55),
               fontWeight: FontWeight.w600,
             ),
           ),

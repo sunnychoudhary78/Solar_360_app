@@ -8,7 +8,6 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../core/utils/upload_url.dart';
 import '../../../core/widgets/app_message.dart';
 import '../models/lead_model.dart';
 import '../providers/lead_provider.dart';
@@ -114,7 +113,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     'Other',
   ];
 
-  final _formKey = GlobalKey<FormState>();
+  late final GlobalKey<FormState> _formKey;
 
   final fullName = TextEditingController();
   final mobile = TextEditingController();
@@ -160,15 +159,22 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   String? bankClearPhotoPath;
   String? chequePassbookPath;
 
-  final List<TitledLocalFile> additionalImages = [];
-  final List<TitledLocalFile> additionalDocs = [];
+  List<TitledLocalFile> additionalImages = [];
+  List<TitledLocalFile> additionalDocs = [];
 
   bool isLoading = false;
   bool isFetchingLocation = false;
 
+  bool get _isBasicCreate => widget.mode == LeadFormMode.basicCreate;
+  bool get _isCompleteDetails => widget.mode == LeadFormMode.completeDetails;
+
   @override
   void initState() {
     super.initState();
+
+    _formKey = GlobalKey<FormState>(
+      debugLabel: 'lead_form_${widget.mode}_${widget.existingLead?.id ?? 'new'}',
+    );
 
     final lead = widget.existingLead;
 
@@ -206,16 +212,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       source = lead.source.isNotEmpty ? lead.source : source;
       priority = lead.priority.isNotEmpty ? lead.priority : priority;
 
-      if (lead.bankAccountName.trim().toLowerCase() == 'current') {
+      final accountType = lead.bankAccountName.trim().toLowerCase();
+      if (accountType == 'current') {
         bankAccountType = 'Current';
-      } else if (lead.bankAccountName.trim().toLowerCase() == 'saving') {
+      } else if (accountType == 'saving') {
         bankAccountType = 'Saving';
       }
     }
 
     if (_isBasicCreate) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _fetchCurrentLocation();
+        if (mounted) _fetchCurrentLocation();
       });
     }
   }
@@ -254,37 +261,43 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     super.dispose();
   }
 
-  bool get _isBasicCreate => widget.mode == LeadFormMode.basicCreate;
-  bool get _isCompleteDetails => widget.mode == LeadFormMode.completeDetails;
-
   String? _textOrNull(TextEditingController controller) {
     final value = controller.text.trim();
-    if (value.isEmpty) return null;
-    return value;
+    return value.isEmpty ? null : value;
+  }
+
+  bool isImagePath(String? path) {
+    if (path == null) return false;
+    final p = path.toLowerCase();
+    return p.endsWith('.jpg') ||
+        p.endsWith('.jpeg') ||
+        p.endsWith('.png') ||
+        p.endsWith('.webp');
+  }
+
+  bool isPdfPath(String path) => path.toLowerCase().endsWith('.pdf');
+
+  String fileDisplayName(String path) {
+    final parts = path.split(RegExp(r'[\\/]'));
+    return parts.isEmpty ? path : parts.last;
   }
 
   String? _validateFullName(String? value) {
     final v = value?.trim() ?? '';
-
     if (v.isEmpty) return 'Full name is required';
-    if (v.length < 3) return 'Full name minimum 3 letters hona chahiye';
-
+    if (v.length < 3) return 'Full name must be at least 3 letters';
     if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
-      return 'Full name me sirf alphabets allowed hain';
+      return 'Only alphabets are allowed in full name';
     }
-
     return null;
   }
 
   String? _validateMobile(String? value) {
     final v = value?.trim() ?? '';
-
     if (v.isEmpty) return 'Mobile number is required';
-
     if (!RegExp(r'^[6-9]\d{9}$').hasMatch(v)) {
-      return 'Valid 10 digit mobile number enter karo';
+      return 'Please enter a valid 10-digit mobile number';
     }
-
     return null;
   }
 
@@ -296,93 +309,64 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   String? _validateEmail(String? value) {
     final v = value?.trim() ?? '';
-
     if (v.isEmpty) return null;
-
-    if (!RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$').hasMatch(v)) {
-      return 'Email sirf @gmail.com hona chahiye';
+    if (!RegExp(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+        .hasMatch(v)) {
+      return 'Please enter a valid email address';
     }
-
     return null;
   }
 
   String? _validateOptionalAlpha(String? value, String label) {
     final v = value?.trim() ?? '';
-
     if (v.isEmpty) return null;
-
     if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
-      return '$label me sirf alphabets allowed hain';
+      return 'Only alphabets are allowed in $label';
     }
-
     return null;
   }
 
   String? _validatePincode(String? value) {
     final v = value?.trim() ?? '';
-
     if (v.isEmpty) return null;
-
     if (!RegExp(r'^\d{6}$').hasMatch(v)) {
-      return 'Pincode 6 digits ka hona chahiye';
+      return 'Please enter a valid 6-digit pincode';
     }
-
     return null;
   }
 
   String? _validateNumber(String? value, String label) {
     final v = value?.trim() ?? '';
-
     if (v.isEmpty) return null;
-
     if (!RegExp(r'^-?\d+(\.\d+)?$').hasMatch(v)) {
-      return '$label valid number hona chahiye';
+      return 'Please enter a valid $label';
     }
-
     return null;
   }
 
-  String? _validateMaxDigitNumber(
-    String? value,
-    String label,
-    int maxLength,
-  ) {
+  String? _validateMaxDigitNumber(String? value, String label, int maxLength) {
     final v = value?.trim() ?? '';
-
     if (v.isEmpty) return null;
-
-    if (!RegExp(r'^\d+$').hasMatch(v)) {
-      return '$label only numeric hona chahiye';
-    }
-
-    if (v.length > maxLength) {
-      return '$label max $maxLength digits ka hona chahiye';
-    }
-
+    if (!RegExp(r'^\d+$').hasMatch(v)) return '$label must be numeric only';
+    if (v.length > maxLength) return '$label must be maximum $maxLength digits';
     return null;
   }
 
   String? _validateAccount(String? value) {
     final v = value?.trim() ?? '';
-
     if (v.isEmpty) return null;
-
     if (!RegExp(r'^\d{9,18}$').hasMatch(v)) {
-      return 'Account number 9 to 18 digits hona chahiye';
+      return 'Account number must be 9 to 18 digits';
     }
-
     return null;
   }
 
   String? _validateIfsc(String? value) {
     final v = value?.trim().toUpperCase() ?? '';
-
     if (v.isEmpty) return null;
-
     if (!RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(v)) {
-      return 'Valid IFSC code enter karo';
+      return 'Please enter a valid IFSC code';
     }
-
     return null;
   }
 
@@ -390,43 +374,32 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     if (isFetchingLocation) return;
 
     try {
-      setState(() => isFetchingLocation = true);
+      if (mounted) setState(() => isFetchingLocation = true);
 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
       if (!serviceEnabled) {
         if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enable location service')),
-        );
+        showAppMessage(context, 'Please enable location service', isError: true);
         return;
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
-
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
 
       if (permission == LocationPermission.denied) {
         if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission denied')),
-        );
+        showAppMessage(context, 'Location permission denied', isError: true);
         return;
       }
 
       if (permission == LocationPermission.deniedForever) {
         if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Location permission permanently denied. Please enable it from app settings.',
-            ),
-          ),
+        showAppMessage(
+          context,
+          'Location permission permanently denied. Please enable it from app settings.',
+          isError: true,
         );
         return;
       }
@@ -445,7 +418,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
-
         geoLocation.text = [
           place.name,
           place.street,
@@ -461,21 +433,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       if (mounted) setState(() {});
     } catch (e) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to fetch location: $e')),
-      );
+      showAppMessage(context, 'Unable to fetch location: $e', isError: true);
     } finally {
-      if (mounted) {
-        setState(() => isFetchingLocation = false);
-      }
+      if (mounted) setState(() => isFetchingLocation = false);
     }
   }
 
   Future<void> saveLead() async {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) {
+    final formState = _formKey.currentState;
+    if (formState == null || !formState.validate()) {
       showAppMessage(context, 'Please fix validation errors', isError: true);
       return;
     }
@@ -515,7 +483,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     };
 
     try {
-      setState(() => isLoading = true);
+      if (mounted) setState(() => isLoading = true);
 
       final repo = ref.read(leadRepositoryProvider);
 
@@ -525,15 +493,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           data,
           singleFilePaths: {
             if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
-            if (bankClearPhotoPath != null)
-              'bank_clear_photo': bankClearPhotoPath!,
+            if (bankClearPhotoPath != null) 'bank_clear_photo': bankClearPhotoPath!,
             if (chequePassbookPath != null)
               'cheque_passbook_copy': chequePassbookPath!,
           },
-          additionalImageEntries:
-              additionalImages.map((item) => item.toPayload()).toList(),
-          additionalDocumentEntries:
-              additionalDocs.map((item) => item.toPayload()).toList(),
+          additionalImageEntries: additionalImages.map((e) => e.toPayload()).toList(),
+          additionalDocumentEntries: additionalDocs.map((e) => e.toPayload()).toList(),
         );
       } else if (_isBasicCreate) {
         final basicData = <String, dynamic>{
@@ -550,7 +515,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           'priority': data['priority'],
           'notes': data['notes'],
         };
-
         await repo.createLead(basicData);
       } else {
         await repo.createLead(
@@ -560,20 +524,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
             if (chequePassbookPath != null)
               'cheque_passbook_copy': chequePassbookPath!,
           },
-          additionalImageEntries:
-              additionalImages.map((item) => item.toPayload()).toList(),
-          additionalDocumentEntries:
-              additionalDocs.map((item) => item.toPayload()).toList(),
+          additionalImageEntries: additionalImages.map((e) => e.toPayload()).toList(),
+          additionalDocumentEntries: additionalDocs.map((e) => e.toPayload()).toList(),
         );
       }
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ref.invalidate(allLeadsProvider);
-        }
-      });
-
       if (!mounted) return;
+
+      ref.invalidate(allLeadsProvider);
 
       showAppMessage(
         context,
@@ -585,12 +543,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-
       showAppMessage(context, 'Failed to save lead: $e', isError: true);
     } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -604,10 +559,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     TextCapitalization textCapitalization = TextCapitalization.none,
     bool readOnly = false,
     Widget? suffixIcon,
+    String? suffixText,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
+        key: ValueKey('field_$label'),
         controller: controller,
         enabled: !isLoading,
         readOnly: readOnly,
@@ -620,6 +577,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         decoration: InputDecoration(
           labelText: label,
           suffixIcon: suffixIcon,
+          suffixText: suffixText,
+          suffixStyle: const TextStyle(
+            color: Colors.black54,
+            fontWeight: FontWeight.w700,
+          ),
           filled: true,
           fillColor: bgColor,
           errorMaxLines: 2,
@@ -639,12 +601,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required List<String> items,
     required String hintText,
   }) {
-    final currentValue =
-        items.contains(controller.text.trim()) ? controller.text.trim() : null;
+    final textValue = controller.text.trim();
+    final currentValue = items.contains(textValue) ? textValue : null;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
+        key: ValueKey('dropdown_controller_$label'),
         value: currentValue,
         isExpanded: true,
         decoration: InputDecoration(
@@ -655,12 +618,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
         items: items
-            .map(
-              (item) => DropdownMenuItem<String>(
-                value: item,
-                child: Text(item),
-              ),
-            )
+            .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
             .toList(),
         onChanged: isLoading
             ? null
@@ -678,10 +636,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required List<String> items,
     required ValueChanged<String?> onChanged,
   }) {
+    final safeValue = items.contains(value) ? value : items.first;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
-        value: value,
+        key: ValueKey('dropdown_$label'),
+        value: safeValue,
         isExpanded: true,
         validator: (v) {
           if (v == null || v.trim().isEmpty) return '$label is required';
@@ -694,12 +655,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
         items: items
-            .map(
-              (item) => DropdownMenuItem<String>(
-                value: item,
-                child: Text(item),
-              ),
-            )
+            .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
             .toList(),
         onChanged: isLoading ? null : onChanged,
       ),
@@ -733,13 +689,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         border: Border.all(color: const Color(0xFFE4E1EA)),
       ),
       child: SwitchListTile(
+        key: ValueKey('switch_$title'),
         value: value,
         title: Text(
           title,
-          style: const TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: textColor, fontWeight: FontWeight.w600),
         ),
         activeColor: primaryColor,
         onChanged: isLoading ? null : onChanged,
@@ -805,22 +759,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   Future<void> _captureImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
-
     final file = await _imagePicker.pickImage(source: ImageSource.camera);
-    if (file == null) return;
-    if (!mounted) return;
-
-    setState(() => onPicked(file.path));
+    if (file == null || !mounted) return;
+    onPicked(file.path);
   }
 
   Future<void> _pickImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
-
     final file = await _imagePicker.pickImage(source: ImageSource.gallery);
-    if (file == null) return;
-    if (!mounted) return;
-
-    setState(() => onPicked(file.path));
+    if (file == null || !mounted) return;
+    onPicked(file.path);
   }
 
   Future<String?> _pickSingleFile({required bool imageOnly}) async {
@@ -847,152 +795,150 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required String uploadLabel,
     required String defaultTitlePrefix,
     required bool imageOnly,
-    required List<TitledLocalFile> target,
+    required bool addToImages,
   }) async {
+    final currentLength = addToImages ? additionalImages.length : additionalDocs.length;
     final titleController = TextEditingController(
-      text: '$defaultTitlePrefix ${target.length + 1}',
+      text: '$defaultTitlePrefix ${currentLength + 1}',
     );
 
     String? selectedPath;
 
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(dialogTitle),
-              content: SingleChildScrollView(
-                child: SizedBox(
-                  width: double.maxFinite,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: titleController,
-                        decoration: InputDecoration(
-                          labelText: titleLabel,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      InkWell(
-                        onTap: () async {
-                          FocusScope.of(context).unfocus();
-
-                          final path =
-                              await _pickSingleFile(imageOnly: imageOnly);
-
-                          if (path == null) return;
-                          if (!mounted) return;
-
-                          setDialogState(() => selectedPath = path);
-                        },
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          height: 130,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: const Color(0xFFE4E1EA),
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (innerContext, setDialogState) {
+              return AlertDialog(
+                title: Text(dialogTitle),
+                content: SingleChildScrollView(
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextField(
+                          controller: titleController,
+                          decoration: InputDecoration(
+                            labelText: titleLabel,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: selectedPath == null
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      imageOnly
-                                          ? Icons.add_photo_alternate_outlined
-                                          : Icons.upload_file_outlined,
-                                      color: primaryColor,
-                                      size: 38,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(uploadLabel),
-                                  ],
-                                )
-                              : ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: isImagePath(selectedPath!)
-                                      ? Image.file(
-                                          File(selectedPath!),
-                                          fit: BoxFit.cover,
-                                          width: double.infinity,
-                                        )
-                                      : _docPreview(selectedPath!),
-                                ),
                         ),
-                      ),
-                      if (selectedPath != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          fileDisplayName(selectedPath!),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 12),
+                        const SizedBox(height: 14),
+                        InkWell(
+                          onTap: () async {
+                            FocusScope.of(innerContext).unfocus();
+                            final path = await _pickSingleFile(imageOnly: imageOnly);
+                            if (path == null || !innerContext.mounted) return;
+                            setDialogState(() => selectedPath = path);
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            height: 130,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: bgColor,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFE4E1EA)),
+                            ),
+                            child: selectedPath == null
+                                ? Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        imageOnly
+                                            ? Icons.add_photo_alternate_outlined
+                                            : Icons.upload_file_outlined,
+                                        color: primaryColor,
+                                        size: 38,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(uploadLabel),
+                                    ],
+                                  )
+                                : ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: isImagePath(selectedPath)
+                                        ? Image.file(
+                                            File(selectedPath!),
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                          )
+                                        : _docPreview(selectedPath!),
+                                  ),
+                          ),
                         ),
+                        if (selectedPath != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            fileDisplayName(selectedPath!),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    FocusScope.of(context).unfocus();
-                    Navigator.pop(dialogContext);
-                  },
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primaryColor,
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      FocusScope.of(innerContext).unfocus();
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
                   ),
-                  onPressed: () {
-                    FocusScope.of(context).unfocus();
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: primaryColor),
+                    onPressed: () {
+                      FocusScope.of(innerContext).unfocus();
 
-                    final title = titleController.text.trim();
+                      final title = titleController.text.trim();
+                      if (title.isEmpty) {
+                        ScaffoldMessenger.of(innerContext).showSnackBar(
+                          SnackBar(content: Text('$titleLabel is required')),
+                        );
+                        return;
+                      }
 
-                    if (title.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('$titleLabel is required')),
-                      );
-                      return;
-                    }
+                      if (selectedPath == null || selectedPath!.trim().isEmpty) {
+                        ScaffoldMessenger.of(innerContext).showSnackBar(
+                          SnackBar(content: Text('$uploadLabel is required')),
+                        );
+                        return;
+                      }
 
-                    if (selectedPath == null || selectedPath!.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('$uploadLabel is required')),
-                      );
-                      return;
-                    }
+                      final item = TitledLocalFile(title: title, path: selectedPath!);
 
-                    setState(() {
-                      target.add(
-                        TitledLocalFile(
-                          title: title,
-                          path: selectedPath!,
-                        ),
-                      );
-                    });
+                      if (mounted) {
+                        setState(() {
+                          if (addToImages) {
+                            additionalImages = [...additionalImages, item];
+                          } else {
+                            additionalDocs = [...additionalDocs, item];
+                          }
+                        });
+                      }
 
-                    Navigator.pop(dialogContext);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Add'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      titleController.dispose();
+    }
   }
 
   Widget _singleImagePicker({
@@ -1004,6 +950,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     final isImage = hasFile && isImagePath(value);
 
     return Container(
+      key: ValueKey('single_picker_$title'),
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1021,13 +968,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: textColor)),
           const SizedBox(height: 10),
           if (hasFile)
             Stack(
@@ -1038,7 +979,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     height: 160,
                     width: double.infinity,
                     child: isImage
-                        ? Image.file(File(value), fit: BoxFit.cover)
+                        ? Image.file(
+                            File(value),
+                            key: ValueKey('single_image_$title$value'),
+                            fit: BoxFit.cover,
+                          )
                         : _docPreview(value),
                   ),
                 ),
@@ -1050,14 +995,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     radius: 18,
                     child: IconButton(
                       padding: EdgeInsets.zero,
-                      icon: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      onPressed: isLoading
-                          ? null
-                          : () => setState(() => onChanged(null)),
+                      icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                      onPressed: isLoading ? null : () => onChanged(null),
                     ),
                   ),
                 ),
@@ -1075,16 +1014,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               child: const Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.add_photo_alternate_outlined,
-                    size: 40,
-                    color: primaryColor,
-                  ),
+                  Icon(Icons.add_photo_alternate_outlined, size: 40, color: primaryColor),
                   SizedBox(height: 6),
-                  Text(
-                    'No file selected',
-                    style: TextStyle(color: Colors.black45),
-                  ),
+                  Text('No file selected', style: TextStyle(color: Colors.black45)),
                 ],
               ),
             ),
@@ -1117,6 +1049,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     final pdf = isPdfPath(path);
 
     return Container(
+      key: ValueKey('doc_preview_$path'),
       color: const Color(0xFFEEF0F8),
       child: Padding(
         padding: const EdgeInsets.all(6),
@@ -1135,10 +1068,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
               ),
             ),
           ],
@@ -1156,6 +1086,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     bool imagesOnly = false,
   }) {
     return Container(
+      key: ValueKey('multi_picker_$title'),
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1171,10 +1102,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               Expanded(
                 child: Text(
                   '$title (${files.length})',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: textColor),
                 ),
               ),
               FilledButton.icon(
@@ -1197,9 +1125,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 border: Border.all(color: const Color(0xFFE4E1EA)),
               ),
               child: Text(
-                imagesOnly
-                    ? 'No additional images added.'
-                    : 'No extra documents added.',
+                imagesOnly ? 'No additional images added.' : 'No extra documents added.',
                 style: const TextStyle(color: Colors.black45),
               ),
             ),
@@ -1215,6 +1141,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 final image = isImagePath(item.path);
 
                 return SizedBox(
+                  key: ValueKey('${title}_${item.title}_${item.path}_$idx'),
                   width: 120,
                   height: 178,
                   child: Column(
@@ -1229,6 +1156,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               child: image
                                   ? Image.file(
                                       File(item.path),
+                                      key: ValueKey('image_${item.path}_$idx'),
                                       fit: BoxFit.cover,
                                     )
                                   : _docPreview(item.path),
@@ -1242,11 +1170,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               child: const CircleAvatar(
                                 radius: 12,
                                 backgroundColor: Colors.black54,
-                                child: Icon(
-                                  Icons.close,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
+                                child: Icon(Icons.close, size: 14, color: Colors.white),
                               ),
                             ),
                           ),
@@ -1257,19 +1181,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                         item.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
                       ),
                       SizedBox(
                         height: 34,
                         child: TextButton(
                           onPressed: isLoading ? null : () => onReplace(idx),
-                          child: const Text(
-                            'Replace',
-                            style: TextStyle(fontSize: 11),
-                          ),
+                          child: const Text('Replace', style: TextStyle(fontSize: 11)),
                         ),
                       ),
                     ],
@@ -1283,17 +1201,47 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
   }
 
-  Future<void> _replaceFileAt(
-    List<TitledLocalFile> target,
-    int index, {
-    required bool imageOnly,
-  }) async {
-    final path = await _pickSingleFile(imageOnly: imageOnly);
-    if (path == null) return;
-    if (!mounted) return;
+  Future<void> _replaceImageAt(int index) async {
+    final path = await _pickSingleFile(imageOnly: true);
+    if (path == null || !mounted) return;
 
     setState(() {
-      target[index] = target[index].copyWith(path: path);
+      if (index >= 0 && index < additionalImages.length) {
+        final updated = List<TitledLocalFile>.from(additionalImages);
+        updated[index] = updated[index].copyWith(path: path);
+        additionalImages = updated;
+      }
+    });
+  }
+
+  Future<void> _replaceDocAt(int index) async {
+    final path = await _pickSingleFile(imageOnly: false);
+    if (path == null || !mounted) return;
+
+    setState(() {
+      if (index >= 0 && index < additionalDocs.length) {
+        final updated = List<TitledLocalFile>.from(additionalDocs);
+        updated[index] = updated[index].copyWith(path: path);
+        additionalDocs = updated;
+      }
+    });
+  }
+
+  void _removeImageAt(int index) {
+    if (index < 0 || index >= additionalImages.length) return;
+    setState(() {
+      final updated = List<TitledLocalFile>.from(additionalImages);
+      updated.removeAt(index);
+      additionalImages = updated;
+    });
+  }
+
+  void _removeDocAt(int index) {
+    if (index < 0 || index >= additionalDocs.length) return;
+    setState(() {
+      final updated = List<TitledLocalFile>.from(additionalDocs);
+      updated.removeAt(index);
+      additionalDocs = updated;
     });
   }
 
@@ -1307,10 +1255,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         elevation: 0,
         title: Text(
           _isCompleteDetails ? 'Complete Lead Details' : 'Create Lead (Basic)',
-          style: const TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(color: textColor, fontWeight: FontWeight.bold),
         ),
         iconTheme: const IconThemeData(color: textColor),
       ),
@@ -1325,13 +1270,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 'Full Name *',
                 fullName,
                 validator: _validateFullName,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                ],
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]'))],
                 textCapitalization: TextCapitalization.words,
               ),
               input(
-                'Mobile *',
+                'Mobile Number *',
                 mobile,
                 keyboardType: TextInputType.phone,
                 validator: _validateMobile,
@@ -1341,7 +1284,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ],
               ),
               input(
-                'Email',
+                'Email Address',
                 email,
                 keyboardType: TextInputType.emailAddress,
                 validator: _validateEmail,
@@ -1351,9 +1294,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 'City',
                 city,
                 validator: (v) => _validateOptionalAlpha(v, 'City'),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                ],
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]'))],
                 textCapitalization: TextCapitalization.words,
               ),
               controllerDropdown(
@@ -1373,15 +1314,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ],
               ),
               input(
-                'KW',
+                'System Size (kW)',
                 kw,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: (v) => _validateNumber(v, 'KW'),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                ],
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) => _validateNumber(v, 'System Size'),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
               ),
               if (!_isBasicCreate) ...[
                 sectionTitle('Connection Details'),
@@ -1389,11 +1326,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   'CA Number',
                   caNumber,
                   keyboardType: TextInputType.number,
-                  validator: (v) => _validateMaxDigitNumber(
-                    v,
-                    'CA Number',
-                    10,
-                  ),
+                  validator: (v) => _validateMaxDigitNumber(v, 'CA Number', 10),
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(10),
@@ -1403,11 +1336,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   'K Number',
                   kNumber,
                   keyboardType: TextInputType.number,
-                  validator: (v) => _validateMaxDigitNumber(
-                    v,
-                    'K Number',
-                    20,
-                  ),
+                  validator: (v) => _validateMaxDigitNumber(v, 'K Number', 20),
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(20),
@@ -1417,11 +1346,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   'Reference Number',
                   referenceNumber,
                   keyboardType: TextInputType.number,
-                  validator: (v) => _validateMaxDigitNumber(
-                    v,
-                    'Reference Number',
-                    10,
-                  ),
+                  validator: (v) => _validateMaxDigitNumber(v, 'Reference Number', 10),
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(10),
@@ -1440,36 +1365,26 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   geoLocation,
                   suffixIcon: IconButton(
                     tooltip: 'Use Current Location',
-                    onPressed: isLoading || isFetchingLocation
-                        ? null
-                        : _fetchCurrentLocation,
+                    onPressed: isLoading || isFetchingLocation ? null : _fetchCurrentLocation,
                     icon: const Icon(Icons.my_location),
                   ),
                 ),
                 input(
                   'Latitude',
                   latitude,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                    signed: true,
-                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                   validator: (v) => _validateNumber(v, 'Latitude'),
                 ),
                 input(
                   'Longitude',
                   longitude,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                    signed: true,
-                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                   validator: (v) => _validateNumber(v, 'Longitude'),
                 ),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: isLoading || isFetchingLocation
-                        ? null
-                        : _fetchCurrentLocation,
+                    onPressed: isLoading || isFetchingLocation ? null : _fetchCurrentLocation,
                     icon: const Icon(Icons.my_location),
                     label: const Text('Use Current Location'),
                   ),
@@ -1523,13 +1438,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 dropdown(
                   label: 'Source',
                   value: source,
-                  items: const [
-                    'Website',
-                    'Referral',
-                    'Walk-in',
-                    'Call',
-                    'Other',
-                  ],
+                  items: const ['Website', 'Referral', 'Walk-in', 'Call', 'Other'],
                   onChanged: (value) {
                     if (value == null) return;
                     setState(() => source = value);
@@ -1549,15 +1458,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   'Available Shadow Free Area',
                   availableShadowFreeArea,
                   keyboardType: TextInputType.number,
-                  validator: (v) => _validateMaxDigitNumber(
-                    v,
-                    'Available Shadow Free Area',
-                    5,
-                  ),
+                  validator: (v) => _validateMaxDigitNumber(v, 'Available Shadow Free Area', 5),
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(5),
                   ],
+                  suffixText: 'sqmtr',
                 ),
                 input(
                   'Quotation Amount',
@@ -1568,11 +1474,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 input(
                   'Visited Employee Name',
                   visitedEmployeeName,
-                  validator: (v) =>
-                      _validateOptionalAlpha(v, 'Visited Employee Name'),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                  ],
+                  validator: (v) => _validateOptionalAlpha(v, 'Visited Employee Name'),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]'))],
                   textCapitalization: TextCapitalization.words,
                 ),
                 input(
@@ -1588,23 +1491,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 switchTile(
                   title: 'Roof Load Bearing Capacity',
                   value: roofLoadBearingCapacity,
-                  onChanged: (value) {
-                    setState(() => roofLoadBearingCapacity = value);
-                  },
+                  onChanged: (value) => setState(() => roofLoadBearingCapacity = value),
                 ),
                 switchTile(
                   title: 'Shadow Free Roof',
                   value: shadowFreeRoof,
-                  onChanged: (value) {
-                    setState(() => shadowFreeRoof = value);
-                  },
+                  onChanged: (value) => setState(() => shadowFreeRoof = value),
                 ),
                 switchTile(
                   title: 'Vendor Visited Site',
                   value: vendorVisitedSite,
-                  onChanged: (value) {
-                    setState(() => vendorVisitedSite = value);
-                  },
+                  onChanged: (value) => setState(() => vendorVisitedSite = value),
                 ),
                 sectionTitle('Notes'),
                 input('Notes', notes, maxLines: 4),
@@ -1629,11 +1526,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     uploadLabel: 'Choose Image',
                     defaultTitlePrefix: 'Image',
                     imageOnly: true,
-                    target: additionalImages,
+                    addToImages: true,
                   ),
-                  onRemove: (i) => setState(() => additionalImages.removeAt(i)),
-                  onReplace: (i) =>
-                      _replaceFileAt(additionalImages, i, imageOnly: true),
+                  onRemove: _removeImageAt,
+                  onReplace: _replaceImageAt,
                 ),
                 _multiFilePicker(
                   title: 'Additional Documents',
@@ -1645,11 +1541,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     uploadLabel: 'Choose File',
                     defaultTitlePrefix: 'Document',
                     imageOnly: false,
-                    target: additionalDocs,
+                    addToImages: false,
                   ),
-                  onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
-                  onReplace: (i) =>
-                      _replaceFileAt(additionalDocs, i, imageOnly: false),
+                  onRemove: _removeDocAt,
+                  onReplace: _replaceDocAt,
                 ),
               ],
               const SizedBox(height: 24),
@@ -1661,18 +1556,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                   ),
                   child: isLoading
                       ? const SizedBox(
                           height: 26,
                           width: 26,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 3,
-                          ),
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
                         )
                       : Text(
                           _isCompleteDetails
@@ -1680,10 +1570,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               : _isBasicCreate
                                   ? 'Submit to Support'
                                   : 'Save Lead',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                 ),
               ),

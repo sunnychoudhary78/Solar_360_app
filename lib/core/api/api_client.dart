@@ -8,9 +8,9 @@ final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 8),
-      receiveTimeout: const Duration(seconds: 8),
-      sendTimeout: const Duration(seconds: 8),
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+      sendTimeout: const Duration(seconds: 15),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -31,11 +31,9 @@ final dioProvider = Provider<Dio>((ref) {
 
         handler.next(options);
       },
-      onError: (error, handler) async {
-        if (error.response?.statusCode == 401) {
-          await TokenStorage.clear();
-        }
-
+      onError: (error, handler) {
+        // Yahan token clear mat karo.
+        // Session clear ka decision AuthRepository.restoreSession/logout karega.
         handler.next(error);
       },
     ),

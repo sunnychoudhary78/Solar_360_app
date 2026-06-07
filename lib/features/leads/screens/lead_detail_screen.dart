@@ -206,18 +206,17 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
         _lead = _lead.copyWith(status: nextStatus);
         allowedNext = [];
       });
+
       ref.invalidate(allLeadsProvider);
 
       await _reloadSilently();
 
       if (!mounted) return;
-
       showAppMessage(context, 'Status updated to $nextStatus');
     } catch (e) {
       if (!mounted) return;
 
       setState(() => loading = false);
-
       showAppMessage(context, e.toString(), isError: true);
     }
   }
@@ -249,7 +248,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       await _reloadSilently();
 
       if (!mounted) return;
-
       showAppMessage(context, 'Note added successfully');
     } catch (e) {
       if (!mounted) return;
@@ -291,7 +289,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       await _reloadSilently();
 
       if (!mounted) return;
-
       showAppMessage(context, 'Documents uploaded successfully');
     } catch (e) {
       if (!mounted) return;
@@ -356,7 +353,6 @@ registration_time=${result.regTime.trim()}
       await _reloadSilently();
 
       if (!mounted) return;
-
       showAppMessage(context, 'Registration details saved');
     } catch (e) {
       if (!mounted) return;
@@ -449,6 +445,19 @@ registration_time=${result.regTime.trim()}
     final showEditRegistrationButton =
         canSupportManageRegistration && _hasRegistrationDetailsFrontend;
 
+    final isInstallationUser =
+        normalizedAppRole == 'installation' || normalizedRoleName == 'installation';
+
+    final filteredNextStatuses = isInstallationUser
+        ? nextStatuses
+            .where(
+              (status) =>
+                  status.trim().toLowerCase() != 'installation done' &&
+                  status.trim().toLowerCase() != 'mark installation done',
+            )
+            .toList()
+        : nextStatuses;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
       appBar: AppBar(
@@ -491,7 +500,7 @@ registration_time=${result.regTime.trim()}
                         : _lead.workflowStep,
                   ),
                   const SizedBox(height: 14),
-                  if (auth.appRole == 'installation') ...[
+                  if (isInstallationUser) ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _openInstallationForm,
                       icon: const Icon(Icons.build_circle_outlined),
@@ -577,7 +586,10 @@ registration_time=${result.regTime.trim()}
                         'DCR Certificate No',
                         _installationValue('dcr_certificate_no'),
                       ),
-                      _row('Application No', _installationValue('application_no')),
+                      _row(
+                        'Application No',
+                        _installationValue('application_no'),
+                      ),
                       _row(
                         'Stamp Paper Rs.100',
                         _installationValue('stamp_paper_rs_100'),
@@ -596,7 +608,7 @@ registration_time=${result.regTime.trim()}
                       ),
                       _row(
                         'No. Of Solar Panels',
-                        _installationValue('number_of_solar_panel'),
+                        _installationValue('number_of_solar_panels'),
                       ),
                       _row(
                         'Install Net Meter Date',
@@ -608,11 +620,15 @@ registration_time=${result.regTime.trim()}
                       ),
                       _row('Invoice No', _installationValue('invoice_no')),
                       const Divider(),
-                      _row('S.P. No. 1', _installationValue('sp_no_1')),
-                      _row('S.P. No. 2', _installationValue('sp_no_2')),
-                      _row('S.P. No. 3', _installationValue('sp_no_3')),
-                      _row('S.P. No. 4', _installationValue('sp_no_4')),
-                      _row('S.P. No. 5', _installationValue('sp_no_5')),
+                      _row(
+                        'Inverter Serial Number',
+                        _installationValue('inverter_serial_number'),
+                      ),
+                      _row(
+                        'Battery Serial Number',
+                        _installationValue('battery_serial_number'),
+                      ),
+                      _spNumbersRows(),
                     ]),
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
@@ -655,7 +671,7 @@ registration_time=${result.regTime.trim()}
                       ),
                     ),
                   ],
-                  if (nextStatuses.isNotEmpty) ...[
+                  if (filteredNextStatuses.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     const Text(
                       'Status actions',
@@ -665,7 +681,7 @@ registration_time=${result.regTime.trim()}
                       ),
                     ),
                     const SizedBox(height: 10),
-                    ...nextStatuses.map((status) {
+                    ...filteredNextStatuses.map((status) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: SizedBox(
@@ -682,7 +698,7 @@ registration_time=${result.regTime.trim()}
                               ),
                             ),
                             child: Text(
-                              nextStatuses.length == 1
+                              filteredNextStatuses.length == 1
                                   ? LeadWorkflow.nextActionLabel(_lead.status)
                                   : status,
                               style:
@@ -716,6 +732,45 @@ registration_time=${result.regTime.trim()}
     final d = _lead.installationDetails;
     if (d == null) return '';
     return d[key]?.toString() ?? '';
+  }
+
+  Widget _spNumbersRows() {
+    final d = _lead.installationDetails;
+    if (d == null) return const SizedBox.shrink();
+
+    final raw = d['sp_numbers'];
+
+    if (raw is List && raw.isNotEmpty) {
+      final rows = <Widget>[];
+      for (int i = 0; i < raw.length; i++) {
+        final value = raw[i]?.toString() ?? '';
+        if (value.trim().isNotEmpty) {
+          rows.add(_row('S.P. No. ${i + 1}', value));
+        }
+      }
+
+      if (rows.isEmpty) return const SizedBox.shrink();
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: rows,
+      );
+    }
+
+    final rows = <Widget>[];
+    for (int i = 1; i <= 20; i++) {
+      final value = d['sp_no_$i']?.toString() ?? '';
+      if (value.trim().isNotEmpty) {
+        rows.add(_row('S.P. No. $i', value));
+      }
+    }
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
+    );
   }
 
   Widget _headerCard(String customerName) {
@@ -903,8 +958,8 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
 
   final ImagePicker _imagePicker = ImagePicker();
 
-  final List<TitledLocalFile> additionalImages = [];
-  final List<TitledLocalFile> additionalDocs = [];
+  List<TitledLocalFile> additionalImages = [];
+  List<TitledLocalFile> additionalDocs = [];
 
   bool saving = false;
 
@@ -949,152 +1004,171 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
     required String uploadLabel,
     required String defaultTitlePrefix,
     required bool imageOnly,
-    required List<TitledLocalFile> target,
+    required bool addToImages,
   }) async {
+    final targetLength =
+        addToImages ? additionalImages.length : additionalDocs.length;
+
     final titleController = TextEditingController(
-      text: '$defaultTitlePrefix ${target.length + 1}',
+      text: '$defaultTitlePrefix ${targetLength + 1}',
     );
 
     String? selectedPath;
 
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(dialogTitle),
-              content: SingleChildScrollView(
-                child: SizedBox(
-                  width: double.maxFinite,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: titleController,
-                        decoration: InputDecoration(
-                          labelText: titleLabel,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      InkWell(
-                        onTap: () async {
-                          final path =
-                              await _pickSingleFile(imageOnly: imageOnly);
-
-                          if (path == null) return;
-                          if (!mounted) return;
-
-                          setDialogState(() {
-                            selectedPath = path;
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          height: 130,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: const Color(0xFFE4E1EA),
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (innerContext, setDialogState) {
+              return AlertDialog(
+                title: Text(dialogTitle),
+                content: SingleChildScrollView(
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextField(
+                          controller: titleController,
+                          decoration: InputDecoration(
+                            labelText: titleLabel,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: selectedPath == null
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      imageOnly
-                                          ? Icons.add_photo_alternate_outlined
-                                          : Icons.upload_file_outlined,
-                                      color: primaryColor,
-                                      size: 38,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(uploadLabel),
-                                  ],
-                                )
-                              : ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: _isImagePath(selectedPath!)
-                                      ? Image.file(
-                                          File(selectedPath!),
-                                          fit: BoxFit.cover,
-                                          width: double.infinity,
-                                        )
-                                      : _docPreview(selectedPath!),
-                                ),
                         ),
-                      ),
-                      if (selectedPath != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          _fileDisplayName(selectedPath!),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 12),
+                        const SizedBox(height: 14),
+                        InkWell(
+                          onTap: () async {
+                            final path =
+                                await _pickSingleFile(imageOnly: imageOnly);
+
+                            if (path == null || !innerContext.mounted) return;
+
+                            setDialogState(() {
+                              selectedPath = path;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            height: 130,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: bgColor,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFFE4E1EA),
+                              ),
+                            ),
+                            child: selectedPath == null
+                                ? Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        imageOnly
+                                            ? Icons.add_photo_alternate_outlined
+                                            : Icons.upload_file_outlined,
+                                        color: primaryColor,
+                                        size: 38,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(uploadLabel),
+                                    ],
+                                  )
+                                : ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: _isImagePath(selectedPath!)
+                                        ? Image.file(
+                                            File(selectedPath!),
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                          )
+                                        : _docPreview(selectedPath!),
+                                  ),
+                          ),
                         ),
+                        if (selectedPath != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _fileDisplayName(selectedPath!),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    FocusScope.of(context).unfocus();
-                    Navigator.pop(dialogContext);
-                  },
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primaryColor,
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      FocusScope.of(innerContext).unfocus();
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
                   ),
-                  onPressed: () {
-                    FocusScope.of(context).unfocus();
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: primaryColor,
+                    ),
+                    onPressed: () {
+                      FocusScope.of(innerContext).unfocus();
 
-                    final title = titleController.text.trim();
+                      final title = titleController.text.trim();
 
-                    if (title.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('$titleLabel is required')),
+                      if (title.isEmpty) {
+                        ScaffoldMessenger.of(innerContext).showSnackBar(
+                          SnackBar(content: Text('$titleLabel is required')),
+                        );
+                        return;
+                      }
+
+                      if (selectedPath == null ||
+                          selectedPath!.trim().isEmpty) {
+                        ScaffoldMessenger.of(innerContext).showSnackBar(
+                          SnackBar(content: Text('$uploadLabel is required')),
+                        );
+                        return;
+                      }
+
+                      if (!mounted) return;
+
+                      final newItem = TitledLocalFile(
+                        title: title,
+                        path: selectedPath!,
                       );
-                      return;
-                    }
 
-                    if (selectedPath == null || selectedPath!.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('$uploadLabel is required')),
-                      );
-                      return;
-                    }
+                      setState(() {
+                        if (addToImages) {
+                          additionalImages = [
+                            ...additionalImages,
+                            newItem,
+                          ];
+                        } else {
+                          additionalDocs = [
+                            ...additionalDocs,
+                            newItem,
+                          ];
+                        }
+                      });
 
-                    setState(() {
-                      target.add(
-                        TitledLocalFile(
-                          title: title,
-                          path: selectedPath!,
-                        ),
-                      );
-                    });
-
-                    Navigator.pop(dialogContext);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Add'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      titleController.dispose();
+    }
   }
 
   Widget _docPreview(String path) {
@@ -1197,6 +1271,7 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                 final image = _isImagePath(item.path);
 
                 return SizedBox(
+                  key: ValueKey('${title}_${item.path}_${item.title}_$idx'),
                   width: 120,
                   height: 178,
                   child: Column(
@@ -1265,17 +1340,49 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
     );
   }
 
-  Future<void> _replaceFileAt(
-    List<TitledLocalFile> target,
-    int index, {
-    required bool imageOnly,
-  }) async {
-    final path = await _pickSingleFile(imageOnly: imageOnly);
-    if (path == null) return;
-    if (!mounted) return;
+  Future<void> _replaceImageAt(int index) async {
+    final path = await _pickSingleFile(imageOnly: true);
+    if (path == null || !mounted) return;
 
     setState(() {
-      target[index] = target[index].copyWith(path: path);
+      if (index >= 0 && index < additionalImages.length) {
+        final updated = List<TitledLocalFile>.from(additionalImages);
+        updated[index] = updated[index].copyWith(path: path);
+        additionalImages = updated;
+      }
+    });
+  }
+
+  Future<void> _replaceDocAt(int index) async {
+    final path = await _pickSingleFile(imageOnly: false);
+    if (path == null || !mounted) return;
+
+    setState(() {
+      if (index >= 0 && index < additionalDocs.length) {
+        final updated = List<TitledLocalFile>.from(additionalDocs);
+        updated[index] = updated[index].copyWith(path: path);
+        additionalDocs = updated;
+      }
+    });
+  }
+
+  void _removeImageAt(int index) {
+    if (index < 0 || index >= additionalImages.length) return;
+
+    setState(() {
+      final updated = List<TitledLocalFile>.from(additionalImages);
+      updated.removeAt(index);
+      additionalImages = updated;
+    });
+  }
+
+  void _removeDocAt(int index) {
+    if (index < 0 || index >= additionalDocs.length) return;
+
+    setState(() {
+      final updated = List<TitledLocalFile>.from(additionalDocs);
+      updated.removeAt(index);
+      additionalDocs = updated;
     });
   }
 
@@ -1314,11 +1421,10 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                   uploadLabel: 'Choose Image',
                   defaultTitlePrefix: 'Image',
                   imageOnly: true,
-                  target: additionalImages,
+                  addToImages: true,
                 ),
-                onRemove: (i) => setState(() => additionalImages.removeAt(i)),
-                onReplace: (i) =>
-                    _replaceFileAt(additionalImages, i, imageOnly: true),
+                onRemove: _removeImageAt,
+                onReplace: _replaceImageAt,
               ),
               _multiFilePicker(
                 title: 'Documents',
@@ -1330,11 +1436,10 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                   uploadLabel: 'Choose File',
                   defaultTitlePrefix: 'Document',
                   imageOnly: false,
-                  target: additionalDocs,
+                  addToImages: false,
                 ),
-                onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
-                onReplace: (i) =>
-                    _replaceFileAt(additionalDocs, i, imageOnly: false),
+                onRemove: _removeDocAt,
+                onReplace: _replaceDocAt,
               ),
             ],
           ),
@@ -1616,7 +1721,7 @@ class _RegistrationDialogState extends State<_RegistrationDialog> {
             foregroundColor: Colors.white,
           ),
           child: const Text('Save'),
-        ), 
+        ),
       ],
     );
   }
