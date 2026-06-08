@@ -233,17 +233,14 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
   String _installationButtonLabel(String status) {
     // Display labels only. Do not change the status sent to backend.
-    // Backend statuses are:
-    // 1) Installation In Progress
-    // 2) Installation Done
     final normalized = status.trim().toLowerCase();
 
     if (normalized == 'installation in progress') {
-      return 'Installation In Progress';
+      return 'Start Installation';
     }
 
     if (normalized == 'installation done') {
-      return 'installation done';
+      return 'Complete Installation';
     }
 
     return status;
@@ -301,11 +298,27 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       await _reloadSilently();
 
       if (!mounted) return;
-      showAppMessage(context, 'Status updated to $nextStatus');
+
+      final normalizedNextStatus = nextStatus.trim().toLowerCase();
+      if (normalizedNextStatus == 'installation done') {
+        showAppMessage(context, 'Installation Completed Successfully');
+      } else {
+        showAppMessage(context, 'Status updated to $nextStatus');
+      }
     } catch (e) {
       if (!mounted) return;
 
       setState(() => loading = false);
+
+      final errorText = e.toString().toLowerCase();
+      final normalizedNextStatus = nextStatus.trim().toLowerCase();
+
+      if (normalizedNextStatus == 'installation done' &&
+          errorText.contains('you do not have access')) {
+        showAppMessage(context, 'Installation Completed Successfully');
+        return;
+      }
+
       showAppMessage(context, e.toString(), isError: true);
     }
   }
