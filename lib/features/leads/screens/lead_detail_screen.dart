@@ -299,6 +299,9 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
+      // Force a rebuild in case fresh data is loaded with the same object.
+      setState(() {});
+
       final normalizedNextStatus = nextStatus.trim().toLowerCase();
       if (normalizedNextStatus == 'installation done') {
         showAppMessage(context, 'Installation Completed Successfully');
