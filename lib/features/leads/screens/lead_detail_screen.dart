@@ -10,6 +10,7 @@ import '../../../core/workflow/lead_workflow.dart';
 import '../screens/lead_form_screen.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../installation/screens/installation_form_screen.dart';
+import '../../installation/providers/installation_provider.dart';
 import '../models/lead_model.dart';
 import '../providers/lead_provider.dart';
 import '../utils/lead_files.dart';
@@ -160,6 +161,35 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   }
 
   List<String> _resolveNextStatuses(String roleName) {
+    final normalizedRole = roleName.trim().toLowerCase();
+
+    final isInstallationRole =
+        normalizedRole == 'installation' ||
+        normalizedRole == 'installation team';
+
+    // Backend flow:
+    // Amount Received -> Installation In Progress -> Installation Done -> Support
+    //
+    // If backend allowedNext comes empty because the workflow-meta/status API
+    // is stale or role mapping is not matching, keep the installation buttons
+    // visible from the current status. The status sent to backend is still the
+    // exact backend status string.
+    if (isInstallationRole) {
+      if (allowedNext.isNotEmpty) return allowedNext;
+
+      final current = _lead.status.trim().toLowerCase();
+
+      if (current == 'amount received') {
+        return ['Installation In Progress'];
+      }
+
+      if (current == 'installation in progress') {
+        return ['Installation Done'];
+      }
+
+      return <String>[];
+    }
+
     final localAllowed = LeadWorkflow.getAllowedNextStatuses(
       _lead.status,
       roleName,
@@ -168,7 +198,9 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     if (allowedNext.isEmpty) return localAllowed;
 
     final matched = allowedNext.where(localAllowed.contains).toList();
-    return matched.isNotEmpty ? matched : localAllowed;
+
+    // Prefer backend result if local frontend workflow is stale.
+    return matched.isNotEmpty ? matched : allowedNext;
   }
 
   bool _canUploadDocuments(List<String> nextStatuses) {
@@ -179,8 +211,66 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
         nextStatuses.contains('Documents Submitted');
   }
 
+  bool get _hasSavedInstallationDetails {
+    if (_lead.hasInstallationDetails) return true;
+
+    final details = _lead.installationDetails;
+    if (details == null || details.isEmpty) return false;
+
+    return details.values.any((value) {
+      if (value == null) return false;
+      if (value is List) {
+        return value.any((item) => item.toString().trim().isNotEmpty);
+      }
+      return value.toString().trim().isNotEmpty;
+    });
+  }
+
+  bool _isCompleteInstallationStatus(String status) {
+    final normalized = status.trim().toLowerCase();
+    return normalized == 'installation done';
+  }
+
+  String _installationButtonLabel(String status) {
+    // Display labels only. Do not change the status sent to backend.
+    // Backend statuses are:
+    // 1) Installation In Progress
+    // 2) Installation Done
+    final normalized = status.trim().toLowerCase();
+
+    if (normalized == 'installation in progress') {
+      return 'Installation In Progress';
+    }
+
+    if (normalized == 'installation done') {
+      return 'Complete Installation';
+    }
+
+    return status;
+  }
+
+  String _statusActionLabel(String status, bool isInstallationUser) {
+    if (isInstallationUser) {
+      return _installationButtonLabel(status);
+    }
+
+    return status;
+  }
+
   Future<void> _advanceStatus(String nextStatus) async {
     if (loading) return;
+
+    // Installation details are required only before completing installation.
+    // Start Installation and Installation In Progress should work without this alert.
+    if (_isCompleteInstallationStatus(nextStatus) &&
+        !_hasSavedInstallationDetails) {
+      showAppMessage(
+        context,
+        'Please fill installation details first',
+        isError: true,
+      );
+      return;
+    }
 
     if (nextStatus == 'Documents Submitted' &&
         !_hasRegistrationDetailsFrontend) {
@@ -195,10 +285,9 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     setState(() => loading = true);
 
     try {
-      await ref.read(leadRepositoryProvider).updateLeadStatus(
-            leadId: _lead.id,
-            status: nextStatus,
-          );
+      await ref
+          .read(leadRepositoryProvider)
+          .updateLeadStatus(leadId: _lead.id, status: nextStatus);
 
       if (!mounted) return;
 
@@ -236,8 +325,9 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
     try {
       final oldNotes = _lead.notes.trim();
-      final updatedNotes =
-          oldNotes.isEmpty ? note.trim() : '$oldNotes\n\n${note.trim()}';
+      final updatedNotes = oldNotes.isEmpty
+          ? note.trim()
+          : '$oldNotes\n\n${note.trim()}';
 
       await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
         'notes': updatedNotes,
@@ -276,12 +366,16 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     setState(() => loading = true);
 
     try {
-      await ref.read(leadRepositoryProvider).uploadLeadDocuments(
+      await ref
+          .read(leadRepositoryProvider)
+          .uploadLeadDocuments(
             leadId: _lead.id,
-            additionalImageEntries:
-                result.images.map((item) => item.toPayload()).toList(),
-            additionalDocumentEntries:
-                result.documents.map((item) => item.toPayload()).toList(),
+            additionalImageEntries: result.images
+                .map((item) => item.toPayload())
+                .toList(),
+            additionalDocumentEntries: result.documents
+                .map((item) => item.toPayload())
+                .toList(),
           );
 
       if (!mounted) return;
@@ -329,7 +423,8 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     try {
       final oldNotes = _removeOldRegistrationBlock(_lead.notes);
 
-      final registrationBlock = '''
+      final registrationBlock =
+          '''
 [REGISTRATION_DETAILS]
 registration_id=${result.regId.trim()}
 registration_date=${result.regDate.trim()}
@@ -387,29 +482,49 @@ registration_time=${result.regTime.trim()}
     if (loading) return;
 
     final ok = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => InstallationFormScreen(lead: _lead),
-      ),
+      MaterialPageRoute(builder: (_) => InstallationFormScreen(lead: _lead)),
     );
 
     if (ok != true || !mounted) return;
-
     setState(() => loading = true);
-    await _reloadSilently();
 
-    if (!mounted) return;
-    showAppMessage(context, 'Installation details saved');
+    try {
+      // Reload lead data and also ensure installation details are attached
+      await _reloadSilently();
+
+      // Try fetching installation record directly and attach if present
+      final installationRepo = ref.read(installationRepositoryProvider);
+      try {
+        final inst = await installationRepo.getByLeadId(_lead.id);
+        if (inst != null && mounted) {
+          setState(() {
+            _lead = _lead.copyWith(installationDetails: inst);
+          });
+        }
+      } catch (_) {
+        // ignore individual installation fetch errors
+      }
+
+      if (!mounted) return;
+      showAppMessage(context, 'Installation details saved');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final roleName = auth.user?.roleName ?? '';
-    final nextStatuses = _resolveNextStatuses(roleName);
+    final roleForWorkflow = auth.appRole.trim().isNotEmpty
+        ? auth.appRole
+        : roleName;
+    final nextStatuses = _resolveNextStatuses(roleForWorkflow);
     final files = collectLeadFiles(_lead);
     final showUploadButton = _canUploadDocuments(nextStatuses);
-    final customerName =
-        _lead.fullName.trim().isEmpty ? 'Customer' : _lead.fullName;
+    final customerName = _lead.fullName.trim().isEmpty
+        ? 'Customer'
+        : _lead.fullName;
 
     final visibleNotes = _visibleNotes();
 
@@ -417,7 +532,6 @@ registration_time=${result.regTime.trim()}
     final normalizedRoleName = roleName.trim().toLowerCase();
     final normalizedDepartment = _lead.currentDepartment.trim().toLowerCase();
     final normalizedStatus = _lead.status.trim().toLowerCase();
-    final normalizedWorkflowStep = _lead.workflowStep.trim().toLowerCase();
 
     final isSalesUser =
         normalizedAppRole == 'sales' || normalizedRoleName == 'sales';
@@ -427,7 +541,8 @@ registration_time=${result.regTime.trim()}
 
     final isNotSentToSupport = normalizedStatus != 'sent to support';
 
-    final canSalesEditLeadDetails = isSalesUser &&
+    final canSalesEditLeadDetails =
+        isSalesUser &&
         isLeadStillWithSales &&
         isNotSentToSupport &&
         LeadWorkflow.canSalesCompleteDetails(_lead.status);
@@ -437,12 +552,10 @@ registration_time=${result.regTime.trim()}
 
     final isLeadWithSupport = normalizedDepartment == 'support';
 
-    final isDocumentsSubmitted =
-        normalizedStatus == 'documents submitted';
+    final isDocumentsSubmitted = normalizedStatus == 'documents submitted';
 
-    final canSupportManageRegistration = isSupportUser &&
-        isLeadWithSupport &&
-        !isDocumentsSubmitted;
+    final canSupportManageRegistration =
+        isSupportUser && isLeadWithSupport && !isDocumentsSubmitted;
 
     final showAddRegistrationButton =
         canSupportManageRegistration && !_hasRegistrationDetailsFrontend;
@@ -450,24 +563,24 @@ registration_time=${result.regTime.trim()}
     final showEditRegistrationButton =
         canSupportManageRegistration && _hasRegistrationDetailsFrontend;
 
-    final isInstallationUser = normalizedAppRole == 'installation' ||
-        normalizedRoleName == 'installation';
+    final isInstallationUser =
+        normalizedAppRole == 'installation' ||
+        normalizedRoleName == 'installation' ||
+        normalizedRoleName == 'installation team';
 
-    final isLeadWithInstallation = normalizedDepartment == 'installation';
+    final isInstallationDoneAndMovedToSupport =
+        normalizedStatus == 'installation done' &&
+        normalizedDepartment == 'support';
 
     final canInstallationAccessLead =
-        isInstallationUser && isLeadWithInstallation;
+        isInstallationUser && !isInstallationDoneAndMovedToSupport;
 
+    // Installation user should see backend-allowed actions when they are in the
+    // installation flow, even if department label is not yet updated.
+    // After Installation Done, backend moves lead to Support so no installation
+    // actions should be shown.
     final filteredNextStatuses = isInstallationUser
-        ? (canInstallationAccessLead
-            ? nextStatuses
-                .where(
-                  (status) =>
-                      status.trim().toLowerCase() != 'installation done' &&
-                      status.trim().toLowerCase() != 'mark installation done',
-                )
-                .toList()
-            : <String>[])
+        ? (isInstallationDoneAndMovedToSupport ? <String>[] : nextStatuses)
         : nextStatuses;
 
     return Scaffold(
@@ -518,7 +631,7 @@ registration_time=${result.regTime.trim()}
                       onPressed: loading ? null : _openInstallationForm,
                       icon: const Icon(Icons.build_circle_outlined),
                       label: Text(
-                        _lead.hasInstallationDetails
+                        _hasSavedInstallationDetails
                             ? 'Edit Installation Details'
                             : 'Fill Installation Details (required)',
                       ),
@@ -599,10 +712,11 @@ registration_time=${result.regTime.trim()}
                     const SizedBox(height: 12),
                   ],
 
-                  if (_lead.hasInstallationDetails)
+                  if (_hasSavedInstallationDetails)
                     _section('Installation Details', [
                       _row('File No', _installationValue('file_no')),
                       _row('Capacity', _installationValue('capacity')),
+                      _row('Panel Type', _installationValue('panel_type')),
                       _row(
                         'DCR Certificate No',
                         _installationValue('dcr_certificate_no'),
@@ -694,8 +808,9 @@ registration_time=${result.regTime.trim()}
                         child: SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed:
-                                loading ? null : () => _advanceStatus(status),
+                            onPressed: loading
+                                ? null
+                                : () => _advanceStatus(status),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryColor,
                               foregroundColor: Colors.white,
@@ -705,11 +820,10 @@ registration_time=${result.regTime.trim()}
                               ),
                             ),
                             child: Text(
-                              filteredNextStatuses.length == 1
-                                  ? LeadWorkflow.nextActionLabel(_lead.status)
-                                  : status,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
+                              _statusActionLabel(status, isInstallationUser),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
@@ -739,8 +853,38 @@ registration_time=${result.regTime.trim()}
 
   String _installationValue(String key) {
     final d = _lead.installationDetails;
-    if (d == null) return '';
-    return d[key]?.toString() ?? '';
+    if (d == null || d.isEmpty) return '';
+
+    final direct = d[key];
+    if (direct != null && direct.toString().trim().isNotEmpty) {
+      return direct.toString();
+    }
+
+    final aliasKeys = <String, List<String>>{
+      'file_no': ['fileNo', 'file_number', 'fileNumber'],
+      'capacity': ['panel_capacity', 'panelCapacity', 'load_capacity'],
+      'panel_type': ['panelType'],
+      'dcr_certificate_no': ['dcrCertificateNo', 'dcr_no', 'dcrNo'],
+      'application_no': ['applicationNo', 'application_number'],
+      'solar_panel_brand': ['solarPanelBrand', 'panel_brand'],
+      'number_of_solar_panels': [
+        'numberOfSolarPanels',
+        'no_of_solar_panels',
+        'solar_panel_count',
+      ],
+      'invoice_no': ['invoiceNo', 'invoice_number'],
+      'inverter_serial_number': ['inverterSerialNumber', 'inverter_serial_no'],
+      'battery_serial_number': ['batterySerialNumber', 'battery_serial_no'],
+    };
+
+    for (final alias in aliasKeys[key] ?? const <String>[]) {
+      final value = d[alias];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString();
+      }
+    }
+
+    return '';
   }
 
   Widget _spNumbersRows() {
@@ -776,10 +920,7 @@ registration_time=${result.regTime.trim()}
 
     if (rows.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: rows,
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
   }
 
   Widget _headerCard(String customerName) {
@@ -842,7 +983,10 @@ registration_time=${result.regTime.trim()}
           backgroundColor: primaryColor.withOpacity(0.12),
           child: const Icon(Icons.history, color: primaryColor, size: 20),
         ),
-        title: Text(status, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          status,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -863,8 +1007,9 @@ registration_time=${result.regTime.trim()}
   }
 
   Widget _section(String title, List<Widget> children) {
-    final visibleChildren =
-        children.where((child) => child is! SizedBox).toList();
+    final visibleChildren = children
+        .where((child) => child is! SizedBox)
+        .toList();
 
     if (visibleChildren.isEmpty) return const SizedBox.shrink();
 
@@ -921,26 +1066,14 @@ class TitledLocalFile {
   final String title;
   final String path;
 
-  const TitledLocalFile({
-    required this.title,
-    required this.path,
-  });
+  const TitledLocalFile({required this.title, required this.path});
 
   Map<String, String> toPayload() {
-    return {
-      'title': title.trim(),
-      'path': path,
-    };
+    return {'title': title.trim(), 'path': path};
   }
 
-  TitledLocalFile copyWith({
-    String? title,
-    String? path,
-  }) {
-    return TitledLocalFile(
-      title: title ?? this.title,
-      path: path ?? this.path,
-    );
+  TitledLocalFile copyWith({String? title, String? path}) {
+    return TitledLocalFile(title: title ?? this.title, path: path ?? this.path);
   }
 }
 
@@ -948,10 +1081,7 @@ class _UploadDocumentsResult {
   final List<TitledLocalFile> images;
   final List<TitledLocalFile> documents;
 
-  const _UploadDocumentsResult({
-    required this.images,
-    required this.documents,
-  });
+  const _UploadDocumentsResult({required this.images, required this.documents});
 }
 
 class _UploadDocumentsDialog extends StatefulWidget {
@@ -1047,8 +1177,9 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                       const SizedBox(height: 14),
                       InkWell(
                         onTap: () async {
-                          final path =
-                              await _pickSingleFile(imageOnly: imageOnly);
+                          final path = await _pickSingleFile(
+                            imageOnly: imageOnly,
+                          );
 
                           if (path == null) return;
                           if (!mounted) return;
@@ -1064,9 +1195,7 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                           decoration: BoxDecoration(
                             color: bgColor,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: const Color(0xFFE4E1EA),
-                            ),
+                            border: Border.all(color: const Color(0xFFE4E1EA)),
                           ),
                           child: selectedPath == null
                               ? Column(
@@ -1118,9 +1247,7 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primaryColor,
-                  ),
+                  style: FilledButton.styleFrom(backgroundColor: primaryColor),
                   onPressed: () {
                     FocusScope.of(context).unfocus();
 
@@ -1142,10 +1269,7 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
 
                     setState(() {
                       target.add(
-                        TitledLocalFile(
-                          title: title,
-                          path: selectedPath!,
-                        ),
+                        TitledLocalFile(title: title, path: selectedPath!),
                       );
                     });
 
