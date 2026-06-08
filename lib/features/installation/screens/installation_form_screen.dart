@@ -36,12 +36,6 @@ class _InstallationFormScreenState
 
   final dcrCertificateNo = TextEditingController();
   final applicationNo = TextEditingController();
-  final stampPaperRs100 = TextEditingController();
-
-  final centralGovtSubsidyDate = TextEditingController();
-  final stateGovtSubsidyDate = TextEditingController();
-  final installNetMeterDate = TextEditingController();
-  final inspectDiscomDate = TextEditingController();
 
   final List<TextEditingController> spControllers = [
     TextEditingController(),
@@ -71,23 +65,11 @@ class _InstallationFormScreenState
 
     panelType = d['panel_type']?.toString() == 'NON_DCR' ? 'NON_DCR' : 'DCR';
 
-    inverterSerialNumber.text =
-        d['inverter_serial_number']?.toString() ?? '';
-    batterySerialNumber.text =
-        d['battery_serial_number']?.toString() ?? '';
+    inverterSerialNumber.text = d['inverter_serial_number']?.toString() ?? '';
+    batterySerialNumber.text = d['battery_serial_number']?.toString() ?? '';
 
     dcrCertificateNo.text = d['dcr_certificate_no']?.toString() ?? '';
     applicationNo.text = d['application_no']?.toString() ?? '';
-    stampPaperRs100.text = d['stamp_paper_rs_100']?.toString() ?? '';
-
-    centralGovtSubsidyDate.text =
-        _dateOnly(d['central_govt_subsidy_date']?.toString());
-    stateGovtSubsidyDate.text =
-        _dateOnly(d['state_govt_subsidy_date']?.toString());
-    installNetMeterDate.text =
-        _dateOnly(d['install_net_meter_date']?.toString());
-    inspectDiscomDate.text =
-        _dateOnly(d['inspect_discom_date']?.toString());
 
     final rawSpNumbers = d['sp_numbers'];
 
@@ -106,11 +88,6 @@ class _InstallationFormScreenState
     }
   }
 
-  String _dateOnly(String? value) {
-    if (value == null || value.trim().isEmpty) return '';
-    return value.split('T').first;
-  }
-
   @override
   void dispose() {
     fileNo.dispose();
@@ -124,38 +101,12 @@ class _InstallationFormScreenState
 
     dcrCertificateNo.dispose();
     applicationNo.dispose();
-    stampPaperRs100.dispose();
-
-    centralGovtSubsidyDate.dispose();
-    stateGovtSubsidyDate.dispose();
-    installNetMeterDate.dispose();
-    inspectDiscomDate.dispose();
 
     for (final controller in spControllers) {
       controller.dispose();
     }
 
     super.dispose();
-  }
-
-  Future<void> _pickDate(TextEditingController controller) async {
-    FocusScope.of(context).unfocus();
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-
-    if (picked == null) return;
-
-    final month = picked.month.toString().padLeft(2, '0');
-    final day = picked.day.toString().padLeft(2, '0');
-
-    setState(() {
-      controller.text = '${picked.year}-$month-$day';
-    });
   }
 
   void _addSpField() {
@@ -217,7 +168,6 @@ class _InstallationFormScreenState
       'invoice_no': invoiceNo.text.trim(),
       'panel_type': panelType,
 
-      // IMPORTANT:
       // Backend uses this value to auto-update lead status:
       // Installation In Progress -> Installation Done -> Support
       'installation_status': 'Completed',
@@ -226,12 +176,7 @@ class _InstallationFormScreenState
       'battery_serial_number': batterySerialNumber.text.trim(),
       'dcr_certificate_no': dcrCertificateNo.text.trim(),
       'application_no': applicationNo.text.trim(),
-      'stamp_paper_rs_100': stampPaperRs100.text.trim(),
-      'central_govt_subsidy_date': centralGovtSubsidyDate.text.trim(),
-      'state_govt_subsidy_date': stateGovtSubsidyDate.text.trim(),
       'sp_numbers': spNumbers,
-      'install_net_meter_date': installNetMeterDate.text.trim(),
-      'inspect_discom_date': inspectDiscomDate.text.trim(),
     };
 
     setState(() => loading = true);
@@ -310,9 +255,6 @@ class _InstallationFormScreenState
           _panelTypeDropdown(),
           _field('DCR Certificate No.', dcrCertificateNo),
           _field('Application No.', applicationNo),
-          _field('Stamp Paper Rs.100', stampPaperRs100),
-          _dateField('Central Govt Subsidy Date', centralGovtSubsidyDate),
-          _dateField('State Govt Subsidy Date', stateGovtSubsidyDate),
 
           const SizedBox(height: 12),
 
@@ -320,12 +262,6 @@ class _InstallationFormScreenState
           _field('Inverter Serial Number', inverterSerialNumber),
           _field('Battery Serial Number', batterySerialNumber),
           _spSection(),
-
-          const SizedBox(height: 12),
-
-          _sectionTitle('Meter / DISCOM'),
-          _dateField('Install Net Meter Date', installNetMeterDate),
-          _dateField('Inspect of DISCOM Date', inspectDiscomDate),
 
           const SizedBox(height: 24),
 
@@ -479,34 +415,6 @@ class _InstallationFormScreenState
             digitsOnly ? [FilteringTextInputFormatter.digitsOnly] : null,
         decoration: InputDecoration(
           labelText: label,
-          filled: true,
-          fillColor: fieldColor,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(
-              color: primaryColor,
-              width: 1.3,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _dateField(String label, TextEditingController controller) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: TextField(
-        controller: controller,
-        enabled: !loading,
-        readOnly: true,
-        onTap: loading ? null : () => _pickDate(controller),
-        decoration: InputDecoration(
-          labelText: label,
-          suffixIcon: const Icon(Icons.calendar_month_outlined),
           filled: true,
           fillColor: fieldColor,
           border: OutlineInputBorder(

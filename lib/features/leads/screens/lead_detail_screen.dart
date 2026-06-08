@@ -417,6 +417,7 @@ registration_time=${result.regTime.trim()}
     final normalizedRoleName = roleName.trim().toLowerCase();
     final normalizedDepartment = _lead.currentDepartment.trim().toLowerCase();
     final normalizedStatus = _lead.status.trim().toLowerCase();
+    final normalizedWorkflowStep = _lead.workflowStep.trim().toLowerCase();
 
     final isSalesUser =
         normalizedAppRole == 'sales' || normalizedRoleName == 'sales';
@@ -436,8 +437,12 @@ registration_time=${result.regTime.trim()}
 
     final isLeadWithSupport = normalizedDepartment == 'support';
 
-    final canSupportManageRegistration =
-        isSupportUser && isLeadWithSupport && normalizedStatus != 'new lead';
+    final isDocumentsSubmitted =
+        normalizedStatus == 'documents submitted';
+
+    final canSupportManageRegistration = isSupportUser &&
+        isLeadWithSupport &&
+        !isDocumentsSubmitted;
 
     final showAddRegistrationButton =
         canSupportManageRegistration && !_hasRegistrationDetailsFrontend;
@@ -445,17 +450,24 @@ registration_time=${result.regTime.trim()}
     final showEditRegistrationButton =
         canSupportManageRegistration && _hasRegistrationDetailsFrontend;
 
-    final isInstallationUser =
-        normalizedAppRole == 'installation' || normalizedRoleName == 'installation';
+    final isInstallationUser = normalizedAppRole == 'installation' ||
+        normalizedRoleName == 'installation';
+
+    final isLeadWithInstallation = normalizedDepartment == 'installation';
+
+    final canInstallationAccessLead =
+        isInstallationUser && isLeadWithInstallation;
 
     final filteredNextStatuses = isInstallationUser
-        ? nextStatuses
-            .where(
-              (status) =>
-                  status.trim().toLowerCase() != 'installation done' &&
-                  status.trim().toLowerCase() != 'mark installation done',
-            )
-            .toList()
+        ? (canInstallationAccessLead
+            ? nextStatuses
+                .where(
+                  (status) =>
+                      status.trim().toLowerCase() != 'installation done' &&
+                      status.trim().toLowerCase() != 'mark installation done',
+                )
+                .toList()
+            : <String>[])
         : nextStatuses;
 
     return Scaffold(
@@ -500,7 +512,8 @@ registration_time=${result.regTime.trim()}
                         : _lead.workflowStep,
                   ),
                   const SizedBox(height: 14),
-                  if (isInstallationUser) ...[
+
+                  if (canInstallationAccessLead) ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _openInstallationForm,
                       icon: const Icon(Icons.build_circle_outlined),
@@ -512,6 +525,7 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
+
                   if (showAddRegistrationButton) ...[
                     OutlinedButton(
                       onPressed: loading ? null : _saveRegistration,
@@ -519,6 +533,7 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
+
                   if (canSalesEditLeadDetails) ...[
                     SizedBox(
                       width: double.infinity,
@@ -538,6 +553,7 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
+
                   _section('Customer Details', [
                     _row('Full Name', _lead.fullName),
                     _row('Lead Code', _lead.leadCode),
@@ -549,6 +565,7 @@ registration_time=${result.regTime.trim()}
                     _row('Pincode', _lead.pincode),
                     _row('KW', _lead.loadSectionKw),
                   ]),
+
                   _section('Workflow', [
                     _row('Status', _lead.status),
                     _row('Department', _lead.currentDepartment),
@@ -556,6 +573,7 @@ registration_time=${result.regTime.trim()}
                     _row('Priority', _lead.priority),
                     _row('Workflow Step', _lead.workflowStep),
                   ]),
+
                   _section('Connection & Bank', [
                     _row('CA Number', _lead.caNumber),
                     _row('K Number', _lead.kNumber),
@@ -564,12 +582,14 @@ registration_time=${result.regTime.trim()}
                     _row('Account', _lead.accountNumber),
                     _row('IFSC', _lead.ifscCode),
                   ]),
+
                   if (_hasRegistrationDetailsFrontend)
                     _section('Registration', [
                       _row('Registration ID', _displayRegistrationId),
                       _row('Registration Date', _displayRegistrationDate),
                       _row('Registration Time', _displayRegistrationTime),
                     ]),
+
                   if (showEditRegistrationButton) ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _saveRegistration,
@@ -578,6 +598,7 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
+
                   if (_lead.hasInstallationDetails)
                     _section('Installation Details', [
                       _row('File No', _installationValue('file_no')),
@@ -591,32 +612,12 @@ registration_time=${result.regTime.trim()}
                         _installationValue('application_no'),
                       ),
                       _row(
-                        'Stamp Paper Rs.100',
-                        _installationValue('stamp_paper_rs_100'),
-                      ),
-                      _row(
-                        'Central Govt Subsidy Date',
-                        _installationValue('central_govt_subsidy_date'),
-                      ),
-                      _row(
-                        'State Govt Subsidy Date',
-                        _installationValue('state_govt_subsidy_date'),
-                      ),
-                      _row(
                         'Solar Panel Brand',
                         _installationValue('solar_panel_brand'),
                       ),
                       _row(
                         'No. Of Solar Panels',
                         _installationValue('number_of_solar_panels'),
-                      ),
-                      _row(
-                        'Install Net Meter Date',
-                        _installationValue('install_net_meter_date'),
-                      ),
-                      _row(
-                        'Inspect DISCOM Date',
-                        _installationValue('inspect_discom_date'),
                       ),
                       _row('Invoice No', _installationValue('invoice_no')),
                       const Divider(),
@@ -630,12 +631,16 @@ registration_time=${result.regTime.trim()}
                       ),
                       _spNumbersRows(),
                     ]),
+
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
                   ]),
+
                   if (visibleNotes.trim().isNotEmpty)
                     _section('Notes', [_row('Notes', visibleNotes)]),
+
                   const SizedBox(height: 8),
+
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -652,6 +657,7 @@ registration_time=${result.regTime.trim()}
                       ),
                     ),
                   ),
+
                   if (showUploadButton) ...[
                     const SizedBox(height: 10),
                     SizedBox(
@@ -671,6 +677,7 @@ registration_time=${result.regTime.trim()}
                       ),
                     ),
                   ],
+
                   if (filteredNextStatuses.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     const Text(
@@ -709,12 +716,14 @@ registration_time=${result.regTime.trim()}
                       );
                     }),
                   ],
+
                   const SizedBox(height: 16),
                   const Text(
                     'Status history',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
+
                   if (history.isEmpty)
                     const Text(
                       'No history yet',
@@ -958,8 +967,8 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
 
   final ImagePicker _imagePicker = ImagePicker();
 
-  List<TitledLocalFile> additionalImages = [];
-  List<TitledLocalFile> additionalDocs = [];
+  final List<TitledLocalFile> additionalImages = [];
+  final List<TitledLocalFile> additionalDocs = [];
 
   bool saving = false;
 
@@ -1004,171 +1013,152 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
     required String uploadLabel,
     required String defaultTitlePrefix,
     required bool imageOnly,
-    required bool addToImages,
+    required List<TitledLocalFile> target,
   }) async {
-    final targetLength =
-        addToImages ? additionalImages.length : additionalDocs.length;
-
     final titleController = TextEditingController(
-      text: '$defaultTitlePrefix ${targetLength + 1}',
+      text: '$defaultTitlePrefix ${target.length + 1}',
     );
 
     String? selectedPath;
 
-    try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (innerContext, setDialogState) {
-              return AlertDialog(
-                title: Text(dialogTitle),
-                content: SingleChildScrollView(
-                  child: SizedBox(
-                    width: double.maxFinite,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: titleController,
-                          decoration: InputDecoration(
-                            labelText: titleLabel,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(dialogTitle),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: titleController,
+                        decoration: InputDecoration(
+                          labelText: titleLabel,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        InkWell(
-                          onTap: () async {
-                            final path =
-                                await _pickSingleFile(imageOnly: imageOnly);
+                      ),
+                      const SizedBox(height: 14),
+                      InkWell(
+                        onTap: () async {
+                          final path =
+                              await _pickSingleFile(imageOnly: imageOnly);
 
-                            if (path == null || !innerContext.mounted) return;
+                          if (path == null) return;
+                          if (!mounted) return;
 
-                            setDialogState(() {
-                              selectedPath = path;
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            height: 130,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: bgColor,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFFE4E1EA),
-                              ),
+                          setDialogState(() {
+                            selectedPath = path;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 130,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFFE4E1EA),
                             ),
-                            child: selectedPath == null
-                                ? Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        imageOnly
-                                            ? Icons.add_photo_alternate_outlined
-                                            : Icons.upload_file_outlined,
-                                        color: primaryColor,
-                                        size: 38,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(uploadLabel),
-                                    ],
-                                  )
-                                : ClipRRect(
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: _isImagePath(selectedPath!)
-                                        ? Image.file(
-                                            File(selectedPath!),
-                                            fit: BoxFit.cover,
-                                            width: double.infinity,
-                                          )
-                                        : _docPreview(selectedPath!),
-                                  ),
                           ),
+                          child: selectedPath == null
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      imageOnly
+                                          ? Icons.add_photo_alternate_outlined
+                                          : Icons.upload_file_outlined,
+                                      color: primaryColor,
+                                      size: 38,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(uploadLabel),
+                                  ],
+                                )
+                              : ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: _isImagePath(selectedPath!)
+                                      ? Image.file(
+                                          File(selectedPath!),
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                        )
+                                      : _docPreview(selectedPath!),
+                                ),
                         ),
-                        if (selectedPath != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            _fileDisplayName(selectedPath!),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
+                      ),
+                      if (selectedPath != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _fileDisplayName(selectedPath!),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      FocusScope.of(innerContext).unfocus();
-                      Navigator.of(dialogContext).pop();
-                    },
-                    child: const Text('Cancel'),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryColor,
                   ),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: primaryColor,
-                    ),
-                    onPressed: () {
-                      FocusScope.of(innerContext).unfocus();
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
 
-                      final title = titleController.text.trim();
+                    final title = titleController.text.trim();
 
-                      if (title.isEmpty) {
-                        ScaffoldMessenger.of(innerContext).showSnackBar(
-                          SnackBar(content: Text('$titleLabel is required')),
-                        );
-                        return;
-                      }
-
-                      if (selectedPath == null ||
-                          selectedPath!.trim().isEmpty) {
-                        ScaffoldMessenger.of(innerContext).showSnackBar(
-                          SnackBar(content: Text('$uploadLabel is required')),
-                        );
-                        return;
-                      }
-
-                      if (!mounted) return;
-
-                      final newItem = TitledLocalFile(
-                        title: title,
-                        path: selectedPath!,
+                    if (title.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$titleLabel is required')),
                       );
+                      return;
+                    }
 
-                      setState(() {
-                        if (addToImages) {
-                          additionalImages = [
-                            ...additionalImages,
-                            newItem,
-                          ];
-                        } else {
-                          additionalDocs = [
-                            ...additionalDocs,
-                            newItem,
-                          ];
-                        }
-                      });
+                    if (selectedPath == null || selectedPath!.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$uploadLabel is required')),
+                      );
+                      return;
+                    }
 
-                      Navigator.of(dialogContext).pop();
-                    },
-                    child: const Text('Add'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      titleController.dispose();
-    }
+                    setState(() {
+                      target.add(
+                        TitledLocalFile(
+                          title: title,
+                          path: selectedPath!,
+                        ),
+                      );
+                    });
+
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _docPreview(String path) {
@@ -1271,7 +1261,6 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                 final image = _isImagePath(item.path);
 
                 return SizedBox(
-                  key: ValueKey('${title}_${item.path}_${item.title}_$idx'),
                   width: 120,
                   height: 178,
                   child: Column(
@@ -1340,49 +1329,17 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
     );
   }
 
-  Future<void> _replaceImageAt(int index) async {
-    final path = await _pickSingleFile(imageOnly: true);
-    if (path == null || !mounted) return;
+  Future<void> _replaceFileAt(
+    List<TitledLocalFile> target,
+    int index, {
+    required bool imageOnly,
+  }) async {
+    final path = await _pickSingleFile(imageOnly: imageOnly);
+    if (path == null) return;
+    if (!mounted) return;
 
     setState(() {
-      if (index >= 0 && index < additionalImages.length) {
-        final updated = List<TitledLocalFile>.from(additionalImages);
-        updated[index] = updated[index].copyWith(path: path);
-        additionalImages = updated;
-      }
-    });
-  }
-
-  Future<void> _replaceDocAt(int index) async {
-    final path = await _pickSingleFile(imageOnly: false);
-    if (path == null || !mounted) return;
-
-    setState(() {
-      if (index >= 0 && index < additionalDocs.length) {
-        final updated = List<TitledLocalFile>.from(additionalDocs);
-        updated[index] = updated[index].copyWith(path: path);
-        additionalDocs = updated;
-      }
-    });
-  }
-
-  void _removeImageAt(int index) {
-    if (index < 0 || index >= additionalImages.length) return;
-
-    setState(() {
-      final updated = List<TitledLocalFile>.from(additionalImages);
-      updated.removeAt(index);
-      additionalImages = updated;
-    });
-  }
-
-  void _removeDocAt(int index) {
-    if (index < 0 || index >= additionalDocs.length) return;
-
-    setState(() {
-      final updated = List<TitledLocalFile>.from(additionalDocs);
-      updated.removeAt(index);
-      additionalDocs = updated;
+      target[index] = target[index].copyWith(path: path);
     });
   }
 
@@ -1421,10 +1378,11 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                   uploadLabel: 'Choose Image',
                   defaultTitlePrefix: 'Image',
                   imageOnly: true,
-                  addToImages: true,
+                  target: additionalImages,
                 ),
-                onRemove: _removeImageAt,
-                onReplace: _replaceImageAt,
+                onRemove: (i) => setState(() => additionalImages.removeAt(i)),
+                onReplace: (i) =>
+                    _replaceFileAt(additionalImages, i, imageOnly: true),
               ),
               _multiFilePicker(
                 title: 'Documents',
@@ -1436,10 +1394,11 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                   uploadLabel: 'Choose File',
                   defaultTitlePrefix: 'Document',
                   imageOnly: false,
-                  addToImages: false,
+                  target: additionalDocs,
                 ),
-                onRemove: _removeDocAt,
-                onReplace: _replaceDocAt,
+                onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
+                onReplace: (i) =>
+                    _replaceFileAt(additionalDocs, i, imageOnly: false),
               ),
             ],
           ),

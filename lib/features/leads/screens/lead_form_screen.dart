@@ -113,7 +113,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     'Other',
   ];
 
-  late final GlobalKey<FormState> _formKey;
+  final _formKey = GlobalKey<FormState>();
 
   final fullName = TextEditingController();
   final mobile = TextEditingController();
@@ -159,8 +159,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   String? bankClearPhotoPath;
   String? chequePassbookPath;
 
-  List<TitledLocalFile> additionalImages = [];
-  List<TitledLocalFile> additionalDocs = [];
+  final List<TitledLocalFile> additionalImages = [];
+  final List<TitledLocalFile> additionalDocs = [];
 
   bool isLoading = false;
   bool isFetchingLocation = false;
@@ -171,10 +171,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   @override
   void initState() {
     super.initState();
-
-    _formKey = GlobalKey<FormState>(
-      debugLabel: 'lead_form_${widget.mode}_${widget.existingLead?.id ?? 'new'}',
-    );
 
     final lead = widget.existingLead;
 
@@ -564,7 +560,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
-        key: ValueKey('field_$label'),
         controller: controller,
         enabled: !isLoading,
         readOnly: readOnly,
@@ -607,7 +602,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
-        key: ValueKey('dropdown_controller_$label'),
         value: currentValue,
         isExpanded: true,
         decoration: InputDecoration(
@@ -641,7 +635,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
-        key: ValueKey('dropdown_$label'),
         value: safeValue,
         isExpanded: true,
         validator: (v) {
@@ -689,7 +682,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         border: Border.all(color: const Color(0xFFE4E1EA)),
       ),
       child: SwitchListTile(
-        key: ValueKey('switch_$title'),
         value: value,
         title: Text(
           title,
@@ -759,16 +751,22 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   Future<void> _captureImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
+
     final file = await _imagePicker.pickImage(source: ImageSource.camera);
-    if (file == null || !mounted) return;
-    onPicked(file.path);
+    if (file == null) return;
+    if (!mounted) return;
+
+    setState(() => onPicked(file.path));
   }
 
   Future<void> _pickImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
+
     final file = await _imagePicker.pickImage(source: ImageSource.gallery);
-    if (file == null || !mounted) return;
-    onPicked(file.path);
+    if (file == null) return;
+    if (!mounted) return;
+
+    setState(() => onPicked(file.path));
   }
 
   Future<String?> _pickSingleFile({required bool imageOnly}) async {
@@ -795,150 +793,152 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required String uploadLabel,
     required String defaultTitlePrefix,
     required bool imageOnly,
-    required bool addToImages,
+    required List<TitledLocalFile> target,
   }) async {
-    final currentLength = addToImages ? additionalImages.length : additionalDocs.length;
     final titleController = TextEditingController(
-      text: '$defaultTitlePrefix ${currentLength + 1}',
+      text: '$defaultTitlePrefix ${target.length + 1}',
     );
 
     String? selectedPath;
 
-    try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (innerContext, setDialogState) {
-              return AlertDialog(
-                title: Text(dialogTitle),
-                content: SingleChildScrollView(
-                  child: SizedBox(
-                    width: double.maxFinite,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: titleController,
-                          decoration: InputDecoration(
-                            labelText: titleLabel,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(dialogTitle),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: titleController,
+                        decoration: InputDecoration(
+                          labelText: titleLabel,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        InkWell(
-                          onTap: () async {
-                            FocusScope.of(innerContext).unfocus();
-                            final path = await _pickSingleFile(imageOnly: imageOnly);
-                            if (path == null || !innerContext.mounted) return;
-                            setDialogState(() => selectedPath = path);
-                          },
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            height: 130,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: bgColor,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE4E1EA)),
+                      ),
+                      const SizedBox(height: 14),
+                      InkWell(
+                        onTap: () async {
+                          FocusScope.of(context).unfocus();
+
+                          final path =
+                              await _pickSingleFile(imageOnly: imageOnly);
+
+                          if (path == null) return;
+                          if (!mounted) return;
+
+                          setDialogState(() => selectedPath = path);
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 130,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFFE4E1EA),
                             ),
-                            child: selectedPath == null
-                                ? Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        imageOnly
-                                            ? Icons.add_photo_alternate_outlined
-                                            : Icons.upload_file_outlined,
-                                        color: primaryColor,
-                                        size: 38,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(uploadLabel),
-                                    ],
-                                  )
-                                : ClipRRect(
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: isImagePath(selectedPath)
-                                        ? Image.file(
-                                            File(selectedPath!),
-                                            fit: BoxFit.cover,
-                                            width: double.infinity,
-                                          )
-                                        : _docPreview(selectedPath!),
-                                  ),
                           ),
+                          child: selectedPath == null
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      imageOnly
+                                          ? Icons.add_photo_alternate_outlined
+                                          : Icons.upload_file_outlined,
+                                      color: primaryColor,
+                                      size: 38,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(uploadLabel),
+                                  ],
+                                )
+                              : ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: isImagePath(selectedPath!)
+                                      ? Image.file(
+                                          File(selectedPath!),
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                        )
+                                      : _docPreview(selectedPath!),
+                                ),
                         ),
-                        if (selectedPath != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            fileDisplayName(selectedPath!),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
+                      ),
+                      if (selectedPath != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          fileDisplayName(selectedPath!),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      FocusScope.of(innerContext).unfocus();
-                      Navigator.of(dialogContext).pop();
-                    },
-                    child: const Text('Cancel'),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryColor,
                   ),
-                  FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: primaryColor),
-                    onPressed: () {
-                      FocusScope.of(innerContext).unfocus();
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
 
-                      final title = titleController.text.trim();
-                      if (title.isEmpty) {
-                        ScaffoldMessenger.of(innerContext).showSnackBar(
-                          SnackBar(content: Text('$titleLabel is required')),
-                        );
-                        return;
-                      }
+                    final title = titleController.text.trim();
 
-                      if (selectedPath == null || selectedPath!.trim().isEmpty) {
-                        ScaffoldMessenger.of(innerContext).showSnackBar(
-                          SnackBar(content: Text('$uploadLabel is required')),
-                        );
-                        return;
-                      }
+                    if (title.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$titleLabel is required')),
+                      );
+                      return;
+                    }
 
-                      final item = TitledLocalFile(title: title, path: selectedPath!);
+                    if (selectedPath == null || selectedPath!.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$uploadLabel is required')),
+                      );
+                      return;
+                    }
 
-                      if (mounted) {
-                        setState(() {
-                          if (addToImages) {
-                            additionalImages = [...additionalImages, item];
-                          } else {
-                            additionalDocs = [...additionalDocs, item];
-                          }
-                        });
-                      }
+                    setState(() {
+                      target.add(
+                        TitledLocalFile(
+                          title: title,
+                          path: selectedPath!,
+                        ),
+                      );
+                    });
 
-                      Navigator.of(dialogContext).pop();
-                    },
-                    child: const Text('Add'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      titleController.dispose();
-    }
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _singleImagePicker({
@@ -950,7 +950,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     final isImage = hasFile && isImagePath(value);
 
     return Container(
-      key: ValueKey('single_picker_$title'),
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -968,7 +967,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
           const SizedBox(height: 10),
           if (hasFile)
             Stack(
@@ -979,11 +984,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     height: 160,
                     width: double.infinity,
                     child: isImage
-                        ? Image.file(
-                            File(value),
-                            key: ValueKey('single_image_$title$value'),
-                            fit: BoxFit.cover,
-                          )
+                        ? Image.file(File(value), fit: BoxFit.cover)
                         : _docPreview(value),
                   ),
                 ),
@@ -995,8 +996,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     radius: 18,
                     child: IconButton(
                       padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.close, color: Colors.white, size: 18),
-                      onPressed: isLoading ? null : () => onChanged(null),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      onPressed: isLoading
+                          ? null
+                          : () => setState(() => onChanged(null)),
                     ),
                   ),
                 ),
@@ -1014,9 +1021,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               child: const Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_photo_alternate_outlined, size: 40, color: primaryColor),
+                  Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 40,
+                    color: primaryColor,
+                  ),
                   SizedBox(height: 6),
-                  Text('No file selected', style: TextStyle(color: Colors.black45)),
+                  Text(
+                    'No file selected',
+                    style: TextStyle(color: Colors.black45),
+                  ),
                 ],
               ),
             ),
@@ -1049,7 +1063,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     final pdf = isPdfPath(path);
 
     return Container(
-      key: ValueKey('doc_preview_$path'),
       color: const Color(0xFFEEF0F8),
       child: Padding(
         padding: const EdgeInsets.all(6),
@@ -1068,7 +1081,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -1086,7 +1102,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     bool imagesOnly = false,
   }) {
     return Container(
-      key: ValueKey('multi_picker_$title'),
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1102,7 +1117,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               Expanded(
                 child: Text(
                   '$title (${files.length})',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: textColor),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                 ),
               ),
               FilledButton.icon(
@@ -1125,7 +1143,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 border: Border.all(color: const Color(0xFFE4E1EA)),
               ),
               child: Text(
-                imagesOnly ? 'No additional images added.' : 'No extra documents added.',
+                imagesOnly
+                    ? 'No additional images added.'
+                    : 'No extra documents added.',
                 style: const TextStyle(color: Colors.black45),
               ),
             ),
@@ -1141,7 +1161,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 final image = isImagePath(item.path);
 
                 return SizedBox(
-                  key: ValueKey('${title}_${item.title}_${item.path}_$idx'),
                   width: 120,
                   height: 178,
                   child: Column(
@@ -1156,7 +1175,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               child: image
                                   ? Image.file(
                                       File(item.path),
-                                      key: ValueKey('image_${item.path}_$idx'),
                                       fit: BoxFit.cover,
                                     )
                                   : _docPreview(item.path),
@@ -1170,7 +1188,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               child: const CircleAvatar(
                                 radius: 12,
                                 backgroundColor: Colors.black54,
-                                child: Icon(Icons.close, size: 14, color: Colors.white),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -1181,13 +1203,19 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                         item.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       SizedBox(
                         height: 34,
                         child: TextButton(
                           onPressed: isLoading ? null : () => onReplace(idx),
-                          child: const Text('Replace', style: TextStyle(fontSize: 11)),
+                          child: const Text(
+                            'Replace',
+                            style: TextStyle(fontSize: 11),
+                          ),
                         ),
                       ),
                     ],
@@ -1201,47 +1229,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
   }
 
-  Future<void> _replaceImageAt(int index) async {
-    final path = await _pickSingleFile(imageOnly: true);
-    if (path == null || !mounted) return;
+  Future<void> _replaceFileAt(
+    List<TitledLocalFile> target,
+    int index, {
+    required bool imageOnly,
+  }) async {
+    final path = await _pickSingleFile(imageOnly: imageOnly);
+    if (path == null) return;
+    if (!mounted) return;
 
     setState(() {
-      if (index >= 0 && index < additionalImages.length) {
-        final updated = List<TitledLocalFile>.from(additionalImages);
-        updated[index] = updated[index].copyWith(path: path);
-        additionalImages = updated;
-      }
-    });
-  }
-
-  Future<void> _replaceDocAt(int index) async {
-    final path = await _pickSingleFile(imageOnly: false);
-    if (path == null || !mounted) return;
-
-    setState(() {
-      if (index >= 0 && index < additionalDocs.length) {
-        final updated = List<TitledLocalFile>.from(additionalDocs);
-        updated[index] = updated[index].copyWith(path: path);
-        additionalDocs = updated;
-      }
-    });
-  }
-
-  void _removeImageAt(int index) {
-    if (index < 0 || index >= additionalImages.length) return;
-    setState(() {
-      final updated = List<TitledLocalFile>.from(additionalImages);
-      updated.removeAt(index);
-      additionalImages = updated;
-    });
-  }
-
-  void _removeDocAt(int index) {
-    if (index < 0 || index >= additionalDocs.length) return;
-    setState(() {
-      final updated = List<TitledLocalFile>.from(additionalDocs);
-      updated.removeAt(index);
-      additionalDocs = updated;
+      target[index] = target[index].copyWith(path: path);
     });
   }
 
@@ -1526,10 +1524,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     uploadLabel: 'Choose Image',
                     defaultTitlePrefix: 'Image',
                     imageOnly: true,
-                    addToImages: true,
+                    target: additionalImages,
                   ),
-                  onRemove: _removeImageAt,
-                  onReplace: _replaceImageAt,
+                  onRemove: (i) => setState(() => additionalImages.removeAt(i)),
+                  onReplace: (i) =>
+                      _replaceFileAt(additionalImages, i, imageOnly: true),
                 ),
                 _multiFilePicker(
                   title: 'Additional Documents',
@@ -1541,10 +1540,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     uploadLabel: 'Choose File',
                     defaultTitlePrefix: 'Document',
                     imageOnly: false,
-                    addToImages: false,
+                    target: additionalDocs,
                   ),
-                  onRemove: _removeDocAt,
-                  onReplace: _replaceDocAt,
+                  onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
+                  onReplace: (i) =>
+                      _replaceFileAt(additionalDocs, i, imageOnly: false),
                 ),
               ],
               const SizedBox(height: 24),
