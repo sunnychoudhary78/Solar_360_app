@@ -243,7 +243,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     }
 
     if (normalized == 'installation done') {
-      return 'Complete Installation';
+      return 'installation done';
     }
 
     return status;
