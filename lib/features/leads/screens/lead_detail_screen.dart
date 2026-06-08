@@ -277,9 +277,20 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
+      final normalizedNextStatus = nextStatus.trim().toLowerCase();
+
       setState(() {
-        _lead = _lead.copyWith(status: nextStatus);
+        if (normalizedNextStatus == 'installation done') {
+          _lead = _lead.copyWith(
+            status: nextStatus,
+            currentDepartment: 'Support',
+          );
+        } else {
+          _lead = _lead.copyWith(status: nextStatus);
+        }
+
         allowedNext = [];
+        loading = false;
       });
 
       ref.invalidate(allLeadsProvider);
@@ -288,9 +299,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
-      setState(() {});
-
-      final normalizedNextStatus = nextStatus.trim().toLowerCase();
       if (normalizedNextStatus == 'installation done') {
         showAppMessage(context, 'Installation Completed Successfully');
       } else {
@@ -299,17 +307,27 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      setState(() => loading = false);
-
       final errorText = e.toString().toLowerCase();
       final normalizedNextStatus = nextStatus.trim().toLowerCase();
 
       if (normalizedNextStatus == 'installation done' &&
           errorText.contains('you do not have access')) {
+        setState(() {
+          _lead = _lead.copyWith(
+            status: nextStatus,
+            currentDepartment: 'Support',
+          );
+          allowedNext = [];
+          loading = false;
+        });
+
+        ref.invalidate(allLeadsProvider);
+
         showAppMessage(context, 'Installation Completed Successfully');
         return;
       }
 
+      setState(() => loading = false);
       showAppMessage(context, e.toString(), isError: true);
     }
   }
@@ -552,10 +570,6 @@ registration_time=${result.regTime.trim()}
 
     final isLeadWithSupport = normalizedDepartment == 'support';
 
-    // IMPORTANT:
-    // Registration can be added/edited only in initial Support registration stage.
-    // After Documents Submitted / Installation flow / Installation Done,
-    // edit registration button will not show again.
     final isRegistrationEditableStage =
         normalizedStatus == 'sent to support' ||
         normalizedStatus == 'loan application initiated';
@@ -627,7 +641,6 @@ registration_time=${result.regTime.trim()}
                         : _lead.workflowStep,
                   ),
                   const SizedBox(height: 14),
-
                   if (canInstallationAccessLead) ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _openInstallationForm,
@@ -640,7 +653,6 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
-
                   if (showAddRegistrationButton) ...[
                     OutlinedButton(
                       onPressed: loading ? null : _saveRegistration,
@@ -648,7 +660,6 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
-
                   if (canSalesEditLeadDetails) ...[
                     SizedBox(
                       width: double.infinity,
@@ -668,7 +679,6 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
-
                   _section('Customer Details', [
                     _row('Full Name', _lead.fullName),
                     _row('Lead Code', _lead.leadCode),
@@ -680,7 +690,6 @@ registration_time=${result.regTime.trim()}
                     _row('Pincode', _lead.pincode),
                     _row('KW', _lead.loadSectionKw),
                   ]),
-
                   _section('Workflow', [
                     _row('Status', _lead.status),
                     _row('Department', _lead.currentDepartment),
@@ -688,7 +697,6 @@ registration_time=${result.regTime.trim()}
                     _row('Priority', _lead.priority),
                     _row('Workflow Step', _lead.workflowStep),
                   ]),
-
                   _section('Connection & Bank', [
                     _row('CA Number', _lead.caNumber),
                     _row('K Number', _lead.kNumber),
@@ -697,14 +705,12 @@ registration_time=${result.regTime.trim()}
                     _row('Account', _lead.accountNumber),
                     _row('IFSC', _lead.ifscCode),
                   ]),
-
                   if (_hasRegistrationDetailsFrontend)
                     _section('Registration', [
                       _row('Registration ID', _displayRegistrationId),
                       _row('Registration Date', _displayRegistrationDate),
                       _row('Registration Time', _displayRegistrationTime),
                     ]),
-
                   if (showEditRegistrationButton) ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _saveRegistration,
@@ -713,7 +719,6 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
-
                   if (_hasSavedInstallationDetails)
                     _section('Installation Details', [
                       _row('File No', _installationValue('file_no')),
@@ -747,16 +752,12 @@ registration_time=${result.regTime.trim()}
                       ),
                       _spNumbersRows(),
                     ]),
-
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
                   ]),
-
                   if (visibleNotes.trim().isNotEmpty)
                     _section('Notes', [_row('Notes', visibleNotes)]),
-
                   const SizedBox(height: 8),
-
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -773,7 +774,6 @@ registration_time=${result.regTime.trim()}
                       ),
                     ),
                   ),
-
                   if (showUploadButton) ...[
                     const SizedBox(height: 10),
                     SizedBox(
@@ -793,7 +793,6 @@ registration_time=${result.regTime.trim()}
                       ),
                     ),
                   ],
-
                   if (filteredNextStatuses.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     const Text(
@@ -832,14 +831,12 @@ registration_time=${result.regTime.trim()}
                       );
                     }),
                   ],
-
                   const SizedBox(height: 16),
                   const Text(
                     'Status history',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-
                   if (history.isEmpty)
                     const Text(
                       'No history yet',
