@@ -167,13 +167,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
         normalizedRole == 'installation' ||
         normalizedRole == 'installation team';
 
-    // Backend flow:
-    // Amount Received -> Installation In Progress -> Installation Done -> Support
-    //
-    // If backend allowedNext comes empty because the workflow-meta/status API
-    // is stale or role mapping is not matching, keep the installation buttons
-    // visible from the current status. The status sent to backend is still the
-    // exact backend status string.
     if (isInstallationRole) {
       if (allowedNext.isNotEmpty) return allowedNext;
 
@@ -199,7 +192,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
     final matched = allowedNext.where(localAllowed.contains).toList();
 
-    // Prefer backend result if local frontend workflow is stale.
     return matched.isNotEmpty ? matched : allowedNext;
   }
 
@@ -232,7 +224,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   }
 
   String _installationButtonLabel(String status) {
-    // Display labels only. Do not change the status sent to backend.
     final normalized = status.trim().toLowerCase();
 
     if (normalized == 'installation in progress') {
@@ -257,8 +248,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   Future<void> _advanceStatus(String nextStatus) async {
     if (loading) return;
 
-    // Installation details are required only before completing installation.
-    // Start Installation and Installation In Progress should work without this alert.
     if (_isCompleteInstallationStatus(nextStatus) &&
         !_hasSavedInstallationDetails) {
       showAppMessage(
@@ -299,7 +288,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
       if (!mounted) return;
 
-      // Force a rebuild in case fresh data is loaded with the same object.
       setState(() {});
 
       final normalizedNextStatus = nextStatus.trim().toLowerCase();
@@ -505,10 +493,8 @@ registration_time=${result.regTime.trim()}
     setState(() => loading = true);
 
     try {
-      // Reload lead data and also ensure installation details are attached
       await _reloadSilently();
 
-      // Try fetching installation record directly and attach if present
       final installationRepo = ref.read(installationRepositoryProvider);
       try {
         final inst = await installationRepo.getByLeadId(_lead.id);
@@ -517,9 +503,7 @@ registration_time=${result.regTime.trim()}
             _lead = _lead.copyWith(installationDetails: inst);
           });
         }
-      } catch (_) {
-        // ignore individual installation fetch errors
-      }
+      } catch (_) {}
 
       if (!mounted) return;
       showAppMessage(context, 'Installation details saved');
@@ -568,10 +552,16 @@ registration_time=${result.regTime.trim()}
 
     final isLeadWithSupport = normalizedDepartment == 'support';
 
-    final isDocumentsSubmitted = normalizedStatus == 'documents submitted';
+    // IMPORTANT:
+    // Registration can be added/edited only in initial Support registration stage.
+    // After Documents Submitted / Installation flow / Installation Done,
+    // edit registration button will not show again.
+    final isRegistrationEditableStage =
+        normalizedStatus == 'sent to support' ||
+        normalizedStatus == 'loan application initiated';
 
     final canSupportManageRegistration =
-        isSupportUser && isLeadWithSupport && !isDocumentsSubmitted;
+        isSupportUser && isLeadWithSupport && isRegistrationEditableStage;
 
     final showAddRegistrationButton =
         canSupportManageRegistration && !_hasRegistrationDetailsFrontend;
@@ -591,10 +581,6 @@ registration_time=${result.regTime.trim()}
     final canInstallationAccessLead =
         isInstallationUser && !isInstallationDoneAndMovedToSupport;
 
-    // Installation user should see backend-allowed actions when they are in the
-    // installation flow, even if department label is not yet updated.
-    // After Installation Done, backend moves lead to Support so no installation
-    // actions should be shown.
     final filteredNextStatuses = isInstallationUser
         ? (isInstallationDoneAndMovedToSupport ? <String>[] : nextStatuses)
         : nextStatuses;
