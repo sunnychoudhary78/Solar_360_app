@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Top-aligned success/error messages (green success theme).
 void showAppMessage(
   BuildContext context,
   String message, {

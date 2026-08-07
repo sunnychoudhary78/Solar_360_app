@@ -1,6 +1,6 @@
 {
-    "name": "solar_sales",
-    "short_name": "solar_sales",
+    "name": "IMT-GreenEnergy",
+    "short_name": "IMT-GreenEnergy",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

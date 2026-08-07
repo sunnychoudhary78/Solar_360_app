@@ -1,4 +1,4 @@
-import '../config/app_config.dart';
+import 'package:solar_sales/core/network/api_constants.dart';
 
 String resolveUploadUrl(String? value) {
   if (value == null) return '';
@@ -7,10 +7,11 @@ String resolveUploadUrl(String? value) {
   if (s.isEmpty) return '';
 
   if (s.startsWith('http://') || s.startsWith('https://')) {
-    return s.replaceAll('/uploads/', '/api/uploads/');
+    if (s.contains('/api/uploads/')) return s;
+    return s.replaceFirst('/uploads/', '/api/uploads/');
   }
 
-  final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api$'), '');
+  final base = ApiConstants.baseUrl.replaceAll(RegExp(r'/api$'), '');
 
   var normalized = s.replaceAll('\\', '/').trim();
 
@@ -18,7 +19,6 @@ String resolveUploadUrl(String? value) {
   normalized = normalized.replaceFirst(RegExp(r'^api/uploads/'), '');
   normalized = normalized.replaceFirst(RegExp(r'^uploads/'), '');
 
-  // Lead files are stored under uploads/leads/ on the server.
   if (!normalized.startsWith('leads/')) {
     normalized = 'leads/$normalized';
   }
@@ -43,6 +43,6 @@ bool isPdfPath(String? path) {
 String fileDisplayName(String? path) {
   if (path == null || path.isEmpty) return 'File';
 
-  final s = path.replaceAll('\\', '/');
-  return s.split('/').last;
+  final normalized = path.replaceAll('\\', '/');
+  return normalized.split('/').last;
 }

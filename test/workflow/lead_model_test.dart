@@ -1,0 +1,107 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:solar_sales/features/leads/data/models/lead_model.dart';
+
+void main() {
+  group('LeadModel parsing', () {
+    test('parses snake_case lead payload', () {
+      final lead = LeadModel.fromJson({
+        'id': 'lead-1',
+        'lead_code': 'LD-001',
+        'full_name': 'Ravi Kumar',
+        'mobile': '9876543210',
+        'email': 'ravi@example.com',
+        'address': '12 Solar Street',
+        'city': 'Delhi',
+        'state': 'DL',
+        'pincode': '110001',
+        'load_section_kw': '5',
+        'ca_number': 'CA123',
+        'k_number': 'K99',
+        'reference_number': 'REF-1',
+        'discom': 'BSES',
+        'geo_location': 'Delhi',
+        'latitude': '28.6',
+        'longitude': '77.2',
+        'bank_account_name': 'Ravi Kumar',
+        'bank_name': 'SBI',
+        'account_number': '1234567890',
+        'ifsc_code': 'SBIN0001234',
+        'project_type': 'Residential',
+        'source': 'Referral',
+        'status': 'New Lead',
+        'current_department': 'Sales',
+        'workflow_step': 'Lead Created (Basic)',
+        'lead_stage': 'open',
+        'assigned_to': 'u2',
+        'assigned_by': 'u1',
+        'created_by': 'u1',
+        'updated_by': 'u1',
+        'priority': 'medium',
+        'notes': 'site visit pending',
+        'roof_photo_status': 'pending',
+        'available_shadow_free_area': '400',
+        'quotation_amount': '250000',
+        'visited_employee_name': 'Amit',
+        'visited_employee_contact': '9999999999',
+        'follow_up_date': '2026-08-10',
+        'last_contacted_at': '2026-08-01',
+        'roof_load_bearing_capacity': true,
+        'shadow_free_roof': true,
+        'vendor_visited_site': false,
+        'is_active': true,
+        'payment_type': 'Subsidy',
+        'subsidy_percentage': '40',
+        'payment_amount': '120000',
+        'final_amount_received': true,
+        'subsidy_apply_status': 'Processing',
+        'assigned_to_document_admin': 'doc-1',
+        'assigned_to_document_admin_name': 'Doc User',
+        'assigned_to_finance_user': 'fin-1',
+        'assignedFinanceUser': {'name': 'Finance User'},
+        'assigned_to_material_engineer': 'me-1',
+        'assignedMaterialEngineer': {'name': 'Material Engineer'},
+        'assigned_to_electrical_engineer': 'ee-1',
+        'assignedElectricalEngineer': {'name': 'Electrical Engineer'},
+        'registration_images': ['leads/reg-1.png', 'leads/reg-2.png'],
+        'created_at': '2026-08-01T10:00:00.000Z',
+        'updated_at': '2026-08-01T11:00:00.000Z',
+        'installation_details': {'panel_brand': 'Waaree', 'panel_count': 10},
+      });
+
+      expect(lead.id, 'lead-1');
+      expect(lead.leadCode, 'LD-001');
+      expect(lead.fullName, 'Ravi Kumar');
+      expect(lead.status, 'New Lead');
+      expect(lead.currentDepartment, 'Sales');
+      expect(lead.discom, 'BSES');
+      expect(lead.roofLoadBearingCapacity, isTrue);
+      expect(lead.paymentType, 'Subsidy');
+      expect(lead.subsidyPercentage, '40');
+      expect(lead.paymentAmount, '120000');
+      expect(lead.finalAmountReceived, isTrue);
+      expect(lead.assignedToDocumentAdminName, 'Doc User');
+      expect(lead.assignedToFinanceUserName, 'Finance User');
+      expect(lead.assignedToMaterialEngineerName, 'Material Engineer');
+      expect(lead.assignedToElectricalEngineerName, 'Electrical Engineer');
+      expect(lead.registrationImages, hasLength(2));
+      expect(lead.installationDetails?['panel_brand'], 'Waaree');
+    });
+
+    test('parses camelCase aliases', () {
+      final lead = LeadModel.fromJson({
+        'id': 'lead-2',
+        'leadCode': 'LD-002',
+        'fullName': 'Anita',
+        'mobile': '9000000000',
+        'status': 'Converted',
+        'currentDepartment': 'Sales',
+        'loadSectionKw': '3',
+      });
+
+      expect(lead.leadCode, 'LD-002');
+      expect(lead.fullName, 'Anita');
+      expect(lead.loadSectionKw, '3');
+      expect(lead.status, 'Converted');
+    });
+  });
+}

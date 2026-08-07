@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -8,16 +7,16 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../storage/token_storage.dart';
-import 'upload_url.dart';
+import 'package:solar_sales/core/storage/token_storage.dart';
+import 'package:solar_sales/core/utils/upload_url.dart';
 
-const _downloadChannel = MethodChannel('solar_sales/downloads');
+const _downloadChannel = MethodChannel('com.imt.greenenergy/downloads');
 
-/// Downloads a remote upload to device-visible storage and optionally opens it.
 Future<String> downloadRemoteFile({
   required String url,
   required String fileName,
   bool openAfterSave = false,
+  TokenStorage? tokenStorage,
 }) async {
   final uri = Uri.tryParse(url);
   if (uri == null || url.trim().isEmpty) {
@@ -26,7 +25,7 @@ Future<String> downloadRemoteFile({
 
   final safeName = fileDisplayName(fileName);
   final dio = Dio();
-  final token = TokenStorage.token;
+  final token = await (tokenStorage ?? TokenStorage()).getJwt();
 
   final response = await dio.get<List<int>>(
     url,
@@ -66,8 +65,7 @@ Future<String> _saveAndroidDownload({
 }) async {
   final storage = await Permission.storage.request();
   if (storage.isDenied || storage.isPermanentlyDenied) {
-    // Android 10+ uses MediaStore and does not need legacy storage permission.
-    // Older devices will return a native write error if the permission is needed.
+    // Android 10+ uses MediaStore; older devices may need storage permission.
   }
 
   final result = await _downloadChannel.invokeMethod<String>(

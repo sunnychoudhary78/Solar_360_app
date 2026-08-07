@@ -11,7 +11,7 @@
         android:maxSdkVersion="32"/>
 
     <application
-        android:label="solar_sales"
+        android:label="Solar 360"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

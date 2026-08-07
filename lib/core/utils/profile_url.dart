@@ -1,4 +1,4 @@
-import '../config/app_config.dart';
+import 'package:solar_sales/core/network/api_constants.dart';
 
 List<String> resolveProfilePictureUrls(String? value) {
   if (value == null || value.trim().isEmpty) return [];
@@ -6,26 +6,21 @@ List<String> resolveProfilePictureUrls(String? value) {
   final s = value.trim().replaceAll('\\', '/');
 
   if (s.startsWith('http://') || s.startsWith('https://')) {
-    return [s];
+    if (s.contains('/api/uploads/')) return [s];
+    return [s.replaceFirst('/uploads/', '/api/uploads/')];
   }
 
-  final baseWithoutApi =
-      AppConfig.apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
+  final baseWithoutApi = ApiConstants.baseUrl.replaceFirst(
+    RegExp(r'/api/?$'),
+    '',
+  );
 
-  var path = s.replaceFirst(RegExp(r'^/+'), '');
+  final path = s
+      .replaceFirst(RegExp(r'^/+'), '')
+      .replaceFirst(RegExp(r'^api/uploads/'), '')
+      .replaceFirst(RegExp(r'^uploads/'), '');
 
-  if (path.startsWith('api/uploads/')) {
-    path = path.replaceFirst('api/', '');
-  }
-
-  if (!path.startsWith('uploads/')) {
-    path = 'uploads/$path';
-  }
-
-  return [
-    '$baseWithoutApi/$path',
-    '${AppConfig.apiBaseUrl}/$path',
-  ];
+  return ['$baseWithoutApi/api/uploads/$path'];
 }
 
 String resolveProfilePictureUrl(String? value) {

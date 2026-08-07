@@ -1,6 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../utils/profile_url.dart';
+import 'package:solar_sales/core/utils/profile_url.dart';
 
 class ProfilePhotoBox extends StatefulWidget {
   final String? rawProfilePicture;
@@ -49,18 +50,28 @@ class _ProfilePhotoBoxState extends State<ProfilePhotoBox> {
     }
 
     final url = _urls[_index];
+    final scheme = Theme.of(context).colorScheme;
 
-    return Image.network(
-      url,
+    return CachedNetworkImage(
+      imageUrl: url,
       key: ValueKey(url),
       fit: BoxFit.cover,
-      headers: const {'Accept': 'image/*'},
-      errorBuilder: (context, error, stackTrace) {
+      httpHeaders: const {'Accept': 'image/*'},
+      placeholder: (context, url) => ColoredBox(
+        color: scheme.surfaceContainerHighest,
+        child: const Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      errorWidget: (context, url, error) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           setState(() => _index++);
         });
-
         return _initialBox();
       },
     );

@@ -1,19 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:solar_sales/app/app.dart';
+
+import 'package:solar_sales/shared/module/module_access.dart';
 
 void main() {
-  testWidgets('Login screen loads successfully',
-      (WidgetTester tester) async {
+  test('module home routes', () {
+    expect(moduleHomeRoute(AppModules.billbook), '/');
+    expect(moduleHomeRoute(AppModules.solar), '/solar');
+  });
 
-    // Load app
-    await tester.pumpWidget(
-      const SolarSalesApp(),
-    );
-
-    // Check welcome text
-    expect(find.text('Welcome Back'), findsOneWidget);
-
-    // Check sign in button
-    expect(find.text('Sign in'), findsOneWidget);
+  test('module labels', () {
+    expect(ModuleLabels.of(AppModules.billbook), 'Billbook');
+    expect(ModuleLabels.of(AppModules.solar), 'Green Energy');
   });
 }
