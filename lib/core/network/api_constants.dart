@@ -7,7 +7,7 @@ class ApiConstants {
   static String get baseUrl {
     switch (current) {
       case Environment.uat:
-        return 'https://uat-imt-solar-360.immortalgroup.in/api';
+        return 'http://192.168.1.11:3004/api';
       case Environment.prod:
         return 'https://imt-billbook.immortalgroup.in/api';
     }
