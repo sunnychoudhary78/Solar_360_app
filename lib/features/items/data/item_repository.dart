@@ -24,7 +24,13 @@ class ItemRepository {
 
   Future<List<ItemModel>> pendingApprovals() => _api.pendingApprovals();
 
-  Future<ItemModel> create(ItemModel item) => _api.create(item.toJson());
+  Future<ItemModel> create(ItemModel item, {String? warehouseId}) {
+    final body = item.toJson();
+    if (warehouseId != null && warehouseId.isNotEmpty) {
+      body['warehouse_id'] = warehouseId;
+    }
+    return _api.create(body);
+  }
 
   Future<ItemModel> update(String id, ItemModel item) =>
       _api.update(id, item.toJson());

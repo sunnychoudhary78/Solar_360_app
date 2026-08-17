@@ -32,6 +32,7 @@ class ApiEndpoints {
   static const warehouses = 'warehouses';
   static String warehouse(String id) => 'warehouses/$id';
   static String warehouseDeactivate(String id) => 'warehouses/$id/deactivate';
+  static String warehouseActivate(String id) => 'warehouses/$id/activate';
 
   // Inventory
   static const stock = 'inventory/stock';

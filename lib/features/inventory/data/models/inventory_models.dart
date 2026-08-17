@@ -5,11 +5,13 @@ class WarehouseModel {
   final String id;
   final String name;
   final String? location;
+  final bool isActive;
 
   const WarehouseModel({
     required this.id,
     required this.name,
     this.location,
+    this.isActive = true,
   });
 
   factory WarehouseModel.fromJson(Map<String, dynamic> json) {
@@ -17,6 +19,7 @@ class WarehouseModel {
       id: asString(json['id']),
       name: asString(json['name']),
       location: json['location']?.toString(),
+      isActive: asBool(json['is_active'] ?? json['isActive'], true),
     );
   }
 
@@ -24,6 +27,11 @@ class WarehouseModel {
         'name': name,
         'location': location,
       };
+
+  String get displayLabel {
+    if (location == null || location!.isEmpty) return name;
+    return '$name — $location';
+  }
 }
 
 class StockModel {

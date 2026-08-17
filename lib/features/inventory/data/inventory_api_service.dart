@@ -80,8 +80,15 @@ class InventoryApiService {
     await _api.post(ApiEndpoints.stockAdjustment, body);
   }
 
-  Future<List<WarehouseModel>> listWarehouses() async {
-    final res = await _api.get(ApiEndpoints.warehouses);
+  Future<List<WarehouseModel>> listWarehouses({
+    bool includeInactive = false,
+  }) async {
+    final res = await _api.get(
+      ApiEndpoints.warehouses,
+      queryParams: {
+        if (includeInactive) 'includeInactive': 'true',
+      },
+    );
     final list =
         res is List ? res : (res is Map ? (res['data'] as List? ?? []) : []);
     return list
@@ -105,5 +112,9 @@ class InventoryApiService {
 
   Future<void> deactivateWarehouse(String id) async {
     await _api.post(ApiEndpoints.warehouseDeactivate(id));
+  }
+
+  Future<void> activateWarehouse(String id) async {
+    await _api.post(ApiEndpoints.warehouseActivate(id));
   }
 }

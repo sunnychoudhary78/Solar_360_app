@@ -18,7 +18,7 @@ class WarehousesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(warehousesProvider);
+    final async = ref.watch(managedWarehousesProvider);
     final canCreate =
         ref.watch(authProvider).hasPermission('inventory.create');
     final canUpdate =
@@ -30,6 +30,7 @@ class WarehousesScreen extends ConsumerWidget {
       backgroundColor: theme.colorScheme.surfaceContainerLowest,
       floatingActionButton: canCreate
           ? FloatingActionButton.extended(
+              heroTag: 'warehouses_screen_fab',
               onPressed: () => _showForm(context, ref),
               icon: const Icon(Icons.add_rounded),
               label: const Text('Add Warehouse'),
@@ -40,19 +41,28 @@ class WarehousesScreen extends ConsumerWidget {
         loading: () => const LoadingState(),
         error: (e, _) => ErrorState(
           message: cleanError(e),
-          onRetry: () => ref.invalidate(warehousesProvider),
+          onRetry: () => invalidateWarehouseProviders(ref),
         ),
         data: (items) {
           if (items.isEmpty) {
             return RefreshIndicator(
-              onRefresh: () async => ref.invalidate(warehousesProvider),
+              onRefresh: () async => invalidateWarehouseProviders(ref),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 120),
+                children: [
+                  const SizedBox(height: 80),
                   EmptyState(
-                    title: 'No warehouses found',
+                    title: 'No warehouses yet',
+                    subtitle:
+                        'Create a warehouse to assign items and track stock.',
                     icon: Icons.warehouse_outlined,
+                    action: canCreate
+                        ? FilledButton.icon(
+                            onPressed: () => _showForm(context, ref),
+                            icon: const Icon(Icons.add_rounded),
+                            label: const Text('Add Warehouse'),
+                          )
+                        : null,
                   ),
                 ],
               ),
@@ -60,11 +70,11 @@ class WarehousesScreen extends ConsumerWidget {
           }
 
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(warehousesProvider),
+            onRefresh: () async => invalidateWarehouseProviders(ref),
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final warehouse = items[index];
                 return _WarehouseCard(
@@ -73,6 +83,8 @@ class WarehousesScreen extends ConsumerWidget {
                   onEdit: () => _showForm(context, ref, warehouse: warehouse),
                   onDeactivate: () =>
                       _deactivateWarehouse(context, ref, warehouse),
+                  onActivate: () =>
+                      _activateWarehouse(context, ref, warehouse),
                 );
               },
             ),
@@ -106,7 +118,36 @@ class WarehousesScreen extends ConsumerWidget {
       ref
           .read(globalLoadingProvider.notifier)
           .showSuccess('Warehouse deactivated');
-      ref.invalidate(warehousesProvider);
+      invalidateWarehouseProviders(ref);
+    } catch (e) {
+      ref.read(globalLoadingProvider.notifier).hide();
+      ref.read(globalLoadingProvider.notifier).showApiError(e);
+    }
+  }
+
+  Future<void> _activateWarehouse(
+    BuildContext context,
+    WidgetRef ref,
+    WarehouseModel warehouse,
+  ) async {
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Activate warehouse',
+      message: 'Activate ${warehouse.name} so it can be used for items and stock?',
+      confirmLabel: 'Activate',
+    );
+    if (!ok) return;
+
+    ref.read(globalLoadingProvider.notifier).showLoading('Activating...');
+    try {
+      await ref
+          .read(inventoryRepositoryProvider)
+          .activateWarehouse(warehouse.id);
+      ref.read(globalLoadingProvider.notifier).hide();
+      ref
+          .read(globalLoadingProvider.notifier)
+          .showSuccess('Warehouse activated');
+      invalidateWarehouseProviders(ref);
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showApiError(e);
@@ -151,7 +192,7 @@ class WarehousesScreen extends ConsumerWidget {
       ref.read(globalLoadingProvider.notifier).showSuccess(
             warehouse == null ? 'Warehouse created' : 'Warehouse updated',
           );
-      ref.invalidate(warehousesProvider);
+      invalidateWarehouseProviders(ref);
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showApiError(e);
@@ -165,12 +206,14 @@ class _WarehouseCard extends StatelessWidget {
   final bool canUpdate;
   final VoidCallback onEdit;
   final VoidCallback onDeactivate;
+  final VoidCallback onActivate;
 
   const _WarehouseCard({
     required this.warehouse,
     required this.canUpdate,
     required this.onEdit,
     required this.onDeactivate,
+    required this.onActivate,
   });
 
   @override
@@ -179,139 +222,181 @@ class _WarehouseCard extends StatelessWidget {
     final hasLocation =
         warehouse.location != null && warehouse.location!.isNotEmpty;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withAlpha(128),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(8),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    final isActive = warehouse.isActive;
+
+    return Opacity(
+      opacity: isActive ? 1 : 0.72,
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant.withAlpha(128),
+            width: 1,
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Icon Badge
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withAlpha(128),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.warehouse_rounded,
-                  color: theme.colorScheme.primary,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-
-              // Text Content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      warehouse.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.location_on_outlined,
-                          size: 14,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            hasLocation
-                                ? warehouse.location!
-                                : 'No location specified',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: hasLocation
-                                  ? theme.colorScheme.onSurfaceVariant
-                                  : theme.colorScheme.onSurfaceVariant
-                                      .withAlpha(140),
-                              fontStyle: hasLocation
-                                  ? FontStyle.normal
-                                  : FontStyle.italic,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Actions Menu
-              if (canUpdate)
-                PopupMenuButton<String>(
-                  icon: Icon(
-                    Icons.more_vert_rounded,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  shape: RoundedRectangleBorder(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(8),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withAlpha(128),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit();
-                    if (value == 'deactivate') onDeactivate();
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
+                  child: Icon(
+                    Icons.warehouse_rounded,
+                    color: theme.colorScheme.primary,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
                         children: [
-                          Icon(Icons.edit_outlined, size: 20),
-                          SizedBox(width: 12),
-                          Text('Edit details'),
+                          Expanded(
+                            child: Text(
+                              warehouse.name,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (isActive
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.error)
+                                  .withAlpha(24),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              isActive ? 'Active' : 'Inactive',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: isActive
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.error,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: 'deactivate',
-                      child: Row(
+                      const SizedBox(height: 4),
+                      Row(
                         children: [
                           Icon(
-                            Icons.block_rounded,
-                            size: 20,
-                            color: theme.colorScheme.error,
+                            Icons.location_on_outlined,
+                            size: 14,
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Deactivate',
-                            style: TextStyle(color: theme.colorScheme.error),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              hasLocation
+                                  ? warehouse.location!
+                                  : 'No location specified',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: hasLocation
+                                    ? theme.colorScheme.onSurfaceVariant
+                                    : theme.colorScheme.onSurfaceVariant
+                                        .withAlpha(140),
+                                fontStyle: hasLocation
+                                    ? FontStyle.normal
+                                    : FontStyle.italic,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-            ],
+                if (canUpdate)
+                  PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit();
+                      if (value == 'deactivate') onDeactivate();
+                      if (value == 'activate') onActivate();
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_outlined, size: 20),
+                            SizedBox(width: 12),
+                            Text('Edit details'),
+                          ],
+                        ),
+                      ),
+                      if (isActive)
+                        PopupMenuItem(
+                          value: 'deactivate',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.block_rounded,
+                                size: 20,
+                                color: theme.colorScheme.error,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Deactivate',
+                                style: TextStyle(color: theme.colorScheme.error),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        const PopupMenuItem(
+                          value: 'activate',
+                          child: Row(
+                            children: [
+                              Icon(Icons.check_circle_outline, size: 20),
+                              SizedBox(width: 12),
+                              Text('Activate'),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),

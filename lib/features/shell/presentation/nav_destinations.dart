@@ -138,6 +138,18 @@ class NavDestinations {
       quickActionSubtitle: 'Product catalog',
     ),
     AppDestination(
+      id: 'bb_warehouses',
+      label: 'Warehouses',
+      icon: Icons.warehouse_outlined,
+      selectedIcon: Icons.warehouse_rounded,
+      section: NavSection.catalog,
+      kind: NavKind.route,
+      permission: 'inventory.read',
+      route: '/inventory/warehouses',
+      quickAction: true,
+      quickActionSubtitle: 'Add & manage sites',
+    ),
+    AppDestination(
       id: 'bb_item_approvals',
       label: 'Item Approvals',
       icon: Icons.fact_check_outlined,

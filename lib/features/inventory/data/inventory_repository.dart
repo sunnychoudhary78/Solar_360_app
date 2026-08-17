@@ -105,7 +105,10 @@ class InventoryRepository {
         ),
       );
 
-  Future<List<WarehouseModel>> listWarehouses() => _api.listWarehouses();
+  Future<List<WarehouseModel>> listWarehouses({
+    bool includeInactive = false,
+  }) =>
+      _api.listWarehouses(includeInactive: includeInactive);
 
   Future<WarehouseModel> createWarehouse({
     required String name,
@@ -122,4 +125,6 @@ class InventoryRepository {
 
   Future<void> deactivateWarehouse(String id) =>
       _api.deactivateWarehouse(id);
+
+  Future<void> activateWarehouse(String id) => _api.activateWarehouse(id);
 }

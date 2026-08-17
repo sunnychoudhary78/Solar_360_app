@@ -19,6 +19,19 @@ final warehousesProvider = FutureProvider<List<WarehouseModel>>((ref) async {
   return ref.watch(inventoryRepositoryProvider).listWarehouses();
 });
 
+/// Management list includes deactivated warehouses so they can be reactivated.
+final managedWarehousesProvider =
+    FutureProvider<List<WarehouseModel>>((ref) async {
+  return ref
+      .watch(inventoryRepositoryProvider)
+      .listWarehouses(includeInactive: true);
+});
+
+void invalidateWarehouseProviders(WidgetRef ref) {
+  ref.invalidate(warehousesProvider);
+  ref.invalidate(managedWarehousesProvider);
+}
+
 final lowStockProvider = FutureProvider<List<StockModel>>((ref) async {
   return ref.watch(inventoryRepositoryProvider).getLowStock();
 });

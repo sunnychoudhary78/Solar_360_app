@@ -187,6 +187,7 @@ class _BillBookContent extends StatelessWidget {
           onQuotation: () => Navigator.pushNamed(context, '/quotations/form'),
           onInvoice: () => Navigator.pushNamed(context, '/invoices/new'),
           onItem: () => Navigator.pushNamed(context, '/items/form'),
+          onWarehouse: () => Navigator.pushNamed(context, '/inventory/warehouses'),
         )),
         const SizedBox(height: 18),
         _Section(child: _FooterHint(accentColor: accentColor)),
@@ -409,10 +410,18 @@ class _AttentionTile extends StatelessWidget {
 }
 
 class _CreateActions extends StatelessWidget {
-  const _CreateActions({required this.auth, required this.accentColor, required this.onCustomer, required this.onQuotation, required this.onInvoice, required this.onItem});
+  const _CreateActions({
+    required this.auth,
+    required this.accentColor,
+    required this.onCustomer,
+    required this.onQuotation,
+    required this.onInvoice,
+    required this.onItem,
+    required this.onWarehouse,
+  });
   final AuthState auth;
   final Color accentColor;
-  final VoidCallback onCustomer, onQuotation, onInvoice, onItem;
+  final VoidCallback onCustomer, onQuotation, onInvoice, onItem, onWarehouse;
   @override
   Widget build(BuildContext context) {
     final actions = <Widget>[
@@ -420,6 +429,15 @@ class _CreateActions extends StatelessWidget {
       if (auth.hasPermission('quotation.create')) _CreateAction(label: 'Quotation', subtitle: 'Create quote', icon: Icons.note_add_outlined, color: const Color(0xFF8B5CF6), onTap: onQuotation),
       if (auth.hasPermission('invoice.create')) _CreateAction(label: 'Invoice', subtitle: 'Create invoice', icon: Icons.receipt_long_outlined, color: const Color(0xFF2563EB), onTap: onInvoice),
       if (auth.hasPermission('item.create')) _CreateAction(label: 'Item', subtitle: 'Add product', icon: Icons.add_box_outlined, color: const Color(0xFFF59E0B), onTap: onItem),
+      if (auth.hasPermission('inventory.create') ||
+          auth.hasPermission('inventory.read'))
+        _CreateAction(
+          label: 'Warehouse',
+          subtitle: 'Add warehouse',
+          icon: Icons.warehouse_outlined,
+          color: const Color(0xFF0E9F6E),
+          onTap: onWarehouse,
+        ),
     ];
     return Wrap(spacing: 10, runSpacing: 10, children: actions);
   }
