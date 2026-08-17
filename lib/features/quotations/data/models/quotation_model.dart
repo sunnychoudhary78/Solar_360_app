@@ -6,6 +6,8 @@ import 'package:solar_sales/shared/utils/formatters.dart';
 class QuotationItemModel {
   final String? id;
   final String itemId;
+  final String? warehouseId;
+  final String? warehouseName;
   final int quantity;
   final String? description;
   final double unitPrice;
@@ -17,6 +19,8 @@ class QuotationItemModel {
   const QuotationItemModel({
     this.id,
     required this.itemId,
+    this.warehouseId,
+    this.warehouseName,
     required this.quantity,
     this.description,
     required this.unitPrice,
@@ -28,9 +32,14 @@ class QuotationItemModel {
 
   factory QuotationItemModel.fromJson(Map<String, dynamic> json) {
     final itemRaw = json['item'];
+    final warehouseRaw = json['warehouse'];
     return QuotationItemModel(
       id: json['id']?.toString(),
       itemId: asString(json['item_id']),
+      warehouseId: json['warehouse_id']?.toString(),
+      warehouseName: warehouseRaw is Map
+          ? warehouseRaw['name']?.toString()
+          : null,
       quantity: asInt(json['quantity'], 1),
       description: json['description']?.toString(),
       unitPrice: asDouble(json['unit_price']),
@@ -46,6 +55,7 @@ class QuotationItemModel {
   Map<String, dynamic> toCreateJson() {
     return {
       'item_id': itemId,
+      'warehouse_id': warehouseId,
       'quantity': quantity,
       'unit_price': unitPrice,
       'gst_percent': gstPercent,

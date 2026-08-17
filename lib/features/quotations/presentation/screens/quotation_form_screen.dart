@@ -19,12 +19,15 @@ import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/document_totals_summary.dart';
 import 'package:solar_sales/shared/widgets/party_address_fields.dart';
+import 'package:solar_sales/shared/widgets/warehouse_field.dart';
 
 import '../../data/models/quotation_model.dart';
 import '../providers/quotation_providers.dart';
 
 class _LineDraft {
   String? itemId;
+  String? warehouseId;
+  String? warehouseName;
   final qty = TextEditingController(text: '1');
   final price = TextEditingController();
   final gst = TextEditingController(text: '18');
@@ -107,6 +110,8 @@ class _QuotationFormScreenState extends ConsumerState<QuotationFormScreen> {
         q.items.map((item) {
           final line = _LineDraft();
           line.itemId = item.itemId;
+          line.warehouseId = item.warehouseId;
+          line.warehouseName = item.warehouseName;
           line.qty.text = item.quantity.toString();
           line.price.text = item.unitPrice.toString();
           line.gst.text = item.gstPercent.toString();
@@ -205,8 +210,8 @@ class _QuotationFormScreenState extends ConsumerState<QuotationFormScreen> {
       return;
     }
 
-    final dupError = AppValidators.duplicateLineItems(
-      _lines.map((l) => l.itemId),
+    final dupError = AppValidators.duplicateItemWarehousePairs(
+      _lines.map((l) => (l.itemId, l.warehouseId)),
     );
     if (dupError != null) {
       ref.read(globalLoadingProvider.notifier).showError(dupError);
@@ -221,9 +226,16 @@ class _QuotationFormScreenState extends ConsumerState<QuotationFormScreen> {
             .showError('Select an item for each line');
         return;
       }
+      if (line.warehouseId == null || line.warehouseId!.isEmpty) {
+        ref
+            .read(globalLoadingProvider.notifier)
+            .showError('Select a warehouse for each line item');
+        return;
+      }
       items.add(
         QuotationItemModel(
           itemId: line.itemId!,
+          warehouseId: line.warehouseId,
           quantity: int.parse(line.qty.text.trim()),
           unitPrice: double.parse(line.price.text.trim()),
           gstPercent: double.parse(line.gst.text.trim()),
@@ -782,6 +794,19 @@ class _QuotationFormScreenState extends ConsumerState<QuotationFormScreen> {
                 });
               },
               validator: (v) => v == null ? 'Select item' : null,
+            ),
+            const SizedBox(height: 12),
+            WarehouseField(
+              warehouseId: line.warehouseId,
+              warehouseName: line.warehouseName,
+              readOnly: false,
+              requiredField: true,
+              onChanged: (id) {
+                setState(() {
+                  line.warehouseId = id;
+                  line.warehouseName = null;
+                });
+              },
             ),
             if (line.itemId != null) ...[
               const SizedBox(height: 6),

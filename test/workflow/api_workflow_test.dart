@@ -40,6 +40,7 @@ void main() {
         items: [
           const QuotationItemModel(
             itemId: 'i1',
+            warehouseId: 'w1',
             quantity: 2,
             unitPrice: 1000,
             gstPercent: 18,
@@ -58,6 +59,7 @@ void main() {
       expect(body['validUntil'], '2026-12-31');
       expect(body['items'], isA<List>());
       expect((body['items'] as List).first['item_id'], 'i1');
+      expect((body['items'] as List).first['warehouse_id'], 'w1');
       expect((body['items'] as List).first['quantity'], 2);
     });
 
@@ -136,6 +138,7 @@ void main() {
         items: [
           const QuotationItemModel(
             itemId: 'i1',
+            warehouseId: 'w1',
             quantity: 1,
             unitPrice: 100,
             gstPercent: 18,

@@ -103,6 +103,7 @@ void main() {
     test('QuotationItemModel.toCreateJson matches web payload keys', () {
       const line = QuotationItemModel(
         itemId: 'i1',
+        warehouseId: 'w1',
         quantity: 3,
         unitPrice: 200,
         gstPercent: 18,
@@ -110,6 +111,7 @@ void main() {
       );
       expect(line.toCreateJson(), {
         'item_id': 'i1',
+        'warehouse_id': 'w1',
         'quantity': 3,
         'unit_price': 200,
         'gst_percent': 18,

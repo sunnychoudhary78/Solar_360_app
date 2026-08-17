@@ -120,6 +120,23 @@ class AppValidators {
     return null;
   }
 
+  /// Returns error if duplicate (item_id, warehouse_id) pairs on a document.
+  static String? duplicateItemWarehousePairs(
+    Iterable<(String? itemId, String? warehouseId)> lines,
+  ) {
+    final seen = <String>{};
+    for (final (itemId, warehouseId) in lines) {
+      if (itemId == null || itemId.isEmpty) continue;
+      if (warehouseId == null || warehouseId.isEmpty) continue;
+      final key = '$itemId:$warehouseId';
+      if (seen.contains(key)) {
+        return 'Duplicate item from the same warehouse is not allowed';
+      }
+      seen.add(key);
+    }
+    return null;
+  }
+
   static String? pincode(String? value) {
     if (value == null || value.trim().isEmpty) return null;
     if (!RegExp(r'^\d{6}$').hasMatch(value.trim())) {
