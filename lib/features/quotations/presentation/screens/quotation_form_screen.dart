@@ -581,7 +581,7 @@ class _QuotationFormScreenState extends ConsumerState<QuotationFormScreen> {
                       TextFormField(
                         controller: _quotationNumber,
                         decoration: InputDecoration(
-                          labelText: 'Quotation Number (Optional)',
+                          labelText: 'Leave blank to auto-generate',
                           hintText: 'Auto-generated if blank',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),

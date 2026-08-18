@@ -46,7 +46,7 @@ class InvoiceDispatchFields extends StatelessWidget {
           controller: motorVehicleNo,
           enabled: enabled,
           decoration: const InputDecoration(labelText: 'Motor vehicle no.'),
-          inputFormatters: [LengthLimitingTextInputFormatter(50)],
+          inputFormatters: [LengthLimitingTextInputFormatter(12)],
           validator: (v) => AppValidators.maxLength(
             v,
             max: 50,
@@ -58,10 +58,10 @@ class InvoiceDispatchFields extends StatelessWidget {
           controller: ewayBillNo,
           enabled: enabled,
           decoration: const InputDecoration(labelText: 'E-way bill no.'),
-          inputFormatters: [LengthLimitingTextInputFormatter(50)],
+          inputFormatters: [LengthLimitingTextInputFormatter(12)],
           validator: (v) => AppValidators.maxLength(
             v,
-            max: 50,
+            max: 12,
             field: 'E-way bill no.',
           ),
         ),

@@ -40,6 +40,8 @@ class SharedHomeLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     final scroll = ListView(
       physics: const AlwaysScrollableScrollPhysics(
         parent: BouncingScrollPhysics(),
@@ -67,8 +69,22 @@ class SharedHomeLayout extends StatelessWidget {
       ],
     );
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveGradient = isDark
+        ? LinearGradient(
+            begin: header.gradient.begin,
+            end: header.gradient.end,
+            stops: header.gradient.stops,
+            colors: [
+              scheme.surfaceContainerLowest,
+              scheme.surfaceContainerLow,
+              scheme.surfaceContainer,
+            ],
+          )
+        : header.gradient;
+
     return _AnimatedGradientBackground(
-      gradient: header.gradient,
+      gradient: effectiveGradient,
       accentColor: header.accentColor,
       child: onRefresh == null
           ? scroll

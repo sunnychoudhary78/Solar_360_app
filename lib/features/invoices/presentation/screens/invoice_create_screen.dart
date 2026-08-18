@@ -454,7 +454,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                     TextFormField(
                       controller: _invoiceNumber,
                       decoration: const InputDecoration(
-                        labelText: 'Invoice number (optional)',
+                        labelText: ' Leave Blank For Auto',
                         hintText: 'Auto-generated if blank',
                       ),
                       inputFormatters: [LengthLimitingTextInputFormatter(50)],

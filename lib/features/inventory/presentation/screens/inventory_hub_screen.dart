@@ -75,6 +75,7 @@ class InventoryHubScreen extends ConsumerWidget {
                         'Manage materials, track ledger history & monitor stock alerts',
                   ),
                 ),
+
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
@@ -86,7 +87,9 @@ class InventoryHubScreen extends ConsumerWidget {
                       crossAxisCount: 2,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
-                      childAspectRatio: 1.5,
+
+                      // Increased card height to prevent bottom overflow.
+                      childAspectRatio: 1.28,
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
@@ -96,6 +99,7 @@ class InventoryHubScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+
                 const SliverToBoxAdapter(
                   child: SizedBox(height: AppSpacing.xl),
                 ),
@@ -108,7 +112,9 @@ class InventoryHubScreen extends ConsumerWidget {
 class _HubCard extends StatelessWidget {
   final _HubTile tile;
 
-  const _HubCard({required this.tile});
+  const _HubCard({
+    required this.tile,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -117,12 +123,17 @@ class _HubCard extends StatelessWidget {
     final accent = _accentFor(scheme, tile.accent);
 
     return PremiumCard(
-      onTap: () => Navigator.pushNamed(context, tile.route),
-      padding: const EdgeInsets.all(16),
+      onTap: () => Navigator.pushNamed(
+        context,
+        tile.route,
+      ),
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // ─────────────────────────────────────────────────────────────
+          // TOP ROW
+          // ─────────────────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,10 +143,17 @@ class _HubCard extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  borderRadius: BorderRadius.circular(
+                    AppRadius.md,
+                  ),
                 ),
-                child: Icon(tile.icon, color: accent, size: 22),
+                child: Icon(
+                  tile.icon,
+                  color: accent,
+                  size: 22,
+                ),
               ),
+
               if (tile.badgeText != null)
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -144,10 +162,14 @@ class _HubCard extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    borderRadius: BorderRadius.circular(
+                      AppRadius.pill,
+                    ),
                   ),
                   child: Text(
                     tile.badgeText!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: accent,
                       fontSize: 10,
@@ -159,33 +181,41 @@ class _HubCard extends StatelessWidget {
                 Icon(
                   Icons.arrow_forward_rounded,
                   size: 18,
-                  color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                  color: scheme.onSurfaceVariant.withValues(
+                    alpha: 0.6,
+                  ),
                 ),
             ],
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                tile.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                tile.subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: textTheme.bodySmall?.copyWith(
-                  height: 1.25,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+
+          const Spacer(),
+
+          // ─────────────────────────────────────────────────────────────
+          // TITLE
+          // ─────────────────────────────────────────────────────────────
+          Text(
+            tile.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
+            ),
+          ),
+
+          const SizedBox(height: 4),
+
+          // ─────────────────────────────────────────────────────────────
+          // SUBTITLE
+          // ─────────────────────────────────────────────────────────────
+          Text(
+            tile.subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.bodySmall?.copyWith(
+              height: 1.2,
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -193,9 +223,17 @@ class _HubCard extends StatelessWidget {
   }
 }
 
-enum _HubAccent { primary, secondary, tertiary, error }
+enum _HubAccent {
+  primary,
+  secondary,
+  tertiary,
+  error,
+}
 
-Color _accentFor(ColorScheme scheme, _HubAccent accent) {
+Color _accentFor(
+  ColorScheme scheme,
+  _HubAccent accent,
+) {
   return switch (accent) {
     _HubAccent.primary => scheme.primary,
     _HubAccent.secondary => scheme.secondary,

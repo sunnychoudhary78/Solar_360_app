@@ -1,5 +1,3 @@
-// FULL REWRITE: Billbook Dashboard
-// Keeps existing Riverpod provider, DashboardModel, permissions and routes.
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -54,14 +52,20 @@ class DashboardScreen extends ConsumerWidget {
       ),
       // DO NOT CHANGE: existing Billbook header image.
       heroImage: 'assets/images/billbook_header.png',
-      gradient: const LinearGradient(
+      gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          Color(0xFFF3FBF7),
-          Color(0xFFE8F7F0),
-          Color(0xFFF8FCFA),
-        ],
+        colors: scheme.brightness == Brightness.dark
+            ? [
+                scheme.surfaceContainerLowest,
+                scheme.surfaceContainerLow,
+                scheme.surfaceContainer,
+              ]
+            : const [
+                Color(0xFFF3FBF7),
+                Color(0xFFE8F7F0),
+                Color(0xFFF8FCFA),
+              ],
       ),
       accentColor: green,
     );
