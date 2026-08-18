@@ -788,7 +788,11 @@ class _QuotationFormScreenState extends ConsumerState<QuotationFormScreen> {
                         : '';
                     line.gst.text = item.gstPercent.toString();
                     if (line.description.text.isEmpty) {
-                      line.description.text = item.name;
+                      final itemDescription = item.description?.trim();
+                      line.description.text =
+                          itemDescription != null && itemDescription.isNotEmpty
+                              ? itemDescription
+                              : item.name;
                     }
                   }
                 });
