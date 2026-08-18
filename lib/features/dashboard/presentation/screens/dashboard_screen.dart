@@ -8,6 +8,7 @@ import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
 import 'package:solar_sales/features/shell/presentation/nav_destinations.dart';
+import 'package:solar_sales/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:solar_sales/shared/constants/role_taglines.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
@@ -77,6 +78,17 @@ class DashboardScreen extends ConsumerWidget {
         subtitle: '${_timeGreeting()}, $firstName',
         largeTitle: true,
         actions: [
+          IconButton(
+            tooltip: 'Notifications',
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NotificationsScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh_rounded),

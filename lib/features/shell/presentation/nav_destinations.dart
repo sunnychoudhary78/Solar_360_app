@@ -126,6 +126,15 @@ class NavDestinations {
       quickActionSubtitle: 'Billing & dispatch',
     ),
     AppDestination(
+      id: 'bb_notifications',
+      label: 'Notifications',
+      icon: Icons.notifications_outlined,
+      selectedIcon: Icons.notifications_rounded,
+      section: NavSection.main,
+      kind: NavKind.shellTab,
+      screen: NotificationsScreen(),
+    ),
+    AppDestination(
       id: 'bb_items',
       label: 'Items',
       icon: Icons.category_outlined,
