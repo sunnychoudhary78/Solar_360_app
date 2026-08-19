@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:solar_sales/features/items/presentation/providers/item_providers.dart';
+
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/items/data/models/item_model.dart';
+import 'package:solar_sales/features/items/presentation/providers/item_providers.dart';
 import 'package:solar_sales/features/inventory/data/models/inventory_models.dart';
-
 import 'package:solar_sales/shared/utils/document_workflow.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -13,6 +13,7 @@ import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/paginated_list_view.dart';
 
 import '../providers/inventory_providers.dart';
+
 
 class StockLedgerScreen extends ConsumerStatefulWidget {
   const StockLedgerScreen({super.key});
@@ -34,56 +35,64 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final scheme = theme.colorScheme;
     final state = ref.watch(ledgerListProvider);
     final warehouses = ref.watch(warehousesProvider);
     final itemsAsync = ref.watch(approvedItemsProvider);
+    final canUpdate = ref.watch(authProvider).hasPermission('inventory.update');
+
+    final selectedType = state.transType?.toLowerCase();
+    final showAction = canUpdate && selectedType != null;
+    final actionConfig = showAction
+        ? _getTransConfig(selectedType!, theme)
+        : null;
 
     return Scaffold(
       backgroundColor: isDark
-          ? theme.colorScheme.surfaceContainerLowest
-          : theme.colorScheme.surfaceContainerLow,
-      appBar: const AppAppBar(
-        title: 'Stock Ledger',
-      ),
-      // Stock Out is intentionally a floating action button.
-      // It appears only when the OUT transaction filter is selected,
-      // matching the compact floating Stock In action used on Stock Management.
-      floatingActionButton:
-          state.transType?.toLowerCase() == 'out' &&
-                  ref.watch(authProvider).hasPermission('inventory.update')
-              ? FloatingActionButton.extended(
-                  onPressed: () => _openStockOutForm(context),
-                  icon: const Icon(Icons.arrow_upward_rounded),
-                  label: const Text(
-                    'Stock Out',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
+          ? scheme.surfaceContainerLowest
+          : scheme.surfaceContainerLow,
+      appBar: const AppAppBar(title: 'Stock Ledger'),
+
+      // The action is deliberately at the bottom-right and only appears
+      // when one transaction type is selected.
+      floatingActionButton: showAction
+          ? SizedBox(
+              height: 56,
+              child: FloatingActionButton.extended(
+                heroTag: 'stock-ledger-${selectedType ?? 'none'}',
+                onPressed: () => _openMovementForm(context, selectedType!),
+                icon: Icon(actionConfig!.icon),
+                label: Text(
+                  actionConfig.label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
                   ),
-                  backgroundColor: theme.colorScheme.primary,
-                  foregroundColor: theme.colorScheme.onPrimary,
-                  elevation: 6,
-                  extendedPadding: const EdgeInsets.symmetric(horizontal: 24),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                )
-              : null,
+                ),
+                backgroundColor: actionConfig.color,
+                foregroundColor: scheme.onPrimary,
+                elevation: 5,
+                extendedPadding: const EdgeInsets.symmetric(horizontal: 20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22),
+                ),
+              ),
+            )
+          : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
       body: Column(
         children: [
-          // Filter Header Section
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
+              color: scheme.surface,
               borderRadius: const BorderRadius.vertical(
                 bottom: Radius.circular(16),
               ),
               border: Border(
                 bottom: BorderSide(
-                  color: theme.colorScheme.outlineVariant.withValues(
+                  color: scheme.outlineVariant.withValues(
                     alpha: isDark ? 0.2 : 0.5,
                   ),
                 ),
@@ -92,7 +101,6 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Search Input
                 TextField(
                   controller: _invoiceSearch,
                   decoration: InputDecoration(
@@ -100,13 +108,14 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                     prefixIcon: Icon(
                       Icons.search,
                       size: 20,
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: scheme.onSurfaceVariant,
                     ),
                     suffixIcon: _invoiceSearch.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear, size: 18),
                             onPressed: () {
                               _invoiceSearch.clear();
+                              setState(() {});
                               ref
                                   .read(ledgerListProvider.notifier)
                                   .setInvoiceNumber('');
@@ -124,20 +133,20 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                     ),
                     filled: true,
                     fillColor: isDark
-                        ? theme.colorScheme.surfaceContainerHigh
-                        : theme.colorScheme.surfaceContainerHighest.withValues(
+                        ? scheme.surfaceContainerHigh
+                        : scheme.surfaceContainerHighest.withValues(
                             alpha: 0.5,
                           ),
                   ),
-                  onSubmitted: (v) =>
-                      ref.read(ledgerListProvider.notifier).setInvoiceNumber(v),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (value) => ref
+                      .read(ledgerListProvider.notifier)
+                      .setInvoiceNumber(value),
                 ),
                 const SizedBox(height: 12),
 
-                // Warehouse & Item Selection Row
                 Row(
                   children: [
-                    // Warehouse Picker
                     Expanded(
                       child: warehouses.when(
                         loading: () => const SizedBox(
@@ -146,13 +155,12 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         ),
-                        error: (e, _) => TextButton(
-                          onPressed: () => ref.invalidate(warehousesProvider),
+                        error: (error, _) => TextButton(
+                          onPressed: () =>
+                              ref.invalidate(warehousesProvider),
                           child: Text(
                             'Warehouses failed — Retry',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
+                            style: TextStyle(color: scheme.error),
                           ),
                         ),
                         data: (list) => _buildStyledDropdown<String?>(
@@ -161,7 +169,7 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                           hint: 'Warehouse',
                           icon: Icons.storefront,
                           items: [
-                            const DropdownMenuItem(
+                            const DropdownMenuItem<String?>(
                               value: null,
                               child: Text(
                                 'All Warehouses',
@@ -170,36 +178,46 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                               ),
                             ),
                             ...list.map(
-                              (w) => DropdownMenuItem(
-                                value: w.id,
+                              (warehouse) => DropdownMenuItem<String?>(
+                                value: warehouse.id,
                                 child: Text(
-                                  w.name,
+                                  warehouse.name,
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 1,
                                 ),
                               ),
                             ),
                           ],
-                          onChanged: (v) => ref
+                          onChanged: (value) => ref
                               .read(ledgerListProvider.notifier)
-                              .setWarehouse(v),
+                              .setWarehouse(value),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-
-                    // Item Picker
                     Expanded(
                       child: itemsAsync.when(
-                        loading: () => const SizedBox.shrink(),
-                        error: (_, __) => const SizedBox.shrink(),
+                        loading: () => const SizedBox(
+                          height: 48,
+                          child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        error: (error, _) => TextButton(
+                          onPressed: () =>
+                              ref.invalidate(approvedItemsProvider),
+                          child: Text(
+                            'Items failed — Retry',
+                            style: TextStyle(color: scheme.error),
+                          ),
+                        ),
                         data: (items) => _buildStyledDropdown<String?>(
                           context: context,
                           value: state.itemId,
                           hint: 'Item',
                           icon: Icons.inventory_2_outlined,
                           items: [
-                            const DropdownMenuItem(
+                            const DropdownMenuItem<String?>(
                               value: null,
                               child: Text(
                                 'All Items',
@@ -208,18 +226,19 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                               ),
                             ),
                             ...items.map(
-                              (i) => DropdownMenuItem(
-                                value: i.id,
+                              (item) => DropdownMenuItem<String?>(
+                                value: item.id,
                                 child: Text(
-                                  i.name,
+                                  item.name,
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 1,
                                 ),
                               ),
                             ),
                           ],
-                          onChanged: (v) =>
-                              ref.read(ledgerListProvider.notifier).setItem(v),
+                          onChanged: (value) => ref
+                              .read(ledgerListProvider.notifier)
+                              .setItem(value),
                         ),
                       ),
                     ),
@@ -227,7 +246,6 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Transaction Type Filter Chips
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -240,75 +258,62 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                           onSelected: (_) => ref
                               .read(ledgerListProvider.notifier)
                               .setTransType(null),
-
                           showCheckmark: false,
-
                           backgroundColor: isDark
-                              ? theme.colorScheme.surfaceContainerHigh
-                              : theme.colorScheme.surfaceContainerHighest,
-
+                              ? scheme.surfaceContainerHigh
+                              : scheme.surfaceContainerHighest,
                           selectedColor: isDark
-                              ? theme.colorScheme.primaryContainer
-                              : theme.colorScheme.primary.withValues(
-                                  alpha: 0.12,
-                                ),
-
+                              ? scheme.primaryContainer
+                              : scheme.primary.withValues(alpha: 0.12),
                           side: BorderSide(
                             color: state.transType == null
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.outlineVariant,
+                                ? scheme.primary
+                                : scheme.outlineVariant,
                           ),
-
                           labelStyle: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: state.transType == null
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurfaceVariant,
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant,
                           ),
-
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
                         ),
                       ),
                       ...DocumentWorkflow.inventoryTransTypes.map((type) {
-                        final isSelected = state.transType == type;
+                        final isSelected =
+                            state.transType?.toLowerCase() == type.toLowerCase();
                         final config = _getTransConfig(type, theme);
+
                         return Padding(
                           padding: const EdgeInsets.only(right: 6),
                           child: FilterChip(
                             selected: isSelected,
                             label: Text(type.toUpperCase()),
-
                             onSelected: (selected) {
                               ref
                                   .read(ledgerListProvider.notifier)
                                   .setTransType(selected ? type : null);
                             },
-
                             showCheckmark: false,
-
                             backgroundColor: isDark
-                                ? theme.colorScheme.surfaceContainerHigh
-                                : theme.colorScheme.surfaceContainerHighest,
-
+                                ? scheme.surfaceContainerHigh
+                                : scheme.surfaceContainerHighest,
                             selectedColor: config.color.withValues(
                               alpha: isDark ? 0.22 : 0.14,
                             ),
-
                             side: BorderSide(
                               color: isSelected
                                   ? config.color
-                                  : theme.colorScheme.outlineVariant,
+                                  : scheme.outlineVariant,
                             ),
-
                             labelStyle: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: isSelected
                                   ? config.color
-                                  : theme.colorScheme.onSurfaceVariant,
+                                  : scheme.onSurfaceVariant,
                             ),
-
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
                             ),
@@ -322,281 +327,335 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
             ),
           ),
 
-          // Ledger Transactions List
           Expanded(
             child: state.isLoading && state.items.isEmpty
                 ? const LoadingState()
                 : state.error != null && state.items.isEmpty
-                ? ErrorState(
-                    message: state.error!,
-                    onRetry: () =>
-                        ref.read(ledgerListProvider.notifier).refresh(),
-                  )
-                : PaginatedListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
-                    items: state.items,
-                    isLoadingMore: state.isLoadingMore,
-                    hasMore: state.hasMore,
-                    onRefresh: () =>
-                        ref.read(ledgerListProvider.notifier).refresh(),
-                    onLoadMore: () async {
-                        await ref
+                    ? ErrorState(
+                        message: state.error!,
+                        onRetry: () => ref
                             .read(ledgerListProvider.notifier)
-                            .loadMore();
-                      },
-                    empty: const EmptyState(
-                      title: 'No Transactions Found',
-                      icon: Icons.history_toggle_off,
-                    ),
-                    itemBuilder: (context, tx, _) {
-                      final config = _getTransConfig(tx.transType, theme);
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant.withValues(
-                              alpha: isDark ? 0.3 : 0.7,
-                            ),
-                          ),
+                            .refresh(),
+                      )
+                    : PaginatedListView(
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          16,
+                          16,
+                          showAction ? 92 : 16,
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                        items: state.items,
+                        isLoadingMore: state.isLoadingMore,
+                        hasMore: state.hasMore,
+                        onRefresh: () => ref
+                            .read(ledgerListProvider.notifier)
+                            .refresh(),
+                        onLoadMore: () async {
+                          await ref
+                              .read(ledgerListProvider.notifier)
+                              .loadMore();
+                        },
+                        empty: const EmptyState(
+                          title: 'No Transactions Found',
+                          icon: Icons.history_toggle_off,
+                        ),
+                        itemBuilder: (context, tx, _) {
+                          final config =
+                              _getTransConfig(tx.transType, theme);
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: scheme.surface,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: scheme.outlineVariant.withValues(
+                                  alpha: isDark ? 0.3 : 0.7,
+                                ),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Type Badge Icon
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: config.color.withValues(
-                                        alpha: isDark ? 0.15 : 0.12,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Icon(
-                                      config.icon,
-                                      color: config.color,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-
-                                  // Item Name and Details
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          tx.itemName,
-                                          style: theme.textTheme.titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: config.color.withValues(
+                                            alpha: isDark ? 0.15 : 0.12,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Row(
+                                        child: Icon(
+                                          config.icon,
+                                          color: config.color,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Icon(
-                                              Icons.storefront,
-                                              size: 14,
-                                              color: theme.colorScheme.outline,
-                                            ),
-                                            const SizedBox(width: 4),
                                             Text(
-                                              tx.warehouseName,
-                                              style: theme.textTheme.bodySmall
+                                              tx.itemName,
+                                              style: theme
+                                                  .textTheme.titleMedium
                                                   ?.copyWith(
-                                                    color: theme
-                                                        .colorScheme
-                                                        .outline,
+                                                    fontWeight:
+                                                        FontWeight.bold,
                                                   ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.storefront,
+                                                  size: 14,
+                                                  color: scheme.outline,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    tx.warehouseName,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: theme
+                                                        .textTheme.bodySmall
+                                                        ?.copyWith(
+                                                          color:
+                                                              scheme.outline,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // Quantity Change
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        '${tx.quantity > 0 && tx.transType == 'in' ? '+' : ''}${tx.quantity}',
-                                        style: theme.textTheme.titleLarge
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                              color: config.color,
-                                            ),
                                       ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isDark
-                                              ? theme
-                                                    .colorScheme
-                                                    .surfaceContainer
-                                              : theme
-                                                    .colorScheme
-                                                    .surfaceContainerHigh,
-                                          borderRadius: BorderRadius.circular(
-                                            6,
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            '${tx.quantity > 0 && tx.transType.toLowerCase() == 'in' ? '+' : ''}${tx.quantity}',
+                                            style: theme
+                                                .textTheme.titleLarge
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: config.color,
+                                                ),
+                                          ),
+                                          Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? scheme.surfaceContainer
+                                                  : scheme
+                                                      .surfaceContainerHigh,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              'Bal: ${tx.balanceAfter}',
+                                              style: theme
+                                                  .textTheme.labelSmall
+                                                  ?.copyWith(
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                  ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  const Padding(
+                                    padding:
+                                        EdgeInsets.symmetric(vertical: 10),
+                                    child: Divider(height: 1),
+                                  ),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      // Transaction type chip keeps its natural
+                                      // width and never competes with the
+                                      // reference/date area for extra space.
+                                      Flexible(
+                                        flex: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: config.color.withValues(
+                                              alpha: isDark ? 0.18 : 0.12,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            tx.transType.toUpperCase(),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                              color: config.color,
+                                              fontWeight: FontWeight.w700,
+                                            ),
                                           ),
                                         ),
-                                        child: Text(
-                                          'Bal: ${tx.balanceAfter}',
-                                          style: theme.textTheme.labelSmall
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                        ),
                                       ),
+
+                                      const SizedBox(width: 8),
+
+                                      // Reference number gets the flexible
+                                      // space. Long invoice/reference numbers
+                                      // are ellipsized instead of overflowing.
+                                      Expanded(
+                                        child: tx.referenceNumber != null &&
+                                                tx.referenceNumber!.isNotEmpty
+                                            ? InkWell(
+                                                onTap: tx.isInvoiceReference
+                                                    ? () => Navigator.pushNamed(
+                                                          context,
+                                                          '/invoices/detail',
+                                                          arguments:
+                                                              tx.referenceId,
+                                                        )
+                                                    : null,
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.receipt_long,
+                                                      size: 14,
+                                                      color:
+                                                          tx.isInvoiceReference
+                                                              ? scheme.primary
+                                                              : scheme.outline,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Expanded(
+                                                      child: Text(
+                                                        tx.referenceNumber!,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: theme.textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                          color: tx
+                                                                  .isInvoiceReference
+                                                              ? scheme.primary
+                                                              : null,
+                                                          decoration: tx
+                                                                  .isInvoiceReference
+                                                              ? TextDecoration
+                                                                  .underline
+                                                              : null,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              )
+                                            : Text(
+                                                '—',
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                                style: theme.textTheme.bodySmall
+                                                    ?.copyWith(
+                                                  color: scheme.outline,
+                                                ),
+                                              ),
+                                      ),
+
+                                      // Date gets a bounded flexible area so
+                                      // it remains visible without causing a
+                                      // right-side overflow on small phones.
+                                      if (tx.createdAt != null) ...[
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          flex: 0,
+                                          child: ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 125,
+                                            ),
+                                            child: Text(
+                                              formatDateTime(tx.createdAt!),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.right,
+                                              style: theme.textTheme.bodySmall
+                                                  ?.copyWith(
+                                                color: scheme.outline,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ],
                               ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 10),
-                                child: Divider(height: 1),
-                              ),
-
-                              // Footer Metadata (Type / Ref / Date)
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: config.color.withValues(
-                                        alpha: isDark ? 0.18 : 0.12,
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      tx.transType.toUpperCase(),
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                            color: config.color,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  if (tx.referenceNumber != null &&
-                                      tx.referenceNumber!.isNotEmpty)
-                                    InkWell(
-                                      onTap: tx.isInvoiceReference
-                                          ? () => Navigator.pushNamed(
-                                              context,
-                                              '/invoices/detail',
-                                              arguments: tx.referenceId,
-                                            )
-                                          : null,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.receipt_long,
-                                            size: 14,
-                                            color: tx.isInvoiceReference
-                                                ? theme.colorScheme.primary
-                                                : theme.colorScheme.outline,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            tx.referenceNumber!,
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.w500,
-                                                  color: tx.isInvoiceReference
-                                                      ? theme
-                                                            .colorScheme
-                                                            .primary
-                                                      : null,
-                                                  decoration:
-                                                      tx.isInvoiceReference
-                                                      ? TextDecoration.underline
-                                                      : null,
-                                                ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  else
-                                    Text(
-                                      '—',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: theme.colorScheme.outline,
-                                          ),
-                                    ),
-                                  if (tx.createdAt != null) ...[
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      formatDateTime(tx.createdAt!),
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: theme.colorScheme.outline,
-                                          ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                            ),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
     );
   }
 
+  Future<void> _openMovementForm(
+    BuildContext context,
+    String type,
+  ) async {
+    final normalized = type.toLowerCase();
 
-  Future<void> _openStockOutForm(BuildContext context) async {
-    List<ItemModel> currentItems;
-    List<WarehouseModel> currentWarehouses;
+    List<ItemModel> items;
+    List<WarehouseModel> warehouses;
 
     try {
-      currentItems = await ref.read(approvedItemsProvider.future);
+      items = await ref.read(approvedItemsProvider.future);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to load approved items: $e'),
-        ),
+        SnackBar(content: Text('Unable to load approved items: $e')),
       );
       return;
     }
 
     try {
-      currentWarehouses = await ref.read(warehousesProvider.future);
+      warehouses = await ref.read(warehousesProvider.future);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to load warehouses: $e'),
-        ),
+        SnackBar(content: Text('Unable to load warehouses: $e')),
       );
       return;
     }
 
     if (!context.mounted) return;
 
-    if (currentItems.isEmpty) {
+    if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No approved items are available.'),
@@ -605,7 +664,7 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
       return;
     }
 
-    if (currentWarehouses.isEmpty) {
+    if (warehouses.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No active warehouses are available.'),
@@ -614,65 +673,102 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
       return;
     }
 
-    List<StockModel> stock;
-    try {
-      stock = await ref
-          .read(inventoryRepositoryProvider)
-          .getStock();
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to load current stock: $e'),
-        ),
-      );
-      return;
+    List<StockModel> stock = const [];
+    if (normalized == 'out') {
+      try {
+        stock = await ref
+            .read(inventoryRepositoryProvider)
+            .getStock();
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to load current stock: $e')),
+        );
+        return;
+      }
     }
 
     if (!context.mounted) return;
 
-    final result = await showModalBottomSheet<_StockOutFormResult>(
+    final result = await showModalBottomSheet<_MovementFormResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor:
-          Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(24),
         ),
       ),
-      builder: (_) {
-        return _StockOutSheet(
-          items: currentItems,
-          warehouses: currentWarehouses,
-          stock: stock,
-        );
-      },
+      builder: (_) => _MovementSheet(
+        type: normalized,
+        items: items,
+        warehouses: warehouses,
+        stock: stock,
+      ),
     );
 
-    if (result == null) return;
+    if (result == null || !mounted) return;
 
     try {
-      await ref
-          .read(inventoryRepositoryProvider)
-          .stockOut(
+      final repository = ref.read(inventoryRepositoryProvider);
+
+      switch (normalized) {
+        case 'in':
+          await repository.stockIn(
             itemId: result.itemId,
             warehouseId: result.warehouseId,
             quantity: result.quantity,
             notes: result.notes,
           );
+          break;
+
+        case 'out':
+          await repository.stockOut(
+            itemId: result.itemId,
+            warehouseId: result.warehouseId,
+            quantity: result.quantity,
+            notes: result.notes,
+          );
+          break;
+
+        case 'transfer':
+          if (result.toWarehouseId == null) {
+            throw StateError('Destination warehouse is required.');
+          }
+          await repository.stockTransfer(
+            itemId: result.itemId,
+            fromWarehouseId: result.warehouseId,
+            toWarehouseId: result.toWarehouseId!,
+            quantity: result.quantity,
+            notes: result.notes,
+          );
+          break;
+
+        case 'adjustment':
+          await repository.stockAdjustment(
+            itemId: result.itemId,
+            warehouseId: result.warehouseId,
+            quantity: result.quantity,
+            notes: result.notes,
+          );
+          break;
+
+        default:
+          return;
+      }
 
       if (!mounted) return;
 
-      ref.read(ledgerListProvider.notifier).refresh();
+      await ref.read(ledgerListProvider.notifier).refresh();
       ref.read(stockListProvider.notifier).refresh();
       ref.invalidate(lowStockProvider);
+      ref.invalidate(warehousesProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Stock Out completed successfully.',
+            '${_movementLabel(normalized)} completed successfully.',
           ),
         ),
       );
@@ -681,7 +777,9 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Stock Out failed: $e'),
+          content: Text(
+            '${_movementLabel(normalized)} failed: ${cleanError(e)}',
+          ),
         ),
       );
     }
@@ -696,16 +794,20 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     required ValueChanged<T?> onChanged,
   }) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
     return InputDecorator(
       decoration: InputDecoration(
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 8,
+        ),
         filled: true,
         fillColor: isDark
-            ? theme.colorScheme.surfaceContainerHigh
-            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            ? scheme.surfaceContainerHigh
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -713,7 +815,7 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
         prefixIcon: Icon(
           icon,
           size: 18,
-          color: theme.colorScheme.onSurfaceVariant,
+          color: scheme.onSurfaceVariant,
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -729,74 +831,110 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     );
   }
 
-  // Helper method to resolve transaction visual configuration
   _TransConfig _getTransConfig(String transType, ThemeData theme) {
     switch (transType.toLowerCase()) {
       case 'in':
         return _TransConfig(
-          color: Colors.green,
+          label: 'Stock In',
+          color: theme.colorScheme.primary,
           icon: Icons.arrow_downward_rounded,
         );
       case 'out':
         return _TransConfig(
+          label: 'Stock Out',
           color: theme.colorScheme.error,
           icon: Icons.arrow_upward_rounded,
         );
       case 'transfer':
         return _TransConfig(
+          label: 'Transfer',
           color: theme.colorScheme.primary,
           icon: Icons.swap_horiz_rounded,
         );
       case 'adjustment':
       default:
-        return _TransConfig(color: Colors.orange, icon: Icons.tune_rounded);
+        return _TransConfig(
+          label: 'Adjustment',
+          color: theme.colorScheme.tertiary,
+          icon: Icons.tune_rounded,
+        );
+    }
+  }
+
+  String _movementLabel(String type) {
+    switch (type.toLowerCase()) {
+      case 'in':
+        return 'Stock In';
+      case 'out':
+        return 'Stock Out';
+      case 'transfer':
+        return 'Transfer';
+      case 'adjustment':
+        return 'Adjustment';
+      default:
+        return 'Stock movement';
     }
   }
 }
 
-
-class _StockOutFormResult {
+class _MovementFormResult {
   final String itemId;
   final String warehouseId;
+  final String? toWarehouseId;
   final int quantity;
   final String? notes;
 
-  const _StockOutFormResult({
+  const _MovementFormResult({
     required this.itemId,
     required this.warehouseId,
+    this.toWarehouseId,
     required this.quantity,
     this.notes,
   });
 }
 
-class _StockOutSheet extends StatefulWidget {
+class _MovementSheet extends StatefulWidget {
+  final String type;
   final List<ItemModel> items;
   final List<WarehouseModel> warehouses;
   final List<StockModel> stock;
 
-  const _StockOutSheet({
+  const _MovementSheet({
+    required this.type,
     required this.items,
     required this.warehouses,
-    required this.stock,
+    this.stock = const [],
   });
 
   @override
-  State<_StockOutSheet> createState() => _StockOutSheetState();
+  State<_MovementSheet> createState() => _MovementSheetState();
 }
 
-class _StockOutSheetState extends State<_StockOutSheet> {
+class _MovementSheetState extends State<_MovementSheet> {
   final _formKey = GlobalKey<FormState>();
   final _quantityController = TextEditingController();
   final _notesController = TextEditingController();
 
   late String _itemId;
   late String _warehouseId;
+  String? _toWarehouseId;
+
+  bool get _isTransfer => widget.type == 'transfer';
+  bool get _isAdjustment => widget.type == 'adjustment';
+  bool get _isStockOut => widget.type == 'out';
 
   @override
   void initState() {
     super.initState();
+
     _itemId = widget.items.first.id;
     _warehouseId = widget.warehouses.first.id;
+
+    if (_isTransfer && widget.warehouses.length > 1) {
+      _toWarehouseId = widget.warehouses[1].id;
+    } else if (_isTransfer) {
+      _toWarehouseId = widget.warehouses.first.id;
+    }
   }
 
   @override
@@ -807,6 +945,8 @@ class _StockOutSheetState extends State<_StockOutSheet> {
   }
 
   int get _availableQuantity {
+    if (!_isStockOut) return 0;
+
     for (final stockItem in widget.stock) {
       if (stockItem.itemId == _itemId &&
           stockItem.warehouseId == _warehouseId) {
@@ -816,10 +956,67 @@ class _StockOutSheetState extends State<_StockOutSheet> {
     return 0;
   }
 
+  String get _title {
+    switch (widget.type) {
+      case 'in':
+        return 'Stock In';
+      case 'out':
+        return 'Stock Out';
+      case 'transfer':
+        return 'Stock Transfer';
+      case 'adjustment':
+        return 'Stock Adjustment';
+      default:
+        return 'Stock Movement';
+    }
+  }
+
+  String get _subtitle {
+    switch (widget.type) {
+      case 'in':
+        return 'Add stock to a warehouse.';
+      case 'out':
+        return 'Remove stock manually.';
+      case 'transfer':
+        return 'Move stock between warehouses.';
+      case 'adjustment':
+        return 'Set the exact quantity after physical count.';
+      default:
+        return 'Record a stock movement.';
+    }
+  }
+
+  IconData get _icon {
+    switch (widget.type) {
+      case 'in':
+        return Icons.arrow_downward_rounded;
+      case 'out':
+        return Icons.arrow_upward_rounded;
+      case 'transfer':
+        return Icons.swap_horiz_rounded;
+      case 'adjustment':
+        return Icons.tune_rounded;
+      default:
+        return Icons.inventory_2_rounded;
+    }
+  }
+
+  Color _accent(ColorScheme scheme) {
+    switch (widget.type) {
+      case 'out':
+        return scheme.error;
+      case 'adjustment':
+        return scheme.tertiary;
+      default:
+        return scheme.primary;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final accent = _accent(scheme);
     final isDark = theme.brightness == Brightness.dark;
 
     return Padding(
@@ -847,18 +1044,19 @@ class _StockOutSheetState extends State<_StockOutSheet> {
                 ),
               ),
               const SizedBox(height: 16),
+
               Row(
                 children: [
                   Container(
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: scheme.errorContainer,
+                      color: accent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      Icons.arrow_upward_rounded,
-                      color: scheme.onErrorContainer,
+                      _icon,
+                      color: accent,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -867,14 +1065,14 @@ class _StockOutSheetState extends State<_StockOutSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Stock Out',
+                          _title,
                           style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Remove stock manually',
+                          _subtitle,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -886,25 +1084,22 @@ class _StockOutSheetState extends State<_StockOutSheet> {
               ),
               const SizedBox(height: 20),
 
-              DropdownButtonFormField<String>(
+              _buildDropdown<String>(
+                context: context,
+                label: 'Item *',
                 value: _itemId,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Item *',
-                  prefixIcon: const Icon(Icons.inventory_2_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                items: widget.items.map((item) {
-                  return DropdownMenuItem<String>(
-                    value: item.id,
-                    child: Text(
-                      item.name,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
+                icon: Icons.inventory_2_outlined,
+                items: widget.items
+                    .map(
+                      (item) => DropdownMenuItem<String>(
+                        value: item.id,
+                        child: Text(
+                          item.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (value) {
                   if (value == null) return;
                   setState(() {
@@ -912,33 +1107,26 @@ class _StockOutSheetState extends State<_StockOutSheet> {
                     _quantityController.clear();
                   });
                 },
-                validator: (value) =>
-                    value == null || value.isEmpty
-                        ? 'Select an item'
-                        : null,
               ),
 
               const SizedBox(height: 12),
 
-              DropdownButtonFormField<String>(
+              _buildDropdown<String>(
+                context: context,
+                label: _isTransfer ? 'From *' : 'Warehouse *',
                 value: _warehouseId,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Warehouse *',
-                  prefixIcon: const Icon(Icons.warehouse_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                items: widget.warehouses.map((warehouse) {
-                  return DropdownMenuItem<String>(
-                    value: warehouse.id,
-                    child: Text(
-                      warehouse.name,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
+                icon: Icons.warehouse_outlined,
+                items: widget.warehouses
+                    .map(
+                      (warehouse) => DropdownMenuItem<String>(
+                        value: warehouse.id,
+                        child: Text(
+                          warehouse.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (value) {
                   if (value == null) return;
                   setState(() {
@@ -946,49 +1134,79 @@ class _StockOutSheetState extends State<_StockOutSheet> {
                     _quantityController.clear();
                   });
                 },
-                validator: (value) =>
-                    value == null || value.isEmpty
-                        ? 'Select a warehouse'
-                        : null,
               ),
 
-              const SizedBox(height: 10),
+              if (_isTransfer) ...[
+                const SizedBox(height: 12),
+                _buildDropdown<String>(
+                  context: context,
+                  label: 'To *',
+                  value: _toWarehouseId,
+                  icon: Icons.warehouse_rounded,
+                  items: widget.warehouses
+                      .map(
+                        (warehouse) => DropdownMenuItem<String>(
+                          value: warehouse.id,
+                          child: Text(
+                            warehouse.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() => _toWarehouseId = value);
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Select destination warehouse';
+                    }
+                    if (value == _warehouseId) {
+                      return 'From and To warehouses must be different';
+                    }
+                    return null;
+                  },
+                ),
+              ],
 
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? scheme.primaryContainer.withValues(alpha: 0.30)
-                      : scheme.primaryContainer.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.inventory_2_outlined,
-                      size: 18,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Available Stock',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    Text(
-                      '$_availableQuantity',
-                      style: theme.textTheme.titleMedium?.copyWith(
+              if (_isStockOut) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? scheme.primaryContainer.withValues(alpha: 0.30)
+                        : scheme.primaryContainer.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.inventory_2_outlined,
+                        size: 18,
                         color: scheme.primary,
-                        fontWeight: FontWeight.bold,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Available Stock',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Text(
+                        '$_availableQuantity',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
 
               const SizedBox(height: 12),
 
@@ -1000,8 +1218,10 @@ class _StockOutSheetState extends State<_StockOutSheet> {
                   LengthLimitingTextInputFormatter(8),
                 ],
                 decoration: InputDecoration(
-                  labelText: 'Quantity *',
-                  hintText: 'Enter quantity',
+                  labelText: _isAdjustment ? 'New quantity *' : 'Quantity *',
+                  hintText: _isAdjustment
+                      ? 'Enter exact current quantity'
+                      : 'Enter quantity',
                   prefixIcon: const Icon(Icons.numbers_rounded),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1012,10 +1232,13 @@ class _StockOutSheetState extends State<_StockOutSheet> {
                       int.tryParse(value?.trim() ?? '');
 
                   if (quantity == null || quantity <= 0) {
+                    if (_isAdjustment && value?.trim() == '0') {
+                      return null;
+                    }
                     return 'Enter a valid quantity';
                   }
 
-                  if (quantity > _availableQuantity) {
+                  if (_isStockOut && quantity > _availableQuantity) {
                     return 'Quantity cannot exceed available stock';
                   }
 
@@ -1064,13 +1287,12 @@ class _StockOutSheetState extends State<_StockOutSheet> {
                     flex: 2,
                     child: FilledButton.icon(
                       onPressed: _submit,
-                      icon: const Icon(
-                        Icons.arrow_upward_rounded,
-                        size: 18,
-                      ),
-                      label: const Text('Stock Out'),
+                      icon: Icon(_icon, size: 18),
+                      label: Text(_title),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 50),
+                        backgroundColor: accent,
+                        foregroundColor: scheme.onPrimary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -1086,22 +1308,66 @@ class _StockOutSheetState extends State<_StockOutSheet> {
     );
   }
 
+  Widget _buildDropdown<T>({
+    required BuildContext context,
+    required String label,
+    required T? value,
+    required IconData icon,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+    FormFieldValidator<T>? validator,
+  }) {
+    return DropdownButtonFormField<T>(
+      value: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      items: items,
+      onChanged: onChanged,
+      validator: validator ??
+          (value) {
+            if (value == null) {
+              return 'Please select an option';
+            }
+            return null;
+          },
+    );
+  }
+
   void _submit() {
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate()) return;
+
+    final rawQuantity = _quantityController.text.trim();
+    final quantity = int.tryParse(rawQuantity);
+
+    if (quantity == null || quantity < 0) return;
+
+    if (_isTransfer && _toWarehouseId == null) {
       return;
     }
 
-    final quantity = int.parse(
-      _quantityController.text.trim(),
-    );
+    if (_isTransfer && _toWarehouseId == _warehouseId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('From and To warehouses must be different.'),
+        ),
+      );
+      return;
+    }
 
     final notes = _notesController.text.trim();
 
     Navigator.pop(
       context,
-      _StockOutFormResult(
+      _MovementFormResult(
         itemId: _itemId,
         warehouseId: _warehouseId,
+        toWarehouseId: _toWarehouseId,
         quantity: quantity,
         notes: notes.isEmpty ? null : notes,
       ),
@@ -1110,8 +1376,13 @@ class _StockOutSheetState extends State<_StockOutSheet> {
 }
 
 class _TransConfig {
+  final String label;
   final Color color;
   final IconData icon;
 
-  _TransConfig({required this.color, required this.icon});
+  const _TransConfig({
+    required this.label,
+    required this.color,
+    required this.icon,
+  });
 }
