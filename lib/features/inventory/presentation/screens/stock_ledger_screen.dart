@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/features/items/presentation/providers/item_providers.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/features/items/data/models/item_model.dart';
+import 'package:solar_sales/features/inventory/data/models/inventory_models.dart';
 
 import 'package:solar_sales/shared/utils/document_workflow.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
@@ -38,7 +42,28 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
       backgroundColor: isDark
           ? theme.colorScheme.surfaceContainerLowest
           : theme.colorScheme.surfaceContainerLow,
-      appBar: const AppAppBar(title: 'Stock Ledger'),
+      appBar: const AppAppBar(
+        title: 'Stock Ledger',
+      ),
+      bottomNavigationBar:
+          state.transType?.toLowerCase() == 'out' &&
+                  ref.watch(authProvider).hasPermission('inventory.update')
+              ? SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: FilledButton.icon(
+                    onPressed: () => _openStockOutForm(context),
+                    icon: const Icon(Icons.arrow_upward_rounded),
+                    label: const Text('Stock Out'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                )
+              : null,
       body: Column(
         children: [
           // Filter Header Section
@@ -307,8 +332,11 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                     hasMore: state.hasMore,
                     onRefresh: () =>
                         ref.read(ledgerListProvider.notifier).refresh(),
-                    onLoadMore: () =>
-                        ref.read(ledgerListProvider.notifier).loadMore(),
+                    onLoadMore: () async {
+                        await ref
+                            .read(ledgerListProvider.notifier)
+                            .loadMore();
+                      },
                     empty: const EmptyState(
                       title: 'No Transactions Found',
                       icon: Icons.history_toggle_off,
@@ -530,7 +558,128 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     );
   }
 
-  // Helper method to build styled dropdown inputs
+
+  Future<void> _openStockOutForm(BuildContext context) async {
+    List<ItemModel> currentItems;
+    List<WarehouseModel> currentWarehouses;
+
+    try {
+      currentItems = await ref.read(approvedItemsProvider.future);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to load approved items: $e'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      currentWarehouses = await ref.read(warehousesProvider.future);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to load warehouses: $e'),
+        ),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    if (currentItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No approved items are available.'),
+        ),
+      );
+      return;
+    }
+
+    if (currentWarehouses.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No active warehouses are available.'),
+        ),
+      );
+      return;
+    }
+
+    List<StockModel> stock;
+    try {
+      stock = await ref
+          .read(inventoryRepositoryProvider)
+          .getStock();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to load current stock: $e'),
+        ),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    final result = await showModalBottomSheet<_StockOutFormResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor:
+          Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
+      ),
+      builder: (_) {
+        return _StockOutSheet(
+          items: currentItems,
+          warehouses: currentWarehouses,
+          stock: stock,
+        );
+      },
+    );
+
+    if (result == null) return;
+
+    try {
+      await ref
+          .read(inventoryRepositoryProvider)
+          .stockOut(
+            itemId: result.itemId,
+            warehouseId: result.warehouseId,
+            quantity: result.quantity,
+            notes: result.notes,
+          );
+
+      if (!mounted) return;
+
+      ref.read(ledgerListProvider.notifier).refresh();
+      ref.read(stockListProvider.notifier).refresh();
+      ref.invalidate(lowStockProvider);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Stock Out completed successfully.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Stock Out failed: $e'),
+        ),
+      );
+    }
+  }
+
   Widget _buildStyledDropdown<T>({
     required BuildContext context,
     required T value,
@@ -595,6 +744,361 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
       default:
         return _TransConfig(color: Colors.orange, icon: Icons.tune_rounded);
     }
+  }
+}
+
+
+class _StockOutFormResult {
+  final String itemId;
+  final String warehouseId;
+  final int quantity;
+  final String? notes;
+
+  const _StockOutFormResult({
+    required this.itemId,
+    required this.warehouseId,
+    required this.quantity,
+    this.notes,
+  });
+}
+
+class _StockOutSheet extends StatefulWidget {
+  final List<ItemModel> items;
+  final List<WarehouseModel> warehouses;
+  final List<StockModel> stock;
+
+  const _StockOutSheet({
+    required this.items,
+    required this.warehouses,
+    required this.stock,
+  });
+
+  @override
+  State<_StockOutSheet> createState() => _StockOutSheetState();
+}
+
+class _StockOutSheetState extends State<_StockOutSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _quantityController = TextEditingController();
+  final _notesController = TextEditingController();
+
+  late String _itemId;
+  late String _warehouseId;
+
+  @override
+  void initState() {
+    super.initState();
+    _itemId = widget.items.first.id;
+    _warehouseId = widget.warehouses.first.id;
+  }
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  int get _availableQuantity {
+    for (final stockItem in widget.stock) {
+      if (stockItem.itemId == _itemId &&
+          stockItem.warehouseId == _warehouseId) {
+        return stockItem.currentQuantity;
+      }
+    }
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 12,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: scheme.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.arrow_upward_rounded,
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Stock Out',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Remove stock manually',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              DropdownButtonFormField<String>(
+                value: _itemId,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Item *',
+                  prefixIcon: const Icon(Icons.inventory_2_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                items: widget.items.map((item) {
+                  return DropdownMenuItem<String>(
+                    value: item.id,
+                    child: Text(
+                      item.name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _itemId = value;
+                    _quantityController.clear();
+                  });
+                },
+                validator: (value) =>
+                    value == null || value.isEmpty
+                        ? 'Select an item'
+                        : null,
+              ),
+
+              const SizedBox(height: 12),
+
+              DropdownButtonFormField<String>(
+                value: _warehouseId,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Warehouse *',
+                  prefixIcon: const Icon(Icons.warehouse_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                items: widget.warehouses.map((warehouse) {
+                  return DropdownMenuItem<String>(
+                    value: warehouse.id,
+                    child: Text(
+                      warehouse.name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _warehouseId = value;
+                    _quantityController.clear();
+                  });
+                },
+                validator: (value) =>
+                    value == null || value.isEmpty
+                        ? 'Select a warehouse'
+                        : null,
+              ),
+
+              const SizedBox(height: 10),
+
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? scheme.primaryContainer.withValues(alpha: 0.30)
+                      : scheme.primaryContainer.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      size: 18,
+                      color: scheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Available Stock',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Text(
+                      '$_availableQuantity',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              TextFormField(
+                controller: _quantityController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Quantity *',
+                  hintText: 'Enter quantity',
+                  prefixIcon: const Icon(Icons.numbers_rounded),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                validator: (value) {
+                  final quantity =
+                      int.tryParse(value?.trim() ?? '');
+
+                  if (quantity == null || quantity <= 0) {
+                    return 'Enter a valid quantity';
+                  }
+
+                  if (quantity > _availableQuantity) {
+                    return 'Quantity cannot exceed available stock';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 12),
+
+              TextFormField(
+                controller: _notesController,
+                maxLines: 3,
+                maxLength: 250,
+                decoration: InputDecoration(
+                  labelText: 'Notes (Optional)',
+                  hintText: 'Add a note or reason',
+                  alignLabelWithHint: true,
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.only(bottom: 40),
+                    child: Icon(Icons.notes_outlined),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: _submit,
+                      icon: const Icon(
+                        Icons.arrow_upward_rounded,
+                        size: 18,
+                      ),
+                      label: const Text('Stock Out'),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final quantity = int.parse(
+      _quantityController.text.trim(),
+    );
+
+    final notes = _notesController.text.trim();
+
+    Navigator.pop(
+      context,
+      _StockOutFormResult(
+        itemId: _itemId,
+        warehouseId: _warehouseId,
+        quantity: quantity,
+        notes: notes.isEmpty ? null : notes,
+      ),
+    );
   }
 }
 
