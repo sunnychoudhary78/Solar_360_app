@@ -45,25 +45,32 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
       appBar: const AppAppBar(
         title: 'Stock Ledger',
       ),
-      bottomNavigationBar:
+      // Stock Out is intentionally a floating action button.
+      // It appears only when the OUT transaction filter is selected,
+      // matching the compact floating Stock In action used on Stock Management.
+      floatingActionButton:
           state.transType?.toLowerCase() == 'out' &&
                   ref.watch(authProvider).hasPermission('inventory.update')
-              ? SafeArea(
-                  top: false,
-                  minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: FilledButton.icon(
-                    onPressed: () => _openStockOutForm(context),
-                    icon: const Icon(Icons.arrow_upward_rounded),
-                    label: const Text('Stock Out'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+              ? FloatingActionButton.extended(
+                  onPressed: () => _openStockOutForm(context),
+                  icon: const Icon(Icons.arrow_upward_rounded),
+                  label: const Text(
+                    'Stock Out',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
                     ),
+                  ),
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
+                  elevation: 6,
+                  extendedPadding: const EdgeInsets.symmetric(horizontal: 24),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
                   ),
                 )
               : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Column(
         children: [
           // Filter Header Section
@@ -326,7 +333,7 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                         ref.read(ledgerListProvider.notifier).refresh(),
                   )
                 : PaginatedListView(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
                     items: state.items,
                     isLoadingMore: state.isLoadingMore,
                     hasMore: state.hasMore,
