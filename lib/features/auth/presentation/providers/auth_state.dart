@@ -8,6 +8,10 @@ class AuthState {
   final List<String> permissions;
   final bool subscriptionInactive;
 
+  /// Cached assigned roles (login /me / switch + local persistence).
+  /// Keeps Switch Role usable after every successful switch.
+  final List<String> assignedRoles;
+
   const AuthState({
     this.isLoading = false,
     this.isInitializing = true,
@@ -15,6 +19,7 @@ class AuthState {
     this.profile,
     this.permissions = const [],
     this.subscriptionInactive = false,
+    this.assignedRoles = const [],
   });
 
   bool get isAuthenticated =>
@@ -30,11 +35,34 @@ class AuthState {
       authUser?.companyModules ??
       const CompanyModules();
 
+  /// Full set of roles the user can switch between.
   List<String> get roles {
-    final fromProfile = profile?.roles ?? const [];
-    if (fromProfile.isNotEmpty) return fromProfile;
-    return authUser?.roles ?? const [];
+    if (assignedRoles.isNotEmpty) {
+      final merged = <String>{...assignedRoles};
+      final active = effectiveRoleName.trim();
+      if (active.isNotEmpty) merged.add(active);
+      return merged.toList();
+    }
+
+    final merged = <String>{};
+
+    void addAll(Iterable<String> source) {
+      for (final role in source) {
+        final trimmed = role.trim();
+        if (trimmed.isNotEmpty) merged.add(trimmed);
+      }
+    }
+
+    addAll(profile?.roles ?? const []);
+    addAll(authUser?.roles ?? const []);
+
+    final active = effectiveRoleName.trim();
+    if (active.isNotEmpty) merged.add(active);
+
+    return merged.toList();
   }
+
+  bool get canSwitchRoles => roles.length > 1;
 
   String get effectiveRoleName =>
       profile?.effectiveRoleName ?? authUser?.effectiveRoleName ?? '';
@@ -51,6 +79,7 @@ class AuthState {
     UserProfile? profile,
     List<String>? permissions,
     bool? subscriptionInactive,
+    List<String>? assignedRoles,
     bool clearUser = false,
   }) {
     return AuthState(
@@ -61,6 +90,8 @@ class AuthState {
       permissions: clearUser ? const [] : (permissions ?? this.permissions),
       subscriptionInactive:
           subscriptionInactive ?? this.subscriptionInactive,
+      assignedRoles:
+          clearUser ? const [] : (assignedRoles ?? this.assignedRoles),
     );
   }
 }

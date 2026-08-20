@@ -65,8 +65,8 @@ class ModuleNotifier extends Notifier<ModuleState> {
     required bool companyAdmin,
     required bool platformAdmin,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString(storageModuleKey);
+    // Prefer in-memory module when already synced — avoids prefs I/O on role switch.
+    final stored = state.ready ? state.activeModule : null;
 
     final canBillbook = (platformAdmin || companyBillbook) &&
         (companyAdmin ||
@@ -92,7 +92,6 @@ class ModuleNotifier extends Notifier<ModuleState> {
       next = AppModules.solar;
     }
 
-    await prefs.setString(storageModuleKey, next);
     state = ModuleState(
       activeModule: next,
       canBillbook: canBillbook,
@@ -101,6 +100,12 @@ class ModuleNotifier extends Notifier<ModuleState> {
       companySolar: companySolar,
       platformAdmin: platformAdmin,
       ready: true,
+    );
+
+    // Persist preferred module off the critical path.
+    // ignore: unawaited_futures
+    SharedPreferences.getInstance().then(
+      (prefs) => prefs.setString(storageModuleKey, next),
     );
   }
 

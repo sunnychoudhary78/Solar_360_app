@@ -9,6 +9,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:solar_sales/app/navigator.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/widgets/app_message.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
@@ -189,6 +190,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   bool isLoading = false;
   bool isFetchingLocation = false;
+  bool _isClosing = false;
 
   bool get _isBasicCreate => widget.mode == LeadFormMode.basicCreate;
   bool get _isCompleteDetails => widget.mode == LeadFormMode.completeDetails;
@@ -437,11 +439,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return null;
   }
 
+  void _safeSetState(VoidCallback fn) {
+    if (!mounted || _isClosing) return;
+    setState(fn);
+  }
+
   Future<void> _fetchCurrentLocation() async {
-    if (isFetchingLocation) return;
+    if (isFetchingLocation || _isClosing) return;
 
     try {
-      if (mounted) setState(() => isFetchingLocation = true);
+      _safeSetState(() => isFetchingLocation = true);
 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -501,12 +508,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         ].where((e) => e != null && e.trim().isNotEmpty).join(', ');
       }
 
-      if (mounted) setState(() {});
+      _safeSetState(() {});
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || _isClosing) return;
       showAppMessage(context, 'Unable to fetch location: $e', isError: true);
     } finally {
-      if (mounted) setState(() => isFetchingLocation = false);
+      _safeSetState(() => isFetchingLocation = false);
     }
   }
 
@@ -563,9 +570,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       ...additionalDocs,
     ];
 
-    try {
-      if (mounted) setState(() => isLoading = true);
+    if (mounted) setState(() => isLoading = true);
+    _isClosing = true;
 
+    try {
       final repo = ref.read(leadRepositoryProvider);
 
       if (_isCompleteDetails && widget.existingLead != null) {
@@ -629,21 +637,25 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       if (!mounted) return;
 
+      final successMessage = _isCompleteDetails
+          ? 'Lead details saved successfully'
+          : 'Lead created and sent to Support for approval';
+
+      // Close the form before refreshing providers or showing feedback so we
+      // never rebuild this route while it is being removed from the tree.
+      Navigator.of(context).pop(true);
+
       ref.invalidate(allLeadsProvider);
 
-      showAppMessage(
-        context,
-        _isCompleteDetails
-            ? 'Lead details saved successfully'
-            : 'Lead created and sent to Support for approval',
-      );
-
-      Navigator.pop(context, true);
+      final rootContext = navigatorKey.currentContext;
+      if (rootContext != null) {
+        showAppMessage(rootContext, successMessage);
+      }
     } catch (e) {
+      _isClosing = false;
       if (!mounted) return;
+      setState(() => isLoading = false);
       showAppMessage(context, 'Failed to save lead: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => isLoading = false);
     }
   }
 

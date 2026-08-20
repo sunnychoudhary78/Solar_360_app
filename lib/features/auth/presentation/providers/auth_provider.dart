@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/app/navigator.dart';
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/core/providers/network_providers.dart';
+import 'package:solar_sales/core/providers/role_refresh.dart';
 import 'package:solar_sales/features/module/presentation/providers/module_provider.dart';
 
 import '../../data/auth_api_service.dart';
@@ -34,6 +35,115 @@ class AuthNotifier extends Notifier<AuthState> {
     return const AuthState();
   }
 
+  List<String> _normalizeRoles(Iterable<String> roles) {
+    return roles
+        .map((role) => role.trim())
+        .where((role) => role.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  List<String> _mergeRoles(Iterable<Iterable<String>> sources) {
+    final merged = <String>{};
+    for (final source in sources) {
+      for (final role in source) {
+        final trimmed = role.trim();
+        if (trimmed.isNotEmpty) merged.add(trimmed);
+      }
+    }
+    return merged.toList();
+  }
+
+  Future<List<String>> _persistAssignedRoles(
+    List<String> roles, {
+    List<String> fallback = const [],
+  }) async {
+    final merged = _normalizeRoles(
+      _mergeRoles([roles, fallback, state.assignedRoles, state.roles]),
+    );
+    if (merged.isEmpty) {
+      return _repo.getStoredAssignedRoles();
+    }
+    // Persist without blocking callers that already have the merged list.
+    // ignore: unawaited_futures
+    _repo.saveAssignedRoles(merged);
+    return merged;
+  }
+
+  List<String> _mergeAssignedRolesInMemory({
+    required List<String> previousRoles,
+    required List<String> fromUser,
+    required List<String> fromProfile,
+    String? activeRole,
+    String? selectedRole,
+  }) {
+    return _normalizeRoles(
+      _mergeRoles([
+        previousRoles,
+        fromUser,
+        fromProfile,
+        state.assignedRoles,
+        if (activeRole != null && activeRole.trim().isNotEmpty) [activeRole],
+        if (selectedRole != null && selectedRole.trim().isNotEmpty)
+          [selectedRole],
+      ]),
+    );
+  }
+
+  UserProfile _profileFromSwitchUser(
+    AuthUser user, {
+    UserProfile? previous,
+  }) {
+    return UserProfile(
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      roleName: user.roleName,
+      activeRole: user.activeRole,
+      roles: user.roles,
+      hierarchyLevel: user.hierarchyLevel,
+      companyId: user.companyId ?? previous?.companyId,
+      companyName: user.companyName ?? previous?.companyName,
+      // Switch-role payload usually omits company modules — keep prior values.
+      companyModules: previous?.companyModules ?? user.companyModules,
+      photo: user.photo ?? previous?.photo,
+    );
+  }
+
+  Future<AuthState> _buildSessionFromProfile({
+    required UserProfile profile,
+    AuthUser? authUser,
+    List<String> fallbackRoles = const [],
+  }) async {
+    final storedRoles = await _repo.getStoredAssignedRoles();
+    final assignedRoles = await _persistAssignedRoles(
+      _mergeRoles([
+        storedRoles,
+        fallbackRoles,
+        profile.roles,
+        if (authUser?.roles != null) authUser!.roles,
+        if (profile.effectiveRoleName.isNotEmpty)
+          [profile.effectiveRoleName],
+        if (authUser?.effectiveRoleName.isNotEmpty == true)
+          [authUser!.effectiveRoleName],
+      ]),
+      fallback: fallbackRoles,
+    );
+
+    final permissions = await _repo.getPermissions();
+    final enrichedProfile = profile.copyWith(roles: assignedRoles);
+
+    return state.copyWith(
+      authUser: authUser,
+      profile: enrichedProfile,
+      permissions: permissions,
+      assignedRoles: assignedRoles,
+      isLoading: false,
+      isInitializing: false,
+      subscriptionInactive: false,
+    );
+  }
+
   Future<void> tryAutoLogin() async {
     final jwt = await _repo.getStoredToken();
     if (jwt == null || jwt.isEmpty) {
@@ -43,24 +153,22 @@ class AuthNotifier extends Notifier<AuthState> {
 
     try {
       state = state.copyWith(isLoading: true);
+      final storedRoles = await _repo.getStoredAssignedRoles();
       final profile = await _repo.getMe();
-      final permissions = await _repo.getPermissions();
-      state = state.copyWith(
-        isLoading: false,
-        isInitializing: false,
+      final nextState = await _buildSessionFromProfile(
         profile: profile,
-        permissions: permissions,
-        subscriptionInactive: false,
+        fallbackRoles: storedRoles,
       );
+      state = nextState;
       await ref
           .read(moduleProvider.notifier)
           .syncFromAuth(
-            permissions: permissions,
-            role: profile.effectiveRoleName,
-            companyBillbook: profile.companyModules.billbook,
-            companySolar: profile.companyModules.solar,
-            companyAdmin: profile.isCompanyAdmin,
-            platformAdmin: profile.isPlatformSuperAdmin,
+            permissions: nextState.permissions,
+            role: nextState.profile!.effectiveRoleName,
+            companyBillbook: nextState.profile!.companyModules.billbook,
+            companySolar: nextState.profile!.companyModules.solar,
+            companyAdmin: nextState.profile!.isCompanyAdmin,
+            platformAdmin: nextState.profile!.isPlatformSuperAdmin,
           );
     } catch (e) {
       final inactive = _isSubscriptionInactive(e);
@@ -84,32 +192,37 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final result = await _repo.login(email, password);
       final profile = await _repo.getMe();
-      final permissions = await _repo.getPermissions();
-
-      state = state.copyWith(
-        isLoading: false,
-        isInitializing: false,
-        authUser: result.user,
+      final nextState = await _buildSessionFromProfile(
         profile: profile,
-        permissions: permissions,
-        subscriptionInactive: false,
+        authUser: result.user,
+        fallbackRoles: _mergeRoles([
+          result.user.roles,
+          profile.roles,
+          if (result.user.effectiveRoleName.isNotEmpty)
+            [result.user.effectiveRoleName],
+          if (profile.effectiveRoleName.isNotEmpty)
+            [profile.effectiveRoleName],
+        ]),
       );
+      state = nextState;
 
       await ref
           .read(moduleProvider.notifier)
           .syncFromAuth(
-            permissions: permissions,
-            role: profile.effectiveRoleName,
-            companyBillbook: profile.companyModules.billbook,
-            companySolar: profile.companyModules.solar,
-            companyAdmin: profile.isCompanyAdmin,
-            platformAdmin: profile.isPlatformSuperAdmin,
+            permissions: nextState.permissions,
+            role: nextState.profile!.effectiveRoleName,
+            companyBillbook: nextState.profile!.companyModules.billbook,
+            companySolar: nextState.profile!.companyModules.solar,
+            companyAdmin: nextState.profile!.isCompanyAdmin,
+            platformAdmin: nextState.profile!.isPlatformSuperAdmin,
           );
 
       ref.read(globalLoadingProvider.notifier).hide();
       ref
           .read(globalLoadingProvider.notifier)
-          .showMessage('Welcome back, ${profile.name.split(' ').first}');
+          .showMessage(
+            'Welcome back, ${nextState.profile!.name.split(' ').first}',
+          );
 
       final home = ref.read(moduleProvider).homeRoute;
       navigatorKey.currentState?.pushNamedAndRemoveUntil(
@@ -134,67 +247,100 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> switchRole(String role) async {
     ref.read(globalLoadingProvider.notifier).showLoading('Switching role...');
     try {
-      final result = await _repo.switchRole(role);
-      // Prefer fresh profile; fall back to switch payload.
-      UserProfile profile;
-      try {
-        profile = await _repo.getMe();
-      } catch (_) {
-        profile = UserProfile(
-          id: result.user.id,
-          name: result.user.name,
-          email: result.user.email,
-          roleName: result.user.roleName,
-          activeRole: result.user.activeRole,
-          roles: result.user.roles,
-          hierarchyLevel: result.user.hierarchyLevel,
-          companyId: result.user.companyId,
-          companyName: result.user.companyName,
-          companyModules: result.user.companyModules,
-          photo: result.user.photo,
-        );
-      }
+      final previousRoles = state.roles;
+      final previousProfile = state.profile;
 
+      // Critical path: one network call (switch-role returns user + permissions).
+      final result = await _repo.switchRole(role);
+
+      var profile = _profileFromSwitchUser(
+        result.user,
+        previous: previousProfile,
+      );
+
+      // Prefer permissions from the switch response; only fetch if empty.
       var permissions = result.permissions;
       if (permissions.isEmpty) {
         permissions = await _repo.getPermissions();
       }
 
+      final assignedRoles = _mergeAssignedRolesInMemory(
+        previousRoles: previousRoles,
+        fromUser: result.user.roles,
+        fromProfile: profile.roles,
+        activeRole: result.user.effectiveRoleName.isNotEmpty
+            ? result.user.effectiveRoleName
+            : profile.effectiveRoleName,
+        selectedRole: role,
+      );
+
+      // Fire-and-forget local persistence — do not block UI.
+      // ignore: unawaited_futures
+      _repo.saveAssignedRoles(assignedRoles);
+
+      final enrichedProfile = profile.copyWith(roles: assignedRoles);
+
       state = state.copyWith(
         authUser: result.user,
-        profile: profile,
+        profile: enrichedProfile,
         permissions: permissions,
+        assignedRoles: assignedRoles,
         isLoading: false,
         isInitializing: false,
       );
 
-      await ref
-          .read(moduleProvider.notifier)
-          .syncFromAuth(
+      // Module sync is now in-memory first — no need to await prefs I/O.
+      // ignore: discarded_futures
+      ref.read(moduleProvider.notifier).syncFromAuth(
             permissions: permissions,
-            role: profile.effectiveRoleName,
-            companyBillbook: profile.companyModules.billbook,
-            companySolar: profile.companyModules.solar,
-            companyAdmin: profile.isCompanyAdmin,
-            platformAdmin: profile.isPlatformSuperAdmin,
+            role: enrichedProfile.effectiveRoleName,
+            companyBillbook: enrichedProfile.companyModules.billbook,
+            companySolar: enrichedProfile.companyModules.solar,
+            companyAdmin: enrichedProfile.isCompanyAdmin,
+            platformAdmin: enrichedProfile.isPlatformSuperAdmin,
           );
 
       ref.read(globalLoadingProvider.notifier).hide();
       ref
           .read(globalLoadingProvider.notifier)
-          .showSuccess('Switched to ${profile.effectiveRoleName}');
+          .showSuccess('Switched to ${enrichedProfile.effectiveRoleName}');
 
       final home = ref.read(moduleProvider).homeRoute;
       navigatorKey.currentState?.pushNamedAndRemoveUntil(
         home,
         (route) => false,
       );
-      // Full provider wipe so role-scoped caches cannot leak.
-      triggerAppRestart();
+
+      // Defer cache invalidation — invalidating auth-dependent providers
+      // (e.g. dashboard) during auth updates causes CircularDependencyError.
+      scheduleRoleScopedInvalidation(ref);
+
+      // Soft background refresh of profile (company fields, photo, etc.).
+      // Does not block the switch UX.
+      // ignore: unawaited_futures
+      _refreshProfileAfterSwitch(assignedRoles);
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showApiError(e);
       rethrow;
+    }
+  }
+
+  Future<void> _refreshProfileAfterSwitch(List<String> assignedRoles) async {
+    try {
+      final profile = await _repo.getMe();
+      final mergedRoles = _normalizeRoles(
+        _mergeRoles([assignedRoles, profile.roles, state.assignedRoles]),
+      );
+      // ignore: unawaited_futures
+      _repo.saveAssignedRoles(mergedRoles);
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        profile: profile.copyWith(roles: mergedRoles),
+        assignedRoles: mergedRoles,
+      );
+    } catch (_) {
+      // Keep the switch-role payload; background enrichment is best-effort.
     }
   }
 

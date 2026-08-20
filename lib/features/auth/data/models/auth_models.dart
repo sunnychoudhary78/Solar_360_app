@@ -141,6 +141,34 @@ class UserProfile {
     return level != null && level <= 200 && level > 50;
   }
 
+  UserProfile copyWith({
+    String? id,
+    String? name,
+    String? email,
+    String? roleName,
+    String? activeRole,
+    List<String>? roles,
+    int? hierarchyLevel,
+    String? companyId,
+    String? companyName,
+    CompanyModules? companyModules,
+    String? photo,
+  }) {
+    return UserProfile(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      roleName: roleName ?? this.roleName,
+      activeRole: activeRole ?? this.activeRole,
+      roles: roles ?? this.roles,
+      hierarchyLevel: hierarchyLevel ?? this.hierarchyLevel,
+      companyId: companyId ?? this.companyId,
+      companyName: companyName ?? this.companyName,
+      companyModules: companyModules ?? this.companyModules,
+      photo: photo ?? this.photo,
+    );
+  }
+
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final user = json['user'] is Map
         ? Map<String, dynamic>.from(json['user'] as Map)

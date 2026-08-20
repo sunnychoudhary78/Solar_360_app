@@ -40,4 +40,10 @@ class AuthRepository {
   Future<void> logoutLocal() => _tokenStorage.clear();
 
   Future<String?> getStoredToken() => _tokenStorage.getJwt();
+
+  Future<void> saveAssignedRoles(List<String> roles) =>
+      _tokenStorage.saveAssignedRoles(roles);
+
+  Future<List<String>> getStoredAssignedRoles() =>
+      _tokenStorage.getAssignedRoles();
 }

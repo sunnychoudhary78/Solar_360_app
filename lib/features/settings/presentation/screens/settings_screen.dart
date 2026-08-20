@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/theme/theme_mode_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
-import 'package:solar_sales/features/module/presentation/providers/module_provider.dart';
-import 'package:solar_sales/shared/module/module_access.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/dialogs.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
@@ -17,14 +15,12 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final auth = ref.watch(authProvider);
-    final module = ref.watch(moduleProvider);
     final profile = auth.profile;
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    final switchableRoles = filterRolesForModule(auth.roles, module.activeModule)
-        .where((r) =>
-            r.toLowerCase() != auth.effectiveRoleName.toLowerCase())
+    final switchableRoles = auth.roles
+        .where((r) => r.toLowerCase() != auth.effectiveRoleName.toLowerCase())
         .toList();
 
     return Scaffold(
