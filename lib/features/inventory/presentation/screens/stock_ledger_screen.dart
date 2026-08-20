@@ -377,42 +377,77 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
 
   /// Converts the raw ledger rows into UI rows.
   ///
-  /// Transfer transactions are commonly stored as two ledger entries:
-  /// one for the source warehouse and one for the destination warehouse.
-  /// We group those two entries in the UI when they share the same
-  /// reference number and item. No API or backend behaviour is changed.
+  /// Transfers are stored as two ledger entries that share a reference:
+  /// - source warehouse: `trans_type = transfer`
+  /// - destination warehouse: `trans_type = in`
+  /// We group those two entries so the card can show From / To warehouses.
   List<_LedgerDisplayItem> _buildDisplayItems(
     List<StockTransactionModel> transactions,
   ) {
     final result = <_LedgerDisplayItem>[];
-    final consumed = <String>{};
+    final consumedIds = <String>{};
+    final consumedTransferKeys = <String>{};
 
     for (final tx in transactions) {
-      if (tx.transType.toLowerCase() == 'transfer' &&
-          tx.referenceNumber != null &&
-          tx.referenceNumber!.trim().isNotEmpty) {
-        final key = '${tx.itemId}|${tx.referenceNumber}';
+      if (consumedIds.contains(tx.id)) continue;
 
-        if (consumed.contains(key)) continue;
+      final type = tx.transType.toLowerCase();
+      final ref = tx.referenceNumber?.trim();
+
+      if ((type == 'transfer' || type == 'in') &&
+          ref != null &&
+          ref.isNotEmpty) {
+        final key = '${tx.itemId}|$ref';
+        if (consumedTransferKeys.contains(key)) continue;
 
         StockTransactionModel? paired;
         for (final candidate in transactions) {
           if (candidate.id == tx.id) continue;
-          if (candidate.transType.toLowerCase() != 'transfer') continue;
+          if (consumedIds.contains(candidate.id)) continue;
           if (candidate.itemId != tx.itemId) continue;
-          if (candidate.referenceNumber != tx.referenceNumber) continue;
+          if (candidate.referenceNumber?.trim() != ref) continue;
           if (candidate.warehouseId == tx.warehouseId) continue;
 
-          paired = candidate;
-          break;
+          final candidateType = candidate.transType.toLowerCase();
+          // Destination side is recorded as `in`; accept legacy transfer/transfer too.
+          if (type == 'transfer' &&
+              (candidateType == 'in' || candidateType == 'transfer')) {
+            paired = candidate;
+            if (candidateType == 'in') break;
+          } else if (type == 'in' && candidateType == 'transfer') {
+            paired = candidate;
+            break;
+          }
         }
 
         if (paired != null) {
-          consumed.add(key);
+          consumedTransferKeys.add(key);
+          consumedIds.add(tx.id);
+          consumedIds.add(paired.id);
+
+          final primary =
+              type == 'transfer' ? tx : paired;
+          final secondary =
+              type == 'transfer' ? paired : tx;
+
+          result.add(
+            _LedgerDisplayItem(
+              primary: primary,
+              paired: secondary,
+              adjustmentDelta: null,
+            ),
+          );
+          continue;
+        }
+
+        // Unpaired transfer still renders as a transfer card.
+        if (type == 'transfer') {
+          consumedTransferKeys.add(key);
+          consumedIds.add(tx.id);
           result.add(
             _LedgerDisplayItem(
               primary: tx,
-              paired: paired,
+              paired: null,
               adjustmentDelta: null,
             ),
           );
@@ -420,11 +455,12 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
         }
       }
 
+      consumedIds.add(tx.id);
       result.add(
         _LedgerDisplayItem(
           primary: tx,
           paired: null,
-          adjustmentDelta: tx.transType.toLowerCase() == 'adjustment'
+          adjustmentDelta: type == 'adjustment'
               ? _calculateAdjustmentDelta(tx, transactions)
               : null,
         ),
@@ -586,28 +622,16 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                           ],
                         )
                       else
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.swap_horiz_rounded,
-                              size: 16,
-                              color: config.color,
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                paired == null
-                                    ? tx.warehouseName
-                                    : '${source?.warehouseName ?? tx.warehouseName} → ${destination?.warehouseName ?? paired.warehouseName}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
+                        Text(
+                          paired == null
+                              ? 'From: ${tx.warehouseName}'
+                              : 'From: ${source?.warehouseName ?? tx.warehouseName}  →  To: ${destination?.warehouseName ?? paired.warehouseName}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                     ],
                   ),
@@ -647,7 +671,7 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
               ],
             ),
 
-            if (isTransfer && paired != null) ...[
+            if (isTransfer) ...[
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
@@ -663,12 +687,11 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                 ),
                 child: Column(
                   children: [
-                    _buildTransferWarehouseRow(
+                    _buildTransferDetailRow(
                       context: context,
                       icon: Icons.arrow_upward_rounded,
-                      label: 'From',
-                      warehouse: source ?? tx,
-                      quantity: source?.quantity.abs() ?? tx.quantity.abs(),
+                      label: 'From Warehouse',
+                      value: source?.warehouseName ?? tx.warehouseName,
                       isSource: true,
                     ),
                     const SizedBox(height: 8),
@@ -677,14 +700,27 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                       color: scheme.outlineVariant.withValues(alpha: 0.5),
                     ),
                     const SizedBox(height: 8),
-                    _buildTransferWarehouseRow(
+                    _buildTransferDetailRow(
                       context: context,
                       icon: Icons.arrow_downward_rounded,
-                      label: 'To',
-                      warehouse: destination ?? paired,
-                      quantity:
-                          destination?.quantity.abs() ?? paired.quantity.abs(),
+                      label: 'To Warehouse',
+                      value: destination?.warehouseName ??
+                          (paired?.warehouseName ?? '—'),
                       isSource: false,
+                    ),
+                    const SizedBox(height: 8),
+                    Divider(
+                      height: 1,
+                      color: scheme.outlineVariant.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTransferDetailRow(
+                      context: context,
+                      icon: Icons.swap_vert_rounded,
+                      label: 'Transferred Qty',
+                      value: '$amount',
+                      isSource: false,
+                      emphasizeValue: true,
                     ),
                   ],
                 ),
@@ -843,49 +879,45 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     );
   }
 
-  Widget _buildTransferWarehouseRow({
+  Widget _buildTransferDetailRow({
     required BuildContext context,
     required IconData icon,
     required String label,
-    required StockTransactionModel warehouse,
-    required int quantity,
+    required String value,
     required bool isSource,
+    bool emphasizeValue = false,
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final accent = isSource ? scheme.error : scheme.primary;
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 17,
-          color: isSource ? scheme.error : scheme.primary,
-        ),
+        Icon(icon, size: 17, color: accent),
         const SizedBox(width: 7),
-        SizedBox(
-          width: 38,
-          child: Text(
-            label,
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
         Expanded(
-          child: Text(
-            warehouse.warehouseName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Text(
-          '$quantity',
-          style: theme.textTheme.labelLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: isSource ? scheme.error : scheme.primary,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: emphasizeValue ? accent : scheme.onSurface,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -900,9 +932,16 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     final second = display.paired;
     if (second == null) return first;
 
+    if (first.transType.toLowerCase() == 'transfer') return first;
+    if (second.transType.toLowerCase() == 'transfer') return second;
+
+    final firstNotes = first.notes?.toLowerCase() ?? '';
+    final secondNotes = second.notes?.toLowerCase() ?? '';
+    if (firstNotes.contains('(out)')) return first;
+    if (secondNotes.contains('(out)')) return second;
+
     final firstDelta = _balanceChange(first, allTransactions);
     final secondDelta = _balanceChange(second, allTransactions);
-
     if (firstDelta < 0 && secondDelta >= 0) return first;
     if (secondDelta < 0 && firstDelta >= 0) return second;
 
@@ -917,9 +956,16 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     final second = display.paired;
     if (second == null) return null;
 
+    if (second.transType.toLowerCase() == 'in') return second;
+    if (first.transType.toLowerCase() == 'in') return first;
+
+    final firstNotes = first.notes?.toLowerCase() ?? '';
+    final secondNotes = second.notes?.toLowerCase() ?? '';
+    if (secondNotes.contains('(in)')) return second;
+    if (firstNotes.contains('(in)')) return first;
+
     final firstDelta = _balanceChange(first, allTransactions);
     final secondDelta = _balanceChange(second, allTransactions);
-
     if (firstDelta < 0 && secondDelta >= 0) return second;
     if (secondDelta < 0 && firstDelta >= 0) return first;
 
@@ -1452,7 +1498,7 @@ class _MovementSheetState extends State<_MovementSheet> {
 
               _buildDropdown<String>(
                 context: context,
-                label: _isTransfer ? 'From *' : 'Warehouse *',
+                label: _isTransfer ? 'From Warehouse *' : 'Warehouse *',
                 value: _warehouseId,
                 icon: Icons.warehouse_outlined,
                 items: widget.warehouses
@@ -1479,7 +1525,7 @@ class _MovementSheetState extends State<_MovementSheet> {
                 const SizedBox(height: 12),
                 _buildDropdown<String>(
                   context: context,
-                  label: 'To *',
+                  label: 'To Warehouse *',
                   value: _toWarehouseId,
                   icon: Icons.warehouse_rounded,
                   items: widget.warehouses
@@ -1546,68 +1592,6 @@ class _MovementSheetState extends State<_MovementSheet> {
                           ),
                         ],
                       ),
-                      if (_isAdjustment) ...[
-                        const SizedBox(height: 8),
-                        ValueListenableBuilder<TextEditingValue>(
-                          valueListenable: _quantityController,
-                          builder: (context, value, _) {
-                            final entered =
-                                int.tryParse(value.text.trim()) ?? 0;
-                            final delta = entered - _currentQuantity;
-                            final isIncrease = delta > 0;
-                            final isDecrease = delta < 0;
-                            final deltaColor = isIncrease
-                                ? scheme.primary
-                                : isDecrease
-                                    ? scheme.error
-                                    : scheme.onSurfaceVariant;
-                            final deltaText = delta == 0
-                                ? 'No change'
-                                : '${delta > 0 ? '+' : ''}$delta';
-
-                            return Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: deltaColor.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    isIncrease
-                                        ? Icons.trending_up_rounded
-                                        : isDecrease
-                                            ? Icons.trending_down_rounded
-                                            : Icons.remove_rounded,
-                                    size: 17,
-                                    color: deltaColor,
-                                  ),
-                                  const SizedBox(width: 7),
-                                  const Expanded(
-                                    child: Text(
-                                      'Adjustment',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    deltaText,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      color: deltaColor,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ],
                       if (_isTransfer) ...[
                         const SizedBox(height: 8),
                         Row(

@@ -2246,7 +2246,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                           _isCompleteDetails
                               ? 'Save Details'
                               : _isBasicCreate
-                              ? 'Submit to Support'
+                              ? 'Submit'
                               : 'Save Lead',
                           style: const TextStyle(
                             fontSize: 20,

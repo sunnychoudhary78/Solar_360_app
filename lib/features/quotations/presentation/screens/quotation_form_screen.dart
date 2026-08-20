@@ -1399,14 +1399,11 @@ class _QuotationFormScreenState
                         item.gstPercent
                             .toString();
 
-                    if (line
-                        .description
-                        .text
-                        .isEmpty) {
-                      line.description
-                              .text =
-                          item.name;
-                    }
+                    line.description
+                            .text =
+                        item.description
+                            ?.trim() ??
+                        '';
                   }
                 });
               },

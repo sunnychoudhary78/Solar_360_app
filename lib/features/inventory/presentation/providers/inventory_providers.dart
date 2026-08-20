@@ -182,8 +182,9 @@ class LedgerListNotifier extends Notifier<LedgerListState> {
             transType: state.transType,
             invoiceNumber: state.invoiceNumber,
           );
+      final items = await _enrichTransferCompanions(result.data);
       state = state.copyWith(
-        items: result.data,
+        items: items,
         isLoading: false,
         hasMore: result.hasMore,
         page: result.page,
@@ -234,8 +235,13 @@ class LedgerListNotifier extends Notifier<LedgerListState> {
             transType: state.transType,
             invoiceNumber: state.invoiceNumber,
           );
+      final pageItems = await _enrichTransferCompanions(result.data);
+      final existingIds = {for (final tx in state.items) tx.id};
       state = state.copyWith(
-        items: [...state.items, ...result.data],
+        items: [
+          ...state.items,
+          ...pageItems.where((tx) => !existingIds.contains(tx.id)),
+        ],
         isLoadingMore: false,
         hasMore: result.hasMore,
         page: result.page,
@@ -243,6 +249,75 @@ class LedgerListNotifier extends Notifier<LedgerListState> {
     } catch (e) {
       state = state.copyWith(isLoadingMore: false, error: cleanError(e));
     }
+  }
+
+  /// Destination side of a transfer is stored as `trans_type = in` with the
+  /// same transfer reference number. When the TRANSFER filter is on, those
+  /// rows are omitted by the API, so we load recent `in` rows and keep the
+  /// ones that share a transfer reference.
+  ///
+  /// Note: searching by `invoiceNumber` cannot be used here — the API only
+  /// matches `reference_type = invoice`, which excludes transfer refs.
+  Future<List<StockTransactionModel>> _enrichTransferCompanions(
+    List<StockTransactionModel> items,
+  ) async {
+    final transfers = items
+        .where((tx) => tx.transType.toLowerCase() == 'transfer')
+        .toList();
+    if (transfers.isEmpty) return items;
+
+    final neededRefs = <String>{};
+    for (final tx in transfers) {
+      final ref = tx.referenceNumber?.trim();
+      if (ref == null || ref.isEmpty) continue;
+
+      final hasCompanion = items.any(
+        (candidate) =>
+            candidate.id != tx.id &&
+            candidate.itemId == tx.itemId &&
+            candidate.warehouseId != tx.warehouseId &&
+            candidate.referenceNumber?.trim() == ref &&
+            (candidate.transType.toLowerCase() == 'in' ||
+                candidate.transType.toLowerCase() == 'transfer'),
+      );
+      if (!hasCompanion) neededRefs.add(ref);
+    }
+
+    if (neededRefs.isEmpty) return items;
+
+    final repo = ref.read(inventoryRepositoryProvider);
+    final byId = <String, StockTransactionModel>{
+      for (final tx in items) tx.id: tx,
+    };
+    final foundRefs = <String>{};
+
+    // Pull recent stock-in pages until every transfer ref is matched (cap pages).
+    for (var page = 1; page <= 5 && foundRefs.length < neededRefs.length; page++) {
+      final inPage = await repo.getLedger(
+        page: page,
+        limit: 50,
+        itemId: state.itemId,
+        transType: 'in',
+      );
+
+      for (final row in inPage.data) {
+        final ref = row.referenceNumber?.trim();
+        if (ref == null || ref.isEmpty || !neededRefs.contains(ref)) continue;
+
+        final linkedToTransfer =
+            row.referenceType?.toLowerCase() == 'transfer' ||
+            ref.toUpperCase().startsWith('TRF-') ||
+            (row.notes?.toLowerCase().contains('(in)') ?? false);
+        if (!linkedToTransfer) continue;
+
+        byId.putIfAbsent(row.id, () => row);
+        foundRefs.add(ref);
+      }
+
+      if (!inPage.hasMore) break;
+    }
+
+    return byId.values.toList();
   }
 }
 
