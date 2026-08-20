@@ -95,10 +95,12 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
 
     try {
       final repo = ref.read(customerRepositoryProvider);
+      Object? popResult = true;
       if (isEdit) {
         await repo.update(widget.customerId!, model);
       } else {
-        await repo.create(model);
+        final created = await repo.create(model);
+        popResult = created.id.isNotEmpty ? created.id : true;
       }
       ref.read(customerListProvider.notifier).refresh();
       if (isEdit) {
@@ -108,7 +110,7 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
       ref.read(globalLoadingProvider.notifier).showSuccess(
             isEdit ? 'Customer updated' : 'Customer created',
           );
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, popResult);
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showApiError(e);

@@ -48,7 +48,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   context,
                   '/customers/form',
                 );
-                if (result == true) {
+                if (result == true ||
+                    (result is String && result.isNotEmpty)) {
                   ref.read(customerListProvider.notifier).refresh();
                 }
               },
@@ -70,7 +71,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             ),
             child: AppSearchField(
               controller: _searchController,
-              hintText: 'Search by name…',
+              hintText: 'Search name, phone, GST…',
               onChanged: (value) {
                 ref.read(customerListProvider.notifier).setSearch(value);
                 setState(() {});
@@ -115,7 +116,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                                 '/customers/form',
                                 arguments: customer.id,
                               );
-                              if (result == true) {
+                              if (result == true ||
+                                  (result is String && result.isNotEmpty)) {
                                 ref
                                     .read(customerListProvider.notifier)
                                     .refresh();

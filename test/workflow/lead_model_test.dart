@@ -23,6 +23,7 @@ void main() {
         'latitude': '28.6',
         'longitude': '77.2',
         'bank_account_name': 'Ravi Kumar',
+        'account_type': 'Saving',
         'bank_name': 'SBI',
         'account_number': '1234567890',
         'ifsc_code': 'SBIN0001234',
@@ -84,6 +85,8 @@ void main() {
       expect(lead.assignedToMaterialEngineerName, 'Material Engineer');
       expect(lead.assignedToElectricalEngineerName, 'Electrical Engineer');
       expect(lead.registrationImages, hasLength(2));
+      expect(lead.accountType, 'Saving');
+      expect(lead.resolvedBankAccountType, 'Saving');
       expect(lead.installationDetails?['panel_brand'], 'Waaree');
     });
 
@@ -102,6 +105,16 @@ void main() {
       expect(lead.fullName, 'Anita');
       expect(lead.loadSectionKw, '3');
       expect(lead.status, 'Converted');
+    });
+
+    test('resolves account type from bank_account_name fallback', () {
+      final lead = LeadModel.fromJson({
+        'id': 'lead-3',
+        'bank_account_name': 'Current',
+      });
+
+      expect(lead.accountType, isEmpty);
+      expect(lead.resolvedBankAccountType, 'Current');
     });
   });
 }

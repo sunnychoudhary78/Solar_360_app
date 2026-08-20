@@ -22,6 +22,16 @@ import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
+bool _isLoanPaymentType(String? type) {
+  final value = (type ?? '').trim().toLowerCase();
+  return value == 'loan' || value == 'subsidy';
+}
+
+String _paymentTypeUiValue(String type) {
+  if (type.trim().isEmpty) return '';
+  return _isLoanPaymentType(type) ? 'Loan' : type.trim();
+}
+
 class LeadDetailScreen extends ConsumerStatefulWidget {
   final LeadModel lead;
 
@@ -350,6 +360,26 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     return result;
   }
 
+  /// Backend KYC checks `account_type`. Older saves only stored Saving/Current
+  /// in `bank_account_name`, so copy that across before the status change.
+  Future<void> _syncAccountTypeForKyc() async {
+    final repo = ref.read(leadRepositoryProvider);
+    LeadModel lead = _lead;
+    try {
+      lead = await repo.getLeadById(_lead.id);
+    } catch (_) {}
+    if (!mounted) return;
+    _lead = lead;
+
+    final inferred = lead.resolvedBankAccountType;
+    if (inferred == null) return;
+    if (lead.accountType.trim().isNotEmpty) return;
+
+    await repo.updateLead(lead.id, {'account_type': inferred});
+    if (!mounted) return;
+    _lead = _lead.copyWith(accountType: inferred);
+  }
+
   Future<void> _advanceStatus(String nextStatus) async {
     if (loading) return;
 
@@ -416,6 +446,11 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     setState(() => loading = true);
 
     try {
+      if (nextStatus == 'KYC Collected') {
+        await _syncAccountTypeForKyc();
+        if (!mounted) return;
+      }
+
       await ref
           .read(leadRepositoryProvider)
           .updateLeadStatus(
@@ -636,31 +671,51 @@ registration_time=${result.regTime.trim()}
     }
   }
 
-  Future<void> _editPaymentDetails() async {
+  Future<void> _savePaymentDetails(_PaymentResult result) async {
     if (loading) return;
-
-    final result = await showDialog<_PaymentResult>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _PaymentDialog(lead: _lead),
-    );
-
-    if (result == null || !mounted) return;
 
     setState(() => loading = true);
 
+    final isLoan = _isLoanPaymentType(result.paymentType);
+    final percent = result.subsidyPercentage.trim();
+    final amount = result.paymentAmount.trim();
+
+    Future<void> persist(String paymentType) {
+      return ref.read(leadRepositoryProvider).updateLead(_lead.id, {
+        'payment_type': paymentType,
+        'payment_amount': amount,
+        if (isLoan) 'subsidy_percentage': percent,
+      });
+    }
+
     try {
-      await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
-        'payment_type': result.paymentType,
-        'subsidy_percentage': result.paymentType == 'Subsidy'
-            ? result.subsidyPercentage
-            : null,
-        'payment_amount': result.paymentAmount,
+      // Backend lead ENUM is Cash|Subsidy (UI label is Loan).
+      // Some environments may use Cash|Loan — fall back if Subsidy is rejected.
+      var savedType = isLoan ? 'Subsidy' : 'Cash';
+      try {
+        await persist(savedType);
+      } catch (_) {
+        if (!isLoan) rethrow;
+        savedType = 'Loan';
+        await persist(savedType);
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _lead = _lead.copyWith(
+          paymentType: savedType,
+          subsidyPercentage: isLoan ? percent : '',
+          paymentAmount: amount,
+        );
       });
 
       await _reloadSilently();
       if (!mounted) return;
-      showAppMessage(context, 'Payment details saved');
+      showAppMessage(
+        context,
+        'Payment details saved. You can now mark Amount Received.',
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => loading = false);
@@ -830,12 +885,12 @@ registration_time=${result.regTime.trim()}
     final canInstallationAccessLead =
         isInstallationUser && !isInstallationDoneAndMovedToSupport;
     final hasPaymentType = _lead.paymentType.trim().isNotEmpty;
-    final hasSubsidyPercentage =
-        _lead.paymentType != 'Subsidy' ||
+    final hasLoanPercentage =
+        !_isLoanPaymentType(_lead.paymentType) ||
         _lead.subsidyPercentage.trim().isNotEmpty;
     final hasPaymentAmount = _lead.paymentAmount.trim().isNotEmpty;
     final paymentLocked =
-        hasPaymentType && hasSubsidyPercentage && hasPaymentAmount;
+        hasPaymentType && hasLoanPercentage && hasPaymentAmount;
     final registrationImageFiles = _registrationImageFiles();
     final materialDetailsFilled = _hasMaterialDetails;
     final filteredNextStatuses =
@@ -1020,36 +1075,6 @@ registration_time=${result.regTime.trim()}
                     ),
                     const SizedBox(height: 12),
                   ],
-                  if (showFinancePaymentSection)
-                    _section('Payment', [
-                      _row('Payment Type', _lead.paymentType),
-                      if (_lead.paymentType == 'Subsidy')
-                        _row(
-                          'Loan Percentage',
-                          _lead.subsidyPercentage.isEmpty
-                              ? '—'
-                              : '${_lead.subsidyPercentage}%',
-                        ),
-                      _row(
-                        'Payment Amount',
-                        _lead.paymentAmount.isEmpty ? '—' : _lead.paymentAmount,
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: loading || paymentLocked
-                              ? null
-                              : _editPaymentDetails,
-                          icon: const Icon(Icons.payments_outlined),
-                          label: Text(
-                            paymentLocked
-                                ? 'Payment already saved'
-                                : 'Add payment details',
-                          ),
-                        ),
-                      ),
-                    ]),
                   if (showFinalAmountSection)
                     _section('Final Amount', [
                       SwitchListTile(
@@ -1131,6 +1156,44 @@ registration_time=${result.regTime.trim()}
                   ]),
                   if (visibleNotes.trim().isNotEmpty)
                     _section('Notes', [_row('Notes', visibleNotes)]),
+                  if (showFinancePaymentSection) ...[
+                    _section('Payment', [
+                      if (paymentLocked) ...[
+                        _row(
+                          'Payment Type',
+                          _paymentTypeUiValue(_lead.paymentType).isEmpty
+                              ? '—'
+                              : _paymentTypeUiValue(_lead.paymentType),
+                        ),
+                        if (_isLoanPaymentType(_lead.paymentType))
+                          _row(
+                            'Loan Percentage',
+                            _lead.subsidyPercentage.isEmpty
+                                ? '—'
+                                : '${_lead.subsidyPercentage}%',
+                          ),
+                        _row(
+                          'Payment Amount',
+                          _lead.paymentAmount.isEmpty
+                              ? '—'
+                              : _lead.paymentAmount,
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: null,
+                            icon: const Icon(Icons.payments_outlined),
+                            label: const Text('Payment already saved'),
+                          ),
+                        ),
+                      ] else
+                        _InlinePaymentFields(
+                          enabled: !loading,
+                          onSave: _savePaymentDetails,
+                        ),
+                    ]),
+                  ],
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
@@ -2218,48 +2281,59 @@ class _PaymentResult {
   });
 }
 
-class _PaymentDialog extends StatefulWidget {
-  final LeadModel lead;
+class _InlinePaymentFields extends StatefulWidget {
+  final bool enabled;
+  final Future<void> Function(_PaymentResult result) onSave;
 
-  const _PaymentDialog({required this.lead});
+  const _InlinePaymentFields({
+    required this.enabled,
+    required this.onSave,
+  });
 
   @override
-  State<_PaymentDialog> createState() => _PaymentDialogState();
+  State<_InlinePaymentFields> createState() => _InlinePaymentFieldsState();
 }
 
-class _PaymentDialogState extends State<_PaymentDialog> {
-  late String paymentType;
-  late final TextEditingController paymentAmountController;
+class _InlinePaymentFieldsState extends State<_InlinePaymentFields> {
+  String paymentType = '';
   String subsidyPercentage = '';
+  String? saveError;
+  late final TextEditingController amountController;
 
   @override
   void initState() {
     super.initState();
-    paymentType = widget.lead.paymentType;
-    subsidyPercentage = widget.lead.subsidyPercentage;
-    paymentAmountController = TextEditingController(
-      text: widget.lead.paymentAmount,
-    );
+    amountController = TextEditingController();
   }
 
   @override
   void dispose() {
-    paymentAmountController.dispose();
+    amountController.dispose();
     super.dispose();
   }
 
-  void _save() {
-    if (paymentType.trim().isEmpty) return;
-    if (paymentType == 'Subsidy' && subsidyPercentage.trim().isEmpty) return;
+  Future<void> _submit() async {
+    if (!widget.enabled) return;
 
-    final amount = paymentAmountController.text.trim();
-    if (amount.isEmpty ||
-        num.tryParse(amount) == null ||
-        num.parse(amount) <= 0) {
+    if (paymentType.trim().isEmpty) {
+      setState(() => saveError = 'Select payment type');
+      return;
+    }
+    if (_isLoanPaymentType(paymentType) && subsidyPercentage.trim().isEmpty) {
+      setState(() => saveError = 'Select 70% or 100%');
       return;
     }
 
-    Navigator.of(context).pop(
+    final amount = amountController.text.trim();
+    if (amount.isEmpty ||
+        num.tryParse(amount) == null ||
+        num.parse(amount) <= 0) {
+      setState(() => saveError = 'Enter a valid amount');
+      return;
+    }
+
+    setState(() => saveError = null);
+    await widget.onSave(
       _PaymentResult(
         paymentType: paymentType,
         subsidyPercentage: subsidyPercentage,
@@ -2270,61 +2344,78 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Payment details'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: paymentType.trim().isEmpty ? null : paymentType,
-              decoration: const InputDecoration(labelText: 'Payment Type'),
-              items: const [
-                DropdownMenuItem(value: 'Cash', child: Text('Cash')),
-                DropdownMenuItem(value: 'Subsidy', child: Text('Subsidy')),
-              ],
-              onChanged: (value) {
-                if (value == null || !mounted) return;
-                setState(() {
-                  paymentType = value;
-                  if (value != 'Subsidy') subsidyPercentage = '';
-                });
-              },
-            ),
-            if (paymentType == 'Subsidy') ...[
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: subsidyPercentage.trim().isEmpty
-                    ? null
-                    : subsidyPercentage,
-                decoration: const InputDecoration(labelText: 'Loan Percentage'),
-                items: const [
-                  DropdownMenuItem(value: '20', child: Text('20%')),
-                  DropdownMenuItem(value: '40', child: Text('40%')),
-                  DropdownMenuItem(value: '60', child: Text('60%')),
-                  DropdownMenuItem(value: '80', child: Text('80%')),
-                ],
-                onChanged: (value) {
-                  if (value == null || !mounted) return;
-                  setState(() => subsidyPercentage = value);
-                },
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: paymentAmountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Amount'),
-            ),
+    final isLoan = _isLoanPaymentType(paymentType);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          value: paymentType.trim().isEmpty ? null : paymentType,
+          decoration: const InputDecoration(labelText: 'Payment Type'),
+          items: const [
+            DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+            DropdownMenuItem(value: 'Loan', child: Text('Loan')),
           ],
+          onChanged: widget.enabled
+              ? (value) {
+                  if (value == null) return;
+                  setState(() {
+                    paymentType = value;
+                    if (!_isLoanPaymentType(value)) subsidyPercentage = '';
+                    saveError = null;
+                  });
+                }
+              : null,
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('Cancel'),
+        if (isLoan) ...[
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: subsidyPercentage.trim().isEmpty ? null : subsidyPercentage,
+            decoration: const InputDecoration(
+              labelText: 'Loan Percentage',
+              hintText: 'Select loan percentage',
+            ),
+            items: const [
+              DropdownMenuItem(value: '70', child: Text('70%')),
+              DropdownMenuItem(value: '100', child: Text('100%')),
+            ],
+            onChanged: widget.enabled
+                ? (value) {
+                    if (value == null) return;
+                    setState(() {
+                      subsidyPercentage = value;
+                      saveError = null;
+                    });
+                  }
+                : null,
+          ),
+        ],
+        const SizedBox(height: 12),
+        TextField(
+          controller: amountController,
+          enabled: widget.enabled,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Amount'),
+          onChanged: (_) {
+            if (saveError != null) setState(() => saveError = null);
+          },
         ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
+        if (saveError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            saveError!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: widget.enabled ? _submit : null,
+            icon: const Icon(Icons.payments_outlined),
+            label: const Text('Save payment details'),
+          ),
+        ),
       ],
     );
   }

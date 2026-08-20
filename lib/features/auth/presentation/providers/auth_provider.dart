@@ -225,10 +225,7 @@ class AuthNotifier extends Notifier<AuthState> {
           );
 
       final home = ref.read(moduleProvider).homeRoute;
-      navigatorKey.currentState?.pushNamedAndRemoveUntil(
-        home,
-        (route) => false,
-      );
+      await safeResetToRoute(home);
     } catch (e) {
       final inactive = _isSubscriptionInactive(e);
       state = state.copyWith(
@@ -306,13 +303,9 @@ class AuthNotifier extends Notifier<AuthState> {
           .showSuccess('Switched to ${enrichedProfile.effectiveRoleName}');
 
       final home = ref.read(moduleProvider).homeRoute;
-      navigatorKey.currentState?.pushNamedAndRemoveUntil(
-        home,
-        (route) => false,
-      );
+      await safeResetToRoute(home);
 
-      // Defer cache invalidation — invalidating auth-dependent providers
-      // (e.g. dashboard) during auth updates causes CircularDependencyError.
+      // Defer cache invalidation until after the new route is mounted.
       scheduleRoleScopedInvalidation(ref);
 
       // Soft background refresh of profile (company fields, photo, etc.).
@@ -370,10 +363,9 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> logout() async {
     await _repo.logoutLocal();
     state = const AuthState(isLoading: false, isInitializing: false);
-    navigatorKey.currentState?.pushNamedAndRemoveUntil(
-      '/login',
-      (route) => false,
-    );
+    await safeResetToRoute('/login');
+    // ProviderScope restart is deferred inside triggerAppRestart so the
+    // login route can mount before the old InheritedWidget tree is disposed.
     triggerAppRestart();
   }
 

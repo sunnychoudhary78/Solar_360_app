@@ -14,10 +14,8 @@ final dioClientProvider = Provider<DioClient>((ref) {
   return DioClient(
     tokenStorage: tokenStorage,
     onUnauthorized: () {
-      navigatorKey.currentState?.pushNamedAndRemoveUntil(
-        '/login',
-        (route) => false,
-      );
+      // ignore: discarded_futures
+      safeResetToRoute('/login');
     },
   );
 });

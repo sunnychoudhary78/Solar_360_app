@@ -279,10 +279,18 @@ class LeadApiService {
     Map<String, dynamic> data,
   ) async {
     try {
-      final res = await _api.put(ApiEndpoints.lead(leadId), data);
+      final formDataMap = <String, dynamic>{
+        for (final entry in data.entries)
+          if (entry.value != null) entry.key: '${entry.value}',
+      };
+
+      final res = await _dio.put(
+        ApiEndpoints.lead(leadId),
+        data: FormData.fromMap(formDataMap),
+      );
 
       try {
-        return LeadModel.fromJson(_extractLeadJson(res));
+        return LeadModel.fromJson(_extractLeadJson(res.data));
       } catch (_) {
         return null;
       }

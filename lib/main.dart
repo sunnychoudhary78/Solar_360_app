@@ -30,7 +30,12 @@ class _RootState extends State<Root> {
   Key key = UniqueKey();
 
   void restart() {
-    setState(() => key = UniqueKey());
+    // Defer ProviderScope recreation so no Consumer still depends on the old
+    // InheritedWidget (`_dependents.isEmpty` assertion).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => key = UniqueKey());
+    });
   }
 
   @override

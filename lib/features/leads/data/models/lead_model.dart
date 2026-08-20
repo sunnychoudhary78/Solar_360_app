@@ -23,6 +23,7 @@ class LeadModel {
   final String longitude;
 
   final String bankAccountName;
+  final String accountType;
   final String bankName;
   final String accountNumber;
   final String ifscCode;
@@ -112,6 +113,7 @@ class LeadModel {
     required this.latitude,
     required this.longitude,
     required this.bankAccountName,
+    required this.accountType,
     required this.bankName,
     required this.accountNumber,
     required this.ifscCode,
@@ -208,6 +210,7 @@ class LeadModel {
       bankAccountName: _str(
         json['bank_account_name'] ?? json['bankAccountName'],
       ),
+      accountType: _str(json['account_type'] ?? json['accountType']),
       bankName: _str(json['bank_name'] ?? json['bankName']),
       accountNumber: _str(json['account_number'] ?? json['accountNumber']),
       ifscCode: _str(json['ifsc_code'] ?? json['ifscCode']),
@@ -400,6 +403,30 @@ class LeadModel {
         registrationTime.trim().isNotEmpty;
   }
 
+  /// Maps saved account-type values (and legacy Saving/Current stored in
+  /// `bank_account_name`) to the form dropdown values.
+  static String? parseBankAccountType(String? raw) {
+    final lower = (raw ?? '').trim().toLowerCase();
+    if (lower.isEmpty) return null;
+    if (lower == 'current' ||
+        lower == 'current account' ||
+        lower == 'current a/c') {
+      return 'Current';
+    }
+    if (lower == 'saving' ||
+        lower == 'savings' ||
+        lower == 'saving account' ||
+        lower == 'savings account' ||
+        lower == 'saving a/c' ||
+        lower == 'savings a/c') {
+      return 'Saving';
+    }
+    return null;
+  }
+
+  String? get resolvedBankAccountType =>
+      parseBankAccountType(accountType) ?? parseBankAccountType(bankAccountName);
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -420,6 +447,7 @@ class LeadModel {
       'latitude': latitude,
       'longitude': longitude,
       'bank_account_name': bankAccountName,
+      'account_type': accountType,
       'bank_name': bankName,
       'account_number': accountNumber,
       'ifsc_code': ifscCode,
@@ -501,6 +529,7 @@ class LeadModel {
     String? latitude,
     String? longitude,
     String? bankAccountName,
+    String? accountType,
     String? bankName,
     String? accountNumber,
     String? ifscCode,
@@ -580,6 +609,7 @@ class LeadModel {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       bankAccountName: bankAccountName ?? this.bankAccountName,
+      accountType: accountType ?? this.accountType,
       bankName: bankName ?? this.bankName,
       accountNumber: accountNumber ?? this.accountNumber,
       ifscCode: ifscCode ?? this.ifscCode,

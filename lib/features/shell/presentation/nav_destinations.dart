@@ -65,6 +65,18 @@ class AppDestination {
 class NavDestinations {
   NavDestinations._();
 
+  /// Green Energy Customers — shown in the drawer for Sales User only
+  /// (injected above Switch Role; not part of the default section list).
+  static const AppDestination solarCustomers = AppDestination(
+    id: 'ge_customers',
+    label: 'Customers',
+    icon: Icons.people_outline,
+    selectedIcon: Icons.people_rounded,
+    section: NavSection.main,
+    kind: NavKind.route,
+    route: '/customers',
+  );
+
   // ── Billbook ────────────────────────────────────────────────────────────
 
   static const List<AppDestination> billbook = [

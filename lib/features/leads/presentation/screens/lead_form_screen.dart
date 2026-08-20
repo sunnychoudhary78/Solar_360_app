@@ -9,9 +9,10 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'package:solar_sales/app/navigator.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/widgets/app_message.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
@@ -125,6 +126,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     _PredefinedLeadFile('Work Agreement'),
   ];
 
+  /// Matches backend KYC_REQUIRED_DOC_TITLES for Edit/Complete Details.
+  static const Set<String> kycRequiredDocumentTitles = {
+    'Aadhaar Front',
+    'Aadhaar Back',
+    'PAN Card',
+    'Electricity Bill',
+  };
+
   static const List<_PredefinedLeadFile> predefinedImageSlots = [
     _PredefinedLeadFile('Geo Tag Photo', imageOnly: true),
   ];
@@ -191,6 +200,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   bool isLoading = false;
   bool isFetchingLocation = false;
   bool _isClosing = false;
+  bool _mediaSectionReady = false;
+
+  late final List<DropdownMenuItem<String>> _stateMenuItems = indianStates
+      .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
+      .toList(growable: false);
+
+  late final List<DropdownMenuItem<String>> _discomMenuItems = discomOptions
+      .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
+      .toList(growable: false);
 
   bool get _isBasicCreate => widget.mode == LeadFormMode.basicCreate;
   bool get _isCompleteDetails => widget.mode == LeadFormMode.completeDetails;
@@ -198,6 +216,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   @override
   void initState() {
     super.initState();
+
+    if (_isCompleteDetails) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _isClosing) return;
+        setState(() => _mediaSectionReady = true);
+      });
+    } else {
+      _mediaSectionReady = true;
+    }
 
     final lead = widget.existingLead;
 
@@ -238,12 +265,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       source = lead.source.isNotEmpty ? lead.source : source;
       priority = lead.priority.isNotEmpty ? lead.priority : priority;
 
-      final accountType = lead.bankAccountName.trim().toLowerCase();
-      if (accountType == 'current') {
-        bankAccountType = 'Current';
-      } else if (accountType == 'saving') {
-        bankAccountType = 'Saving';
-      }
+      bankAccountType =
+          lead.resolvedBankAccountType ?? bankAccountType;
       isLeadActive = lead.isActive;
       _prefillStoredTitledFiles(lead.additionalDocuments, predefinedDocPaths);
       _prefillStoredTitledFiles(lead.additionalImages, predefinedImagePaths);
@@ -309,6 +332,39 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   String fileDisplayName(String path) {
     final parts = path.split(RegExp(r'[\\/]'));
     return parts.isEmpty ? path : parts.last;
+  }
+
+  /// Decode images at display size to avoid lag from full-resolution bitmaps.
+  Widget _thumbImage(
+    String path, {
+    double? width,
+    required double height,
+    BoxFit fit = BoxFit.cover,
+  }) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final screenW = MediaQuery.sizeOf(context).width;
+    final resolvedWidth =
+        (width != null && width.isFinite) ? width : screenW;
+    return Image.file(
+      File(path),
+      width: width,
+      height: height,
+      fit: fit,
+      filterQuality: FilterQuality.low,
+      gaplessPlayback: true,
+      cacheWidth: (resolvedWidth * dpr).round().clamp(1, 4096),
+      cacheHeight: (height * dpr).round().clamp(1, 4096),
+      errorBuilder: (_, error, stackTrace) => _docPreview(path),
+    );
+  }
+
+  Future<XFile?> _pickCompressedImage(ImageSource source) {
+    return _imagePicker.pickImage(
+      source: source,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 85,
+    );
   }
 
   bool _isExistingRemotePath(String path) {
@@ -543,6 +599,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'latitude': _textOrNull(latitude),
       'longitude': _textOrNull(longitude),
       'bank_account_name': bankAccountType,
+      'account_type': bankAccountType,
       'bank_name': _textOrNull(bankName),
       'account_number': _textOrNull(accountNumber),
       'ifsc_code': _textOrNull(ifscCode)?.toUpperCase(),
@@ -612,6 +669,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           'source': data['source'],
           'priority': data['priority'],
           'notes': data['notes'],
+          if (selectedCustomerId != null && selectedCustomerId!.isNotEmpty)
+            'customer_id': selectedCustomerId,
         };
         await repo.createLead(basicData);
       } else {
@@ -645,18 +704,36 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       // never rebuild this route while it is being removed from the tree.
       Navigator.of(context).pop(true);
 
-      ref.invalidate(allLeadsProvider);
-
-      final rootContext = navigatorKey.currentContext;
-      if (rootContext != null) {
-        showAppMessage(rootContext, successMessage);
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          ref.invalidate(allLeadsProvider);
+        } catch (_) {}
+        showAppMessage(null, successMessage);
+      });
     } catch (e) {
       _isClosing = false;
       if (!mounted) return;
       setState(() => isLoading = false);
       showAppMessage(context, 'Failed to save lead: $e', isError: true);
     }
+  }
+
+  Widget _requiredFieldLabel(String text, {bool isRequired = false}) {
+    if (!isRequired) return Text(text);
+    return Text.rich(
+      TextSpan(
+        children: [
+          const TextSpan(
+            text: '* ',
+            style: TextStyle(
+              color: Color(0xFFE53935),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          TextSpan(text: text),
+        ],
+      ),
+    );
   }
 
   Widget input(
@@ -674,8 +751,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     TextInputAction? textInputAction,
     ValueChanged<String>? onFieldSubmitted,
     FocusNode? focusNode,
+    bool isRequired = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final resolvedKeyboardType =
+        maxLines > 1 && identical(keyboardType, TextInputType.text)
+            ? TextInputType.multiline
+            : keyboardType;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md - 2),
@@ -684,7 +766,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         focusNode: focusNode,
         enabled: !isLoading,
         readOnly: readOnly,
-        keyboardType: keyboardType,
+        keyboardType: resolvedKeyboardType,
         maxLines: maxLines,
         validator: validator,
         inputFormatters: inputFormatters,
@@ -695,7 +777,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         onFieldSubmitted: onFieldSubmitted,
         autovalidateMode: AutovalidateMode.onUserInteraction,
         decoration: InputDecoration(
-          labelText: label,
+          label: _requiredFieldLabel(label, isRequired: isRequired),
           suffixIcon: suffixIcon,
           suffixText: suffixText,
           suffixStyle: TextStyle(
@@ -713,6 +795,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required TextEditingController controller,
     required List<String> items,
     required String hintText,
+    List<DropdownMenuItem<String>>? menuItems,
+    bool isRequired = false,
   }) {
     final textValue = controller.text.trim();
     final currentValue = items.contains(textValue) ? textValue : null;
@@ -722,18 +806,25 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       child: DropdownButtonFormField<String>(
         value: currentValue,
         isExpanded: true,
-        decoration: InputDecoration(labelText: label, hintText: hintText),
-        items: items
-            .map(
-              (item) =>
-                  DropdownMenuItem<String>(value: item, child: Text(item)),
-            )
-            .toList(),
+        decoration: InputDecoration(
+          label: _requiredFieldLabel(label, isRequired: isRequired),
+          hintText: hintText,
+        ),
+        items: menuItems ??
+            items
+                .map(
+                  (item) => DropdownMenuItem<String>(
+                    value: item,
+                    child: Text(item),
+                  ),
+                )
+                .toList(growable: false),
         onChanged: isLoading
             ? null
             : (value) {
                 if (value == null) return;
-                setState(() => controller.text = value);
+                // FormField updates its own UI; avoid rebuilding the whole form.
+                controller.text = value;
               },
       ),
     );
@@ -744,6 +835,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required String value,
     required List<String> items,
     required ValueChanged<String?> onChanged,
+    bool isRequired = false,
   }) {
     final safeValue = items.contains(value) ? value : items.first;
 
@@ -756,13 +848,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           if (v == null || v.trim().isEmpty) return '$label is required';
           return null;
         },
-        decoration: InputDecoration(labelText: label),
+        decoration: InputDecoration(
+          label: _requiredFieldLabel(label, isRequired: isRequired),
+        ),
         items: items
             .map(
               (item) =>
                   DropdownMenuItem<String>(value: item, child: Text(item)),
             )
-            .toList(),
+            .toList(growable: false),
         onChanged: isLoading ? null : onChanged,
       ),
     );
@@ -813,6 +907,26 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         ),
         onChanged: isLoading ? null : onChanged,
       ),
+    );
+  }
+
+  /// Local rebuild only — avoids rebuilding the entire edit form on toggle.
+  Widget localSwitchTile({
+    required String title,
+    required bool Function() getter,
+    required ValueChanged<bool> setter,
+  }) {
+    return StatefulBuilder(
+      builder: (context, setLocal) {
+        return switchTile(
+          title: title,
+          value: getter(),
+          onChanged: (value) {
+            setter(value);
+            setLocal(() {});
+          },
+        );
+      },
     );
   }
 
@@ -868,7 +982,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   Future<void> _captureImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
 
-    final file = await _imagePicker.pickImage(source: ImageSource.camera);
+    final file = await _pickCompressedImage(ImageSource.camera);
     if (file == null) return;
     if (!mounted) return;
 
@@ -878,7 +992,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   Future<void> _pickImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
 
-    final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+    final file = await _pickCompressedImage(ImageSource.gallery);
     if (file == null) return;
     if (!mounted) return;
 
@@ -889,7 +1003,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     FocusScope.of(context).unfocus();
 
     if (imageOnly) {
-      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      final file = await _pickCompressedImage(ImageSource.gallery);
       return file?.path;
     }
 
@@ -986,11 +1100,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                                     AppRadius.lg - 2,
                                   ),
                                   child: isImagePath(selectedPath!)
-                                      ? Image.file(
-                                          File(selectedPath!),
-                                          fit: BoxFit.cover,
-                                          width: double.infinity,
-                                        )
+                                      ? _thumbImage(selectedPath!, height: 130)
                                       : _docPreview(selectedPath!),
                                 ),
                         ),
@@ -1059,6 +1169,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required String title,
     required String? value,
     required ValueChanged<String?> onChanged,
+    bool isRequired = false,
   }) {
     final hasFile = value != null && value.isNotEmpty;
     final isImage = hasFile && isImagePath(value);
@@ -1071,12 +1182,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
+          DefaultTextStyle.merge(
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: scheme.onSurface,
             ),
+            child: _requiredFieldLabel(title, isRequired: isRequired),
           ),
           const SizedBox(height: AppSpacing.sm + 2),
           if (hasFile)
@@ -1088,7 +1199,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     height: 160,
                     width: double.infinity,
                     child: isImage
-                        ? Image.file(File(value), fit: BoxFit.cover)
+                        ? _thumbImage(value, height: 160)
                         : _docPreview(value),
                   ),
                 ),
@@ -1296,9 +1407,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.title,
+                  DefaultTextStyle.merge(
                     style: const TextStyle(fontWeight: FontWeight.w700),
+                    child: _requiredFieldLabel(
+                      item.title,
+                      isRequired:
+                          kycRequiredDocumentTitles.contains(item.title),
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
@@ -1467,9 +1582,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               height: 105,
                               width: 120,
                               child: image
-                                  ? Image.file(
-                                      File(item.path),
-                                      fit: BoxFit.cover,
+                                  ? _thumbImage(
+                                      item.path,
+                                      width: 120,
+                                      height: 105,
                                     )
                                   : _docPreview(item.path),
                             ),
@@ -1540,10 +1656,140 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     });
   }
 
+  Future<void> _openAddCustomer() async {
+    FocusScope.of(context).unfocus();
+    final result = await Navigator.pushNamed(context, '/customers/form');
+    if (!mounted) return;
+    await ref.read(customerListProvider.notifier).refresh();
+    if (!mounted) return;
+
+    CustomerModel? created;
+    final items = ref.read(customerListProvider).items;
+    if (result is String && result.isNotEmpty) {
+      final match = items.where((c) => c.id == result).toList();
+      if (match.isNotEmpty) {
+        created = match.first;
+      } else {
+        try {
+          created = await ref.read(customerRepositoryProvider).getById(result);
+        } catch (_) {}
+      }
+    } else if (result == true && items.isNotEmpty) {
+      created = items.first;
+    }
+
+    if (!mounted || created == null) return;
+    _applyCustomer(created);
+  }
+
+  void _applyCustomer(CustomerModel? customer) {
+    setState(() {
+      selectedCustomerId = customer?.id;
+      if (customer == null) return;
+
+      if (customer.name.trim().isNotEmpty) {
+        fullName.text = customer.name.trim();
+      }
+      if ((customer.phone ?? '').trim().isNotEmpty) {
+        mobile.text = customer.phone!.trim();
+      }
+      if ((customer.email ?? '').trim().isNotEmpty) {
+        email.text = customer.email!.trim();
+      }
+      if ((customer.address ?? '').trim().isNotEmpty) {
+        address.text = customer.address!.trim();
+      }
+      if ((customer.city ?? '').trim().isNotEmpty) {
+        city.text = customer.city!.trim();
+      }
+      if ((customer.state ?? '').trim().isNotEmpty) {
+        state.text = customer.state!.trim();
+      }
+      if ((customer.pincode ?? '').trim().isNotEmpty) {
+        pincode.text = customer.pincode!.trim();
+      }
+    });
+  }
+
+  String _customerMenuLabel(CustomerModel customer) {
+    final parts = <String>[
+      customer.name.trim().isEmpty ? 'Unnamed' : customer.name.trim(),
+      if ((customer.phone ?? '').trim().isNotEmpty) customer.phone!.trim(),
+      if ((customer.city ?? '').trim().isNotEmpty) customer.city!.trim(),
+    ];
+    return parts.join(' - ');
+  }
+
+  /// Shared Linked Customer UI used by Create Lead and Complete Details.
+  Widget _linkedCustomerSection({
+    required List<CustomerModel> customerOptions,
+    required bool allowAddCustomer,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasSelected =
+        selectedCustomerId != null &&
+        customerOptions.any((c) => c.id == selectedCustomerId);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DropdownButtonFormField<String?>(
+            value: hasSelected ? selectedCustomerId : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Link to customer',
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Enter manually / new contact'),
+              ),
+              ...customerOptions.map(
+                (customer) => DropdownMenuItem<String?>(
+                  value: customer.id,
+                  child: Text(
+                    _customerMenuLabel(customer),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+            onChanged: isLoading
+                ? null
+                : (value) {
+                    if (value == null) {
+                      setState(() => selectedCustomerId = null);
+                      return;
+                    }
+                    final match = customerOptions
+                        .where((c) => c.id == value)
+                        .toList();
+                    _applyCustomer(match.isEmpty ? null : match.first);
+                  },
+          ),
+          if (allowAddCustomer) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: isLoading ? null : _openAddCustomer,
+              icon: Icon(Icons.person_add_alt_1_rounded, color: scheme.primary),
+              label: const Text('Add Customer'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final customersState = ref.watch(customerListProvider);
-    final customerOptions = customersState.items;
+    final customerOptions = ref.watch(
+      customerListProvider.select((s) => s.items),
+    );
+    final canCreateCustomer = ref.watch(
+      authProvider.select((a) => a.hasPermission('customer.create')),
+    );
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -1558,39 +1804,27 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           padding: const EdgeInsets.all(18),
           child: formCard(
             children: [
+              if (_isBasicCreate) ...[
+                sectionTitle('Customer'),
+                _linkedCustomerSection(
+                  customerOptions: customerOptions,
+                  allowAddCustomer: canCreateCustomer,
+                ),
+              ],
               sectionTitle('Basic Details'),
               if (!_isBasicCreate)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: DropdownButtonFormField<String>(
-                    value:
-                        customerOptions.any((c) => c.id == selectedCustomerId)
-                        ? selectedCustomerId
-                        : null,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Linked Customer',
-                    ),
-                    items: customerOptions
-                        .map(
-                          (customer) => DropdownMenuItem<String>(
-                            value: customer.id,
-                            child: Text(customer.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: isLoading
-                        ? null
-                        : (value) => setState(() => selectedCustomerId = value),
-                  ),
+                _linkedCustomerSection(
+                  customerOptions: customerOptions,
+                  allowAddCustomer: canCreateCustomer,
                 ),
               AutofillGroup(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     input(
-                      'Full Name *',
+                      'Full Name',
                       fullName,
+                      isRequired: true,
                       validator: _validateFullName,
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
@@ -1602,8 +1836,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       textInputAction: TextInputAction.next,
                     ),
                     input(
-                      'Mobile Number *',
+                      'Mobile Number',
                       mobile,
+                      isRequired: true,
                       keyboardType: TextInputType.phone,
                       validator: _validateMobile,
                       inputFormatters: [
@@ -1624,12 +1859,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     input(
                       'Address',
                       address,
+                      isRequired: _isCompleteDetails,
                       autofillHints: const [AutofillHints.streetAddressLine1],
                       textInputAction: TextInputAction.next,
                     ),
                     input(
                       'City',
                       city,
+                      isRequired: _isCompleteDetails,
                       validator: (v) => _validateOptionalAlpha(v, 'City'),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
@@ -1647,11 +1884,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 label: 'State',
                 controller: state,
                 items: indianStates,
+                menuItems: _stateMenuItems,
                 hintText: 'Select state',
+                isRequired: _isCompleteDetails,
               ),
               input(
                 'Pincode',
                 pincode,
+                isRequired: _isCompleteDetails,
                 keyboardType: TextInputType.number,
                 validator: _validatePincode,
                 inputFormatters: [
@@ -1662,6 +1902,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               input(
                 'System Size (kW)',
                 kw,
+                isRequired: _isCompleteDetails,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
@@ -1675,6 +1916,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 input(
                   'CA Number',
                   caNumber,
+                  isRequired: true,
                   keyboardType: TextInputType.number,
                   validator: (v) => _validateMaxDigitNumber(v, 'CA Number', 10),
                   inputFormatters: [
@@ -1707,7 +1949,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   label: 'DISCOM',
                   controller: discom,
                   items: discomOptions,
+                  menuItems: _discomMenuItems,
                   hintText: 'Select DISCOM',
+                  isRequired: true,
                 ),
                 sectionTitle('Location'),
                 locationStatusBox(),
@@ -1755,15 +1999,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   label: 'Bank Account Type',
                   value: bankAccountType,
                   items: const ['Saving', 'Current'],
+                  isRequired: true,
                   onChanged: (value) {
                     if (value == null) return;
-                    setState(() => bankAccountType = value);
+                    bankAccountType = value;
                   },
                 ),
-                input('Bank Name', bankName),
+                input('Bank Name', bankName, isRequired: true),
                 input(
                   'Account Number',
                   accountNumber,
+                  isRequired: true,
                   keyboardType: TextInputType.number,
                   validator: _validateAccount,
                   inputFormatters: [
@@ -1774,6 +2020,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 input(
                   'IFSC Code',
                   ifscCode,
+                  isRequired: true,
                   validator: _validateIfsc,
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
@@ -1793,7 +2040,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   items: const ['Residential', 'Commercial', 'Industrial'],
                   onChanged: (value) {
                     if (value == null) return;
-                    setState(() => projectType = value);
+                    projectType = value;
                   },
                 ),
                 dropdown(
@@ -1808,7 +2055,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   ],
                   onChanged: (value) {
                     if (value == null) return;
-                    setState(() => source = value);
+                    source = value;
                   },
                 ),
                 dropdown(
@@ -1817,7 +2064,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   items: const ['Low', 'Medium', 'High'],
                   onChanged: (value) {
                     if (value == null) return;
-                    setState(() => priority = value);
+                    priority = value;
                   },
                 ),
                 sectionTitle('Site Checklist'),
@@ -1862,94 +2109,123 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     LengthLimitingTextInputFormatter(10),
                   ],
                 ),
-                switchTile(
+                localSwitchTile(
                   title: 'Roof Load Bearing Capacity',
-                  value: roofLoadBearingCapacity,
-                  onChanged: (value) =>
-                      setState(() => roofLoadBearingCapacity = value),
+                  getter: () => roofLoadBearingCapacity,
+                  setter: (value) => roofLoadBearingCapacity = value,
                 ),
-                switchTile(
+                localSwitchTile(
                   title: 'Shadow Free Roof',
-                  value: shadowFreeRoof,
-                  onChanged: (value) => setState(() => shadowFreeRoof = value),
+                  getter: () => shadowFreeRoof,
+                  setter: (value) => shadowFreeRoof = value,
                 ),
-                switchTile(
+                localSwitchTile(
                   title: 'Vendor Visited Site',
-                  value: vendorVisitedSite,
-                  onChanged: (value) =>
-                      setState(() => vendorVisitedSite = value),
+                  getter: () => vendorVisitedSite,
+                  setter: (value) => vendorVisitedSite = value,
                 ),
-                switchTile(
+                localSwitchTile(
                   title: 'Lead Active',
-                  value: isLeadActive,
-                  onChanged: (value) => setState(() => isLeadActive = value),
+                  getter: () => isLeadActive,
+                  setter: (value) => isLeadActive = value,
                 ),
                 sectionTitle('Notes'),
                 input('Notes', notes, maxLines: 4),
                 sectionTitle('Images & Documents'),
-                _singleImagePicker(
-                  title: 'Roof Photo',
-                  value: roofPhotoPath,
-                  onChanged: (v) => setState(() => roofPhotoPath = v),
-                ),
-                _singleImagePicker(
-                  title: 'Cheque/Passbook Copy',
-                  value: chequePassbookPath,
-                  onChanged: (v) => setState(() => chequePassbookPath = v),
-                ),
-                _singleImagePicker(
-                  title: 'Pre-Installation Photo',
-                  value: preInstallationPhotoPath,
-                  onChanged: (v) =>
-                      setState(() => preInstallationPhotoPath = v),
-                ),
-                _singleDocumentPicker(
-                  title: 'Quotation Document',
-                  value: quotationDocumentPath,
-                  onChanged: (v) => setState(() => quotationDocumentPath = v),
-                ),
-                _predefinedFilesSection(
-                  title: 'KYC & Agreement Documents',
-                  items: predefinedDocumentSlots,
-                  values: predefinedDocPaths,
-                ),
-                _predefinedFilesSection(
-                  title: 'Predefined Images',
-                  items: predefinedImageSlots,
-                  values: predefinedImagePaths,
-                ),
-                _multiFilePicker(
-                  title: 'Additional Images',
-                  files: additionalImages,
-                  imagesOnly: true,
-                  onAdd: () => _showAddTitledFileDialog(
-                    dialogTitle: 'Add Additional Image',
-                    titleLabel: 'Image title',
-                    uploadLabel: 'Choose Image',
-                    defaultTitlePrefix: 'Image',
-                    imageOnly: true,
-                    target: additionalImages,
+                if (!_mediaSectionReady)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                    ),
+                  )
+                else ...[
+                  RepaintBoundary(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _singleImagePicker(
+                          title: 'Roof Photo',
+                          value: roofPhotoPath,
+                          onChanged: (v) => setState(() => roofPhotoPath = v),
+                        ),
+                        _singleImagePicker(
+                          title: 'Cheque/Passbook Copy',
+                          value: chequePassbookPath,
+                          isRequired: true,
+                          onChanged: (v) =>
+                              setState(() => chequePassbookPath = v),
+                        ),
+                        _singleImagePicker(
+                          title: 'Pre-Installation Photo',
+                          value: preInstallationPhotoPath,
+                          onChanged: (v) =>
+                              setState(() => preInstallationPhotoPath = v),
+                        ),
+                        _singleDocumentPicker(
+                          title: 'Quotation Document',
+                          value: quotationDocumentPath,
+                          onChanged: (v) =>
+                              setState(() => quotationDocumentPath = v),
+                        ),
+                        _predefinedFilesSection(
+                          title: 'KYC & Agreement Documents',
+                          items: predefinedDocumentSlots,
+                          values: predefinedDocPaths,
+                        ),
+                        _predefinedFilesSection(
+                          title: 'Predefined Images',
+                          items: predefinedImageSlots,
+                          values: predefinedImagePaths,
+                        ),
+                        _multiFilePicker(
+                          title: 'Additional Images',
+                          files: additionalImages,
+                          imagesOnly: true,
+                          onAdd: () => _showAddTitledFileDialog(
+                            dialogTitle: 'Add Additional Image',
+                            titleLabel: 'Image title',
+                            uploadLabel: 'Choose Image',
+                            defaultTitlePrefix: 'Image',
+                            imageOnly: true,
+                            target: additionalImages,
+                          ),
+                          onRemove: (i) =>
+                              setState(() => additionalImages.removeAt(i)),
+                          onReplace: (i) => _replaceFileAt(
+                            additionalImages,
+                            i,
+                            imageOnly: true,
+                          ),
+                        ),
+                        _multiFilePicker(
+                          title: 'Additional Documents',
+                          files: additionalDocs,
+                          imagesOnly: false,
+                          onAdd: () => _showAddTitledFileDialog(
+                            dialogTitle: 'Add Additional Document',
+                            titleLabel: 'Document title',
+                            uploadLabel: 'Choose File',
+                            defaultTitlePrefix: 'Document',
+                            imageOnly: false,
+                            target: additionalDocs,
+                          ),
+                          onRemove: (i) =>
+                              setState(() => additionalDocs.removeAt(i)),
+                          onReplace: (i) => _replaceFileAt(
+                            additionalDocs,
+                            i,
+                            imageOnly: false,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  onRemove: (i) => setState(() => additionalImages.removeAt(i)),
-                  onReplace: (i) =>
-                      _replaceFileAt(additionalImages, i, imageOnly: true),
-                ),
-                _multiFilePicker(
-                  title: 'Additional Documents',
-                  files: additionalDocs,
-                  imagesOnly: false,
-                  onAdd: () => _showAddTitledFileDialog(
-                    dialogTitle: 'Add Additional Document',
-                    titleLabel: 'Document title',
-                    uploadLabel: 'Choose File',
-                    defaultTitlePrefix: 'Document',
-                    imageOnly: false,
-                    target: additionalDocs,
-                  ),
-                  onRemove: (i) => setState(() => additionalDocs.removeAt(i)),
-                  onReplace: (i) =>
-                      _replaceFileAt(additionalDocs, i, imageOnly: false),
-                ),
+                ],
               ],
               const SizedBox(height: AppSpacing.lg),
               SizedBox(

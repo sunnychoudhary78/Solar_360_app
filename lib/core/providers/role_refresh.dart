@@ -1,3 +1,4 @@
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
@@ -37,11 +38,17 @@ void invalidateRoleScopedData(Ref ref) {
   ref.invalidate(itemListProvider);
 }
 
-/// Runs cache invalidation after the current auth update finishes so Riverpod
-/// does not see a circular dependency between auth and dependents.
+/// Runs cache invalidation after navigation/overlays have settled so Riverpod
+/// and InheritedWidget dependents are not torn down mid-update.
 void scheduleRoleScopedInvalidation(Ref ref) {
-  Future.microtask(() {
-    if (!ref.mounted) return;
-    invalidateRoleScopedData(ref);
+  SchedulerBinding.instance.addPostFrameCallback((_) {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!ref.mounted) return;
+      try {
+        invalidateRoleScopedData(ref);
+      } catch (_) {
+        // Best-effort cache clear — never crash the UI after a successful switch.
+      }
+    });
   });
 }
