@@ -344,7 +344,7 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                           16,
                           showAction ? 92 : 16,
                         ),
-                        items: state.items,
+                        items: _buildDisplayItems(state.items),
                         isLoadingMore: state.isLoadingMore,
                         hasMore: state.hasMore,
                         onRefresh: () => ref
@@ -359,264 +359,14 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                           title: 'No Transactions Found',
                           icon: Icons.history_toggle_off,
                         ),
-                        itemBuilder: (context, tx, _) {
-                          final config =
-                              _getTransConfig(tx.transType, theme);
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: scheme.surface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: scheme.outlineVariant.withValues(
-                                  alpha: isDark ? 0.3 : 0.7,
-                                ),
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          color: config.color.withValues(
-                                            alpha: isDark ? 0.15 : 0.12,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Icon(
-                                          config.icon,
-                                          color: config.color,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              tx.itemName,
-                                              style: theme
-                                                  .textTheme.titleMedium
-                                                  ?.copyWith(
-                                                    fontWeight:
-                                                        FontWeight.bold,
-                                                  ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.storefront,
-                                                  size: 14,
-                                                  color: scheme.outline,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Expanded(
-                                                  child: Text(
-                                                    tx.warehouseName,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: theme
-                                                        .textTheme.bodySmall
-                                                        ?.copyWith(
-                                                          color:
-                                                              scheme.outline,
-                                                        ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            '${tx.quantity > 0 && tx.transType.toLowerCase() == 'in' ? '+' : ''}${tx.quantity}',
-                                            style: theme
-                                                .textTheme.titleLarge
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: config.color,
-                                                ),
-                                          ),
-                                          Container(
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: isDark
-                                                  ? scheme.surfaceContainer
-                                                  : scheme
-                                                      .surfaceContainerHigh,
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              'Bal: ${tx.balanceAfter}',
-                                              style: theme
-                                                  .textTheme.labelSmall
-                                                  ?.copyWith(
-                                                    fontWeight:
-                                                        FontWeight.w600,
-                                                  ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  const Padding(
-                                    padding:
-                                        EdgeInsets.symmetric(vertical: 10),
-                                    child: Divider(height: 1),
-                                  ),
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      // Transaction type chip keeps its natural
-                                      // width and never competes with the
-                                      // reference/date area for extra space.
-                                      Flexible(
-                                        flex: 0,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: config.color.withValues(
-                                              alpha: isDark ? 0.18 : 0.12,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            tx.transType.toUpperCase(),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: theme.textTheme.labelSmall
-                                                ?.copyWith(
-                                              color: config.color,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-
-                                      const SizedBox(width: 8),
-
-                                      // Reference number gets the flexible
-                                      // space. Long invoice/reference numbers
-                                      // are ellipsized instead of overflowing.
-                                      Expanded(
-                                        child: tx.referenceNumber != null &&
-                                                tx.referenceNumber!.isNotEmpty
-                                            ? InkWell(
-                                                onTap: tx.isInvoiceReference
-                                                    ? () => Navigator.pushNamed(
-                                                          context,
-                                                          '/invoices/detail',
-                                                          arguments:
-                                                              tx.referenceId,
-                                                        )
-                                                    : null,
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.receipt_long,
-                                                      size: 14,
-                                                      color:
-                                                          tx.isInvoiceReference
-                                                              ? scheme.primary
-                                                              : scheme.outline,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Expanded(
-                                                      child: Text(
-                                                        tx.referenceNumber!,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: theme.textTheme
-                                                            .bodySmall
-                                                            ?.copyWith(
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          color: tx
-                                                                  .isInvoiceReference
-                                                              ? scheme.primary
-                                                              : null,
-                                                          decoration: tx
-                                                                  .isInvoiceReference
-                                                              ? TextDecoration
-                                                                  .underline
-                                                              : null,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              )
-                                            : Text(
-                                                '—',
-                                                maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                                style: theme.textTheme.bodySmall
-                                                    ?.copyWith(
-                                                  color: scheme.outline,
-                                                ),
-                                              ),
-                                      ),
-
-                                      // Date gets a bounded flexible area so
-                                      // it remains visible without causing a
-                                      // right-side overflow on small phones.
-                                      if (tx.createdAt != null) ...[
-                                        const SizedBox(width: 8),
-                                        Flexible(
-                                          flex: 0,
-                                          child: ConstrainedBox(
-                                            constraints: const BoxConstraints(
-                                              maxWidth: 125,
-                                            ),
-                                            child: Text(
-                                              formatDateTime(tx.createdAt!),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              textAlign: TextAlign.right,
-                                              style: theme.textTheme.bodySmall
-                                                  ?.copyWith(
-                                                color: scheme.outline,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+                         itemBuilder: (context, display, _) {
+                           return _buildLedgerCard(
+                             context: context,
+                             display: display,
+                             allTransactions: state.items,
+                             theme: theme,
+                           );
+                         },
                       ),
           ),
         ],
@@ -624,6 +374,586 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     );
   }
 
+
+  /// Converts the raw ledger rows into UI rows.
+  ///
+  /// Transfer transactions are commonly stored as two ledger entries:
+  /// one for the source warehouse and one for the destination warehouse.
+  /// We group those two entries in the UI when they share the same
+  /// reference number and item. No API or backend behaviour is changed.
+  List<_LedgerDisplayItem> _buildDisplayItems(
+    List<StockTransactionModel> transactions,
+  ) {
+    final result = <_LedgerDisplayItem>[];
+    final consumed = <String>{};
+
+    for (final tx in transactions) {
+      if (tx.transType.toLowerCase() == 'transfer' &&
+          tx.referenceNumber != null &&
+          tx.referenceNumber!.trim().isNotEmpty) {
+        final key = '${tx.itemId}|${tx.referenceNumber}';
+
+        if (consumed.contains(key)) continue;
+
+        StockTransactionModel? paired;
+        for (final candidate in transactions) {
+          if (candidate.id == tx.id) continue;
+          if (candidate.transType.toLowerCase() != 'transfer') continue;
+          if (candidate.itemId != tx.itemId) continue;
+          if (candidate.referenceNumber != tx.referenceNumber) continue;
+          if (candidate.warehouseId == tx.warehouseId) continue;
+
+          paired = candidate;
+          break;
+        }
+
+        if (paired != null) {
+          consumed.add(key);
+          result.add(
+            _LedgerDisplayItem(
+              primary: tx,
+              paired: paired,
+              adjustmentDelta: null,
+            ),
+          );
+          continue;
+        }
+      }
+
+      result.add(
+        _LedgerDisplayItem(
+          primary: tx,
+          paired: null,
+          adjustmentDelta: tx.transType.toLowerCase() == 'adjustment'
+              ? _calculateAdjustmentDelta(tx, transactions)
+              : null,
+        ),
+      );
+    }
+
+    return result;
+  }
+
+  /// Calculates the actual adjustment effect from the previous ledger
+  /// balance for the same item + warehouse.
+  ///
+  /// Example:
+  /// previous balance = 10
+  /// new balance      = 20
+  /// displayed delta  = +10
+  ///
+  /// If the previous balance cannot be found, the transaction quantity is
+  /// used as the best available fallback.
+  int _calculateAdjustmentDelta(
+    StockTransactionModel tx,
+    List<StockTransactionModel> transactions,
+  ) {
+    StockTransactionModel? previous;
+
+    for (final candidate in transactions) {
+      if (candidate.id == tx.id) continue;
+      if (candidate.itemId != tx.itemId) continue;
+      if (candidate.warehouseId != tx.warehouseId) continue;
+
+      if (tx.createdAt != null && candidate.createdAt != null) {
+        if (!candidate.createdAt!.isBefore(tx.createdAt!)) continue;
+
+        if (previous == null ||
+            (previous.createdAt != null &&
+                candidate.createdAt!.isAfter(previous.createdAt!))) {
+          previous = candidate;
+        }
+      }
+    }
+
+    if (previous != null) {
+      return tx.balanceAfter - previous.balanceAfter;
+    }
+
+    return tx.quantity;
+  }
+
+  Widget _buildLedgerCard({
+    required BuildContext context,
+    required _LedgerDisplayItem display,
+    required List<StockTransactionModel> allTransactions,
+    required ThemeData theme,
+  }) {
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final tx = display.primary;
+    final type = tx.transType.toLowerCase();
+    final config = _getTransConfig(tx.transType, theme);
+
+    final isTransfer = type == 'transfer';
+    final isAdjustment = type == 'adjustment';
+
+    final amount = isAdjustment
+        ? (display.adjustmentDelta ?? tx.quantity)
+        : tx.quantity.abs();
+
+    final amountText = isAdjustment
+        ? amount == 0
+            ? '0'
+            : '${amount > 0 ? '+' : ''}$amount'
+        : '${type == 'in' ? '+' : type == 'out' ? '-' : ''}$amount';
+
+    final amountColor = isAdjustment
+        ? amount > 0
+            ? scheme.primary
+            : amount < 0
+                ? scheme.error
+                : scheme.onSurfaceVariant
+        : config.color;
+
+    final paired = display.paired;
+
+    final source = isTransfer
+        ? _transferSource(display, allTransactions)
+        : null;
+    final destination = isTransfer
+        ? _transferDestination(display, allTransactions)
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(
+            alpha: isDark ? 0.3 : 0.7,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: config.color.withValues(
+                      alpha: isDark ? 0.15 : 0.11,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    config.icon,
+                    color: config.color,
+                    size: 23,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tx.itemName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (!isTransfer)
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.storefront_outlined,
+                              size: 15,
+                              color: scheme.outline,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                tx.warehouseName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.outline,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.swap_horiz_rounded,
+                              size: 16,
+                              color: config.color,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                paired == null
+                                    ? tx.warehouseName
+                                    : '${source?.warehouseName ?? tx.warehouseName} → ${destination?.warehouseName ?? paired.warehouseName}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      amountText,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: amountColor,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? scheme.surfaceContainer
+                            : scheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        'Bal: ${tx.balanceAfter}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            if (isTransfer && paired != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? scheme.surfaceContainerHigh
+                      : scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    _buildTransferWarehouseRow(
+                      context: context,
+                      icon: Icons.arrow_upward_rounded,
+                      label: 'From',
+                      warehouse: source ?? tx,
+                      quantity: source?.quantity.abs() ?? tx.quantity.abs(),
+                      isSource: true,
+                    ),
+                    const SizedBox(height: 8),
+                    Divider(
+                      height: 1,
+                      color: scheme.outlineVariant.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTransferWarehouseRow(
+                      context: context,
+                      icon: Icons.arrow_downward_rounded,
+                      label: 'To',
+                      warehouse: destination ?? paired,
+                      quantity:
+                          destination?.quantity.abs() ?? paired.quantity.abs(),
+                      isSource: false,
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (isAdjustment) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: amountColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      amount > 0
+                          ? Icons.trending_up_rounded
+                          : amount < 0
+                              ? Icons.trending_down_rounded
+                              : Icons.remove_rounded,
+                      size: 18,
+                      color: amountColor,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        amount > 0
+                            ? 'Stock increased'
+                            : amount < 0
+                                ? 'Stock decreased'
+                                : 'No stock change',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: amountColor,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'New: ${tx.balanceAfter}',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: amountColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 11),
+              child: Divider(height: 1),
+            ),
+
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: config.color.withValues(
+                      alpha: isDark ? 0.18 : 0.11,
+                    ),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Text(
+                    tx.transType.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: config.color,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: tx.referenceNumber != null &&
+                          tx.referenceNumber!.isNotEmpty
+                      ? InkWell(
+                          onTap: tx.isInvoiceReference
+                              ? () => Navigator.pushNamed(
+                                    context,
+                                    '/invoices/detail',
+                                    arguments: tx.referenceId,
+                                  )
+                              : null,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.receipt_long_outlined,
+                                size: 15,
+                                color: tx.isInvoiceReference
+                                    ? scheme.primary
+                                    : scheme.outline,
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  tx.referenceNumber!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: tx.isInvoiceReference
+                                        ? scheme.primary
+                                        : null,
+                                    decoration: tx.isInvoiceReference
+                                        ? TextDecoration.underline
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Text(
+                          '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.outline,
+                          ),
+                        ),
+                ),
+                if (tx.createdAt != null) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    flex: 0,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 125),
+                      child: Text(
+                        formatDateTime(tx.createdAt!),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.outline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransferWarehouseRow({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required StockTransactionModel warehouse,
+    required int quantity,
+    required bool isSource,
+  }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 17,
+          color: isSource ? scheme.error : scheme.primary,
+        ),
+        const SizedBox(width: 7),
+        SizedBox(
+          width: 38,
+          child: Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            warehouse.warehouseName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Text(
+          '$quantity',
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: isSource ? scheme.error : scheme.primary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  StockTransactionModel? _transferSource(
+    _LedgerDisplayItem display,
+    List<StockTransactionModel> allTransactions,
+  ) {
+    final first = display.primary;
+    final second = display.paired;
+    if (second == null) return first;
+
+    final firstDelta = _balanceChange(first, allTransactions);
+    final secondDelta = _balanceChange(second, allTransactions);
+
+    if (firstDelta < 0 && secondDelta >= 0) return first;
+    if (secondDelta < 0 && firstDelta >= 0) return second;
+
+    return first;
+  }
+
+  StockTransactionModel? _transferDestination(
+    _LedgerDisplayItem display,
+    List<StockTransactionModel> allTransactions,
+  ) {
+    final first = display.primary;
+    final second = display.paired;
+    if (second == null) return null;
+
+    final firstDelta = _balanceChange(first, allTransactions);
+    final secondDelta = _balanceChange(second, allTransactions);
+
+    if (firstDelta < 0 && secondDelta >= 0) return second;
+    if (secondDelta < 0 && firstDelta >= 0) return first;
+
+    return second;
+  }
+
+  int _balanceChange(
+    StockTransactionModel tx,
+    List<StockTransactionModel> transactions,
+  ) {
+    StockTransactionModel? previous;
+
+    for (final candidate in transactions) {
+      if (candidate.id == tx.id) continue;
+      if (candidate.itemId != tx.itemId) continue;
+      if (candidate.warehouseId != tx.warehouseId) continue;
+
+      if (tx.createdAt != null && candidate.createdAt != null) {
+        if (!candidate.createdAt!.isBefore(tx.createdAt!)) continue;
+
+        if (previous == null ||
+            (previous.createdAt != null &&
+                candidate.createdAt!.isAfter(previous.createdAt!))) {
+          previous = candidate;
+        }
+      }
+    }
+
+    if (previous == null) {
+      return 0;
+    }
+
+    return tx.balanceAfter - previous.balanceAfter;
+  }
   Future<void> _openMovementForm(
     BuildContext context,
     String type,
@@ -674,7 +1004,9 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     }
 
     List<StockModel> stock = const [];
-    if (normalized == 'out') {
+    if (normalized == 'out' ||
+        normalized == 'adjustment' ||
+        normalized == 'transfer') {
       try {
         stock = await ref
             .read(inventoryRepositoryProvider)
@@ -945,7 +1277,7 @@ class _MovementSheetState extends State<_MovementSheet> {
   }
 
   int get _availableQuantity {
-    if (!_isStockOut) return 0;
+    if (!(_isStockOut || _isTransfer || _isAdjustment)) return 0;
 
     for (final stockItem in widget.stock) {
       if (stockItem.itemId == _itemId &&
@@ -955,6 +1287,13 @@ class _MovementSheetState extends State<_MovementSheet> {
     }
     return 0;
   }
+
+  int get _currentQuantity => _availableQuantity;
+
+  int get _enteredQuantity =>
+      int.tryParse(_quantityController.text.trim()) ?? 0;
+
+  int get _adjustmentDelta => _enteredQuantity - _currentQuantity;
 
   String get _title {
     switch (widget.type) {
@@ -978,9 +1317,9 @@ class _MovementSheetState extends State<_MovementSheet> {
       case 'out':
         return 'Remove stock manually.';
       case 'transfer':
-        return 'Move stock between warehouses.';
+        return 'Move stock from one warehouse to another.';
       case 'adjustment':
-        return 'Set the exact quantity after physical count.';
+        return 'Enter the new physical stock quantity.';
       default:
         return 'Record a stock movement.';
     }
@@ -1169,40 +1508,133 @@ class _MovementSheetState extends State<_MovementSheet> {
                 ),
               ],
 
-              if (_isStockOut) ...[
+              if (_isStockOut || _isTransfer || _isAdjustment) ...[
                 const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? scheme.primaryContainer.withValues(alpha: 0.30)
-                        : scheme.primaryContainer.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(10),
+                        ? scheme.surfaceContainerHigh
+                        : scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: scheme.outlineVariant.withValues(alpha: 0.7),
+                    ),
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Icon(
-                        Icons.inventory_2_outlined,
-                        size: 18,
-                        color: scheme.primary,
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.inventory_2_outlined,
+                            size: 18,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Current Stock',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          Text(
+                            '$_currentQuantity',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Available Stock',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                      if (_isAdjustment) ...[
+                        const SizedBox(height: 8),
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _quantityController,
+                          builder: (context, value, _) {
+                            final entered =
+                                int.tryParse(value.text.trim()) ?? 0;
+                            final delta = entered - _currentQuantity;
+                            final isIncrease = delta > 0;
+                            final isDecrease = delta < 0;
+                            final deltaColor = isIncrease
+                                ? scheme.primary
+                                : isDecrease
+                                    ? scheme.error
+                                    : scheme.onSurfaceVariant;
+                            final deltaText = delta == 0
+                                ? 'No change'
+                                : '${delta > 0 ? '+' : ''}$delta';
+
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: deltaColor.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isIncrease
+                                        ? Icons.trending_up_rounded
+                                        : isDecrease
+                                            ? Icons.trending_down_rounded
+                                            : Icons.remove_rounded,
+                                    size: 17,
+                                    color: deltaColor,
+                                  ),
+                                  const SizedBox(width: 7),
+                                  const Expanded(
+                                    child: Text(
+                                      'Adjustment',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    deltaText,
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      color: deltaColor,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
-                      ),
-                      Text(
-                        '$_availableQuantity',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.bold,
+                      ],
+                      if (_isTransfer) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.swap_horiz_rounded,
+                              size: 17,
+                              color: scheme.primary,
+                            ),
+                            const SizedBox(width: 7),
+                            const Expanded(
+                              child: Text(
+                                'Available at source',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '$_currentQuantity',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -1217,6 +1649,7 @@ class _MovementSheetState extends State<_MovementSheet> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(8),
                 ],
+                onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: _isAdjustment ? 'New quantity *' : 'Quantity *',
                   hintText: _isAdjustment
@@ -1238,8 +1671,9 @@ class _MovementSheetState extends State<_MovementSheet> {
                     return 'Enter a valid quantity';
                   }
 
-                  if (_isStockOut && quantity > _availableQuantity) {
-                    return 'Quantity cannot exceed available stock';
+                  if ((_isStockOut || _isTransfer) &&
+                      quantity > _availableQuantity) {
+                    return 'Quantity cannot exceed available stock ($_availableQuantity)';
                   }
 
                   return null;
@@ -1373,6 +1807,19 @@ class _MovementSheetState extends State<_MovementSheet> {
       ),
     );
   }
+}
+
+
+class _LedgerDisplayItem {
+  final StockTransactionModel primary;
+  final StockTransactionModel? paired;
+  final int? adjustmentDelta;
+
+  const _LedgerDisplayItem({
+    required this.primary,
+    required this.paired,
+    required this.adjustmentDelta,
+  });
 }
 
 class _TransConfig {
