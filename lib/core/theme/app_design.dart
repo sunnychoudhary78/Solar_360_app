@@ -153,6 +153,10 @@ class AppStatusColors {
       case 'cancelled':
       case 'canceled':
         return scheme.error;
+      case 'follow up':
+        return const Color(0xFFCA8A04); // yellow-600
+      case 'converted':
+        return const Color(0xFF16A34A); // green-600
       case 'inactive':
         return scheme.outline;
       // Lead workflow departments / stages

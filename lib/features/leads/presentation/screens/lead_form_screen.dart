@@ -267,6 +267,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       bankAccountType =
           lead.resolvedBankAccountType ?? bankAccountType;
+      roofLoadBearingCapacity = lead.roofLoadBearingCapacity;
+      shadowFreeRoof = lead.shadowFreeRoof;
+      vendorVisitedSite = lead.vendorVisitedSite;
       isLeadActive = lead.isActive;
       _prefillStoredTitledFiles(lead.additionalDocuments, predefinedDocPaths);
       _prefillStoredTitledFiles(lead.additionalImages, predefinedImagePaths);
