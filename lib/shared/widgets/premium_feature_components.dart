@@ -215,6 +215,8 @@ class PageHeader extends StatelessWidget {
                 if (greeting != null) ...[
                   Text(
                     greeting!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: textTheme.labelMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                       fontWeight: FontWeight.w700,
@@ -222,30 +224,41 @@ class PageHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                 ],
-                Text(
-                  title,
-                  style: textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.3,
+                // Keep full role titles (e.g. "Document Administrator") on one
+                // line by scaling down instead of mid-word wrapping.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.3,
+                    ),
                   ),
                 ),
                 if (subtitle != null && subtitle!.isNotEmpty) ...[
                   const SizedBox(height: 5),
                   Text(
                     subtitle!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                       height: 1.35,
                     ),
                   ),
                 ],
+                // Badge below text so long titles keep full horizontal width.
+                if (trailing != null) ...[
+                  const SizedBox(height: 10),
+                  trailing!,
+                ],
               ],
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 12),
-            trailing!,
-          ],
         ],
       ),
     );

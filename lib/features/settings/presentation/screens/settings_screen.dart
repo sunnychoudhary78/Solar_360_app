@@ -19,10 +19,6 @@ class SettingsScreen extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    final switchableRoles = auth.roles
-        .where((r) => r.toLowerCase() != auth.effectiveRoleName.toLowerCase())
-        .toList();
-
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
       appBar: const AppAppBar(title: 'Settings'),
@@ -95,55 +91,6 @@ class SettingsScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-          ],
-          if (switchableRoles.isNotEmpty) ...[
-            const PremiumSectionTitle(
-              title: 'Active role',
-              subtitle: 'Switching role updates permissions in this company',
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            AppCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  for (var i = 0; i < switchableRoles.length; i++) ...[
-                    if (i > 0)
-                      Divider(
-                        height: 1,
-                        color: scheme.outlineVariant.withValues(alpha: 0.4),
-                      ),
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 2,
-                      ),
-                      leading: Icon(Icons.swap_horiz, color: scheme.primary),
-                      title: Text(
-                        switchableRoles[i],
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      trailing: Icon(
-                        Icons.chevron_right_rounded,
-                        color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
-                      ),
-                      onTap: () async {
-                        final role = switchableRoles[i];
-                        final ok = await showConfirmDialog(
-                          context,
-                          title: 'Switch role',
-                          message:
-                              'Switch to "$role"? The app will refresh with that role\'s permissions.',
-                          confirmLabel: 'Switch',
-                        );
-                        if (!ok) return;
-                        await ref.read(authProvider.notifier).switchRole(role);
-                      },
-                    ),
-                  ],
                 ],
               ),
             ),

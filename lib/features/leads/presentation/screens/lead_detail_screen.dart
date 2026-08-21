@@ -2198,7 +2198,7 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
             const SizedBox(height: 12),
             Wrap(
               spacing: 10,
-              runSpacing: 10,
+              runSpacing: 14,
               children: files.asMap().entries.map((entry) {
                 final item = entry.value;
                 final idx = entry.key;
@@ -2206,8 +2206,9 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
 
                 return SizedBox(
                   width: 120,
-                  height: 178,
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Stack(
                         children: [
@@ -2242,26 +2243,35 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         item.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      SizedBox(
-                        height: 34,
-                        child: TextButton(
-                          onPressed: saving ? null : () => onReplace(idx),
-                          child: const Text(
-                            'Replace',
-                            style: TextStyle(fontSize: 11),
+                      const SizedBox(height: 2),
+                      TextButton(
+                        onPressed: saving ? null : () => onReplace(idx),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          minimumSize: const Size(0, 28),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
                           ),
                         ),
+                        child: const Text(
+                          'Replace',
+                          style: TextStyle(fontSize: 11),
+                        ),
                       ),
+                      const SizedBox(height: 4),
                     ],
                   ),
                 );

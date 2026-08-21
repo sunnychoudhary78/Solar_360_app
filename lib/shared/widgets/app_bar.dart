@@ -88,15 +88,23 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    title,
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
                     ),
                   ),
                   Text(
                     subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: textTheme.labelSmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -112,6 +120,7 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
           toolbarHeight: preferredSize.height,
           centerTitle: centerTitle,
           actions: actions,
+          actionsPadding: const EdgeInsetsDirectional.only(end: 4),
           leading: resolvedLeading,
           automaticallyImplyLeading:
               resolvedLeading == null && automaticallyImplyLeading,

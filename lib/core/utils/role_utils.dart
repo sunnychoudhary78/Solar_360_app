@@ -30,7 +30,7 @@ class RoleUtils {
       case 'admin':
         return 'Solar Admin';
       case 'support':
-        return 'Document Administration';
+        return 'Document Administrator';
       case 'liaison':
         return 'Bank Process';
       case 'finance':
@@ -55,7 +55,7 @@ class RoleUtils {
       case 'Finance Manager':
         return 'Finance Manager';
       case 'Document Administrator':
-        return 'Document Administration';
+        return 'Document Administrator';
       case 'Bank Process':
         return 'Bank Process';
       case 'Finance User':

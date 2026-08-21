@@ -166,7 +166,7 @@ class _Dashboard extends StatelessWidget {
       case 'Sales Manager':
         return 'Sales Desk';
       case 'Document Administrator':
-        return 'Document Administration';
+        return 'Document Administrator';
       case 'Bank Process':
         return 'Bank Process';
       case 'Installation Manager':

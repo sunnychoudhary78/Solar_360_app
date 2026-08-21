@@ -27,7 +27,7 @@ void main() {
   group('RoleUtils.displayTitle', () {
     test('returns desk titles', () {
       expect(RoleUtils.displayTitle('admin'), 'Solar Admin');
-      expect(RoleUtils.displayTitle('support'), 'Document Administration');
+      expect(RoleUtils.displayTitle('support'), 'Document Administrator');
       expect(RoleUtils.displayTitle('liaison'), 'Bank Process');
       expect(RoleUtils.displayTitle('finance'), 'Finance Team');
       expect(RoleUtils.displayTitle('installation'), 'Installation Team');
@@ -44,8 +44,8 @@ void main() {
       );
       expect(RoleUtils.displayTitleForRole('Finance User'), 'Finance User');
       expect(
-        RoleUtils.displayTitleForRole('Material Engineer'),
-        'Material Engineer',
+        RoleUtils.displayTitleForRole('Document Administrator'),
+        'Document Administrator',
       );
       expect(
         RoleUtils.displayTitleForRole('Electrical Engineer'),
