@@ -61,19 +61,19 @@ class WorkflowStepper extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 14,
-                          backgroundColor: done ? scheme.primary : trackColor,
-                          child: active
+                          backgroundColor: active || done
+                              ? scheme.primary
+                              : trackColor,
+                          child: active || done
                               ? Icon(
                                   Icons.check,
-                                  color: scheme.primary,
+                                  color: scheme.onPrimary,
                                   size: 15,
                                 )
                               : Text(
                                   '${i + 1}',
                                   style: TextStyle(
-                                    color: done
-                                        ? scheme.onPrimary
-                                        : scheme.onSurfaceVariant,
+                                    color: scheme.onSurfaceVariant,
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                   ),

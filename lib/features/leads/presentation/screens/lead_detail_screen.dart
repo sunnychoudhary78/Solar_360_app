@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,7 @@ import 'package:solar_sales/features/installation/presentation/screens/installat
 import 'package:solar_sales/features/leads/data/lead_files.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
+import 'package:solar_sales/features/leads/presentation/screens/image_viewer_screen.dart';
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
 import 'package:solar_sales/features/leads/presentation/widgets/lead_attachments_view.dart';
 import 'package:solar_sales/features/leads/presentation/widgets/workflow_stepper.dart';
@@ -239,21 +241,6 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
         nextStatuses.contains('Documents Submitted');
   }
 
-  bool get _hasSavedInstallationDetails {
-    if (_lead.hasInstallationDetails) return true;
-
-    final details = _lead.installationDetails;
-    if (details == null || details.isEmpty) return false;
-
-    return details.values.any((value) {
-      if (value == null) return false;
-      if (value is List) {
-        return value.any((item) => item.toString().trim().isNotEmpty);
-      }
-      return value.toString().trim().isNotEmpty;
-    });
-  }
-
   List<String> _installationSpNumbers() {
     final d = _lead.installationDetails;
     if (d == null) return const [];
@@ -274,6 +261,29 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     return values;
   }
 
+  List<String> _installationImagePaths() {
+    final d = _lead.installationDetails;
+    if (d == null) return const [];
+
+    final raw = d['installation_images'] ?? d['installationImages'];
+    if (raw is! List) return const [];
+
+    return raw
+        .map((item) {
+          if (item is Map) {
+            return (item['url'] ??
+                    item['path'] ??
+                    item['file'] ??
+                    item.toString())
+                .toString()
+                .trim();
+          }
+          return item?.toString().trim() ?? '';
+        })
+        .where((path) => path.isNotEmpty)
+        .toList();
+  }
+
   bool get _hasMaterialDetails {
     final d = _lead.installationDetails;
     if (d == null || d.isEmpty) return false;
@@ -288,6 +298,11 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
         _installationSpNumbers().isNotEmpty;
   }
 
+  /// Electrical Engineer installation photos (not material data).
+  bool get _hasElectricalInstallationDetails {
+    return _installationImagePaths().isNotEmpty;
+  }
+
   bool _isCompleteInstallationStatus(String status) {
     final normalized = status.trim().toLowerCase();
     return normalized == 'installation done';
@@ -295,6 +310,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
   String _installationButtonLabel(String status) {
     final normalized = status.trim().toLowerCase();
+
+    if (normalized == 'assigned to material engineer') {
+      return 'Assign to Installation Team';
+    }
 
     if (normalized == 'installation started') {
       return 'Start Installation';
@@ -356,7 +375,16 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       ),
     );
 
-    controller.dispose();
+    // Dialog route is still unmounting when showDialog completes. Disposing the
+    // controller immediately triggers: '_dependents.isEmpty': is not true.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.dispose();
+      });
+    });
+
+    // Let the route finish tearing down before the caller setStates / invalidates.
+    await Future<void>.delayed(Duration.zero);
     return result;
   }
 
@@ -415,13 +443,21 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       return;
     }
 
-    if ((nextStatus == 'Installation Started' ||
-            nextStatus == 'Installation Completed' ||
-            _isCompleteInstallationStatus(nextStatus)) &&
-        !_hasSavedInstallationDetails) {
+    if (nextStatus == 'Installation Started' && !_hasMaterialDetails) {
       showAppMessage(
         context,
-        'Please fill installation details first',
+        'Please fill material details first',
+        isError: true,
+      );
+      return;
+    }
+
+    if ((nextStatus == 'Installation Completed' ||
+            _isCompleteInstallationStatus(nextStatus)) &&
+        !_hasElectricalInstallationDetails) {
+      showAppMessage(
+        context,
+        'Please fill installation details and upload photos first',
         isError: true,
       );
       return;
@@ -474,11 +510,15 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
         }
 
         loading = false;
+        loadError = null;
       });
 
+      // Refresh list/detail after success; never surface refresh failures as a
+      // status-update error (that caused a brief red flash after Follow Up).
       ref.invalidate(allLeadsProvider);
-
-      await _reloadSilently();
+      try {
+        await _reloadSilently();
+      } catch (_) {}
 
       if (!mounted) return;
 
@@ -489,8 +529,20 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => loading = false);
-      showAppMessage(context, e.toString(), isError: true);
+      setState(() {
+        loading = false;
+        loadError = null;
+      });
+      final message = e
+          .toString()
+          .replaceFirst('Exception: ', '')
+          .replaceFirst('Exception:', '')
+          .trim();
+      showAppMessage(
+        context,
+        message.isEmpty ? 'Failed to update status' : message,
+        isError: true,
+      );
     }
   }
 
@@ -818,7 +870,12 @@ registration_time=${result.regTime.trim()}
       } catch (_) {}
 
       if (!mounted) return;
-      showAppMessage(context, 'Installation details saved');
+      showAppMessage(
+        context,
+        roleKey == 'Material Engineer'
+            ? 'Material details saved'
+            : 'Installation photos saved',
+      );
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -884,6 +941,12 @@ registration_time=${result.regTime.trim()}
 
     final canInstallationAccessLead =
         isInstallationUser && !isInstallationDoneAndMovedToSupport;
+    // Installation Manager assigns engineers; material/installation forms are
+    // for Material Engineer and Electrical Engineer only.
+    final canOpenInstallationForm =
+        canInstallationAccessLead && roleKey != 'Installation Manager';
+    final showMaterialDetailsSection =
+        _hasMaterialDetails && roleKey != 'Installation Manager';
     final hasPaymentType = _lead.paymentType.trim().isNotEmpty;
     final hasLoanPercentage =
         !_isLoanPaymentType(_lead.paymentType) ||
@@ -902,11 +965,15 @@ registration_time=${result.regTime.trim()}
                 !materialDetailsFilled) {
               return false;
             }
-            if ((status == 'Installation Started' ||
-                    status == 'Installation Completed') &&
+            if (status == 'Installation Started' &&
+                roleKey == 'Electrical Engineer' &&
+                !_hasMaterialDetails) {
+              return false;
+            }
+            if (status == 'Installation Completed' &&
                 (roleKey == 'Installation Manager' ||
                     roleKey == 'Electrical Engineer') &&
-                !_hasSavedInstallationDetails) {
+                !_hasElectricalInstallationDetails) {
               return false;
             }
             if (status == 'Documents Submitted' &&
@@ -989,7 +1056,7 @@ registration_time=${result.regTime.trim()}
                         : _lead.workflowStep,
                   ),
                   const SizedBox(height: 14),
-                  if (canInstallationAccessLead) ...[
+                  if (canOpenInstallationForm) ...[
                     OutlinedButton.icon(
                       onPressed: loading ? null : _openInstallationForm,
                       icon: const Icon(Icons.build_circle_outlined),
@@ -998,9 +1065,9 @@ registration_time=${result.regTime.trim()}
                             ? (_hasMaterialDetails
                                   ? 'Edit Material Details'
                                   : 'Fill Material Details (required)')
-                            : (_hasSavedInstallationDetails
-                                  ? 'Edit Installation Details'
-                                  : 'Fill Installation Details (required)'),
+                            : (_hasElectricalInstallationDetails
+                                  ? 'Edit Installation Form'
+                                  : 'Fill Installation Form'),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1118,10 +1185,13 @@ registration_time=${result.regTime.trim()}
                         onChanged: loading ? null : _updateSubsidyStatus,
                       ),
                     ]),
-                  if (_hasSavedInstallationDetails)
-                    _section('Installation Details', [
-                      _row('File No', _installationValue('file_no')),
-                      _row('Capacity', _installationValue('capacity')),
+                  if (showMaterialDetailsSection)
+                    _section('Material Engineer Details', [
+                      _row('Inverter Serial No', _installationValue('file_no')),
+                      _row(
+                        'Inverter Panel Capacity',
+                        _installationValue('capacity'),
+                      ),
                       _row('Panel Type', _installationValue('panel_type')),
                       _row(
                         'DCR Certificate No',
@@ -1132,7 +1202,7 @@ registration_time=${result.regTime.trim()}
                         _installationValue('application_no'),
                       ),
                       _row(
-                        'Solar Panel Brand',
+                        'Inverter Solar Panel Brand',
                         _installationValue('solar_panel_brand'),
                       ),
                       _row(
@@ -1140,17 +1210,13 @@ registration_time=${result.regTime.trim()}
                         _installationValue('number_of_solar_panels'),
                       ),
                       _row('Invoice No', _installationValue('invoice_no')),
-                      const Divider(),
-                      _row(
-                        'Inverter Serial Number',
-                        _installationValue('inverter_serial_number'),
-                      ),
-                      _row(
-                        'Battery Serial Number',
-                        _installationValue('battery_serial_number'),
-                      ),
                       _spNumbersRows(),
                     ]),
+                  if (_hasElectricalInstallationDetails)
+                    _section(
+                      'Electrical Engineer — Installation',
+                      [_installationPhotosGallery()],
+                    ),
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
                   ]),
@@ -1190,6 +1256,7 @@ registration_time=${result.regTime.trim()}
                       ] else
                         _InlinePaymentFields(
                           enabled: !loading,
+                          quotationAmount: _lead.quotationAmount,
                           onSave: _savePaymentDetails,
                         ),
                     ]),
@@ -1411,6 +1478,118 @@ registration_time=${result.regTime.trim()}
     if (rows.isEmpty) return const SizedBox.shrink();
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
+  }
+
+  Widget _installationPhotosGallery() {
+    final paths = _installationImagePaths();
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Installation Photos — ${paths.length}',
+          style: textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm + 2),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: paths.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemBuilder: (context, index) {
+            final raw = paths[index];
+            final url = resolveUploadUrl(raw);
+            final fileName = fileDisplayName(
+              raw.split('\\').last.split('/').last.isEmpty
+                  ? 'installation_${index + 1}.jpg'
+                  : raw.split('\\').last.split('/').last,
+            );
+
+            return Material(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: url.isEmpty
+                    ? null
+                    : () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ImageViewerScreen(
+                              imageUrl: url,
+                              label: 'Installation Photo ${index + 1}',
+                              fileName: fileName,
+                            ),
+                          ),
+                        );
+                      },
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (url.isEmpty)
+                      Icon(
+                        Icons.broken_image_outlined,
+                        color: scheme.onSurfaceVariant,
+                      )
+                    else
+                      CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ),
+                        errorWidget: (_, __, ___) => Icon(
+                          Icons.broken_image_outlined,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    Positioned(
+                      right: 4,
+                      bottom: 4,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                        ),
+                        child: const Icon(
+                          Icons.zoom_in_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Tap a photo to preview or download',
+          style: textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _assignmentSection({
@@ -1681,12 +1860,19 @@ registration_time=${result.regTime.trim()}
             ),
           ),
           Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: PremiumStatusPill(
-                label: value,
-                color: AppStatusColors.forStatus(context, value),
-              ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    child: PremiumStatusPill(
+                      label: value,
+                      color: AppStatusColors.forStatus(context, value),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -2283,10 +2469,12 @@ class _PaymentResult {
 
 class _InlinePaymentFields extends StatefulWidget {
   final bool enabled;
+  final String quotationAmount;
   final Future<void> Function(_PaymentResult result) onSave;
 
   const _InlinePaymentFields({
     required this.enabled,
+    required this.quotationAmount,
     required this.onSave,
   });
 
@@ -2300,6 +2488,17 @@ class _InlinePaymentFieldsState extends State<_InlinePaymentFields> {
   String? saveError;
   late final TextEditingController amountController;
 
+  String get _normalizedQuotationAmount {
+    final raw = widget.quotationAmount.trim().replaceAll(',', '');
+    if (raw.isEmpty) return '';
+    final parsed = num.tryParse(raw);
+    if (parsed == null) return raw;
+    // Keep a clean numeric string for the Amount field / API.
+    return parsed % 1 == 0
+        ? parsed.toInt().toString()
+        : parsed.toString();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2310,6 +2509,21 @@ class _InlinePaymentFieldsState extends State<_InlinePaymentFields> {
   void dispose() {
     amountController.dispose();
     super.dispose();
+  }
+
+  void _applyPaymentType(String value) {
+    setState(() {
+      paymentType = value;
+      if (!_isLoanPaymentType(value)) {
+        subsidyPercentage = '';
+        // Cash → auto-fill from quotation amount.
+        amountController.text = _normalizedQuotationAmount;
+      } else {
+        // Loan → Finance User enters amount manually.
+        amountController.clear();
+      }
+      saveError = null;
+    });
   }
 
   Future<void> _submit() async {
@@ -2324,10 +2538,18 @@ class _InlinePaymentFieldsState extends State<_InlinePaymentFields> {
       return;
     }
 
+    if (!_isLoanPaymentType(paymentType) &&
+        _normalizedQuotationAmount.isEmpty) {
+      setState(
+        () => saveError = 'Quotation amount is missing on this lead',
+      );
+      return;
+    }
+
     final amount = amountController.text.trim();
     if (amount.isEmpty ||
-        num.tryParse(amount) == null ||
-        num.parse(amount) <= 0) {
+        num.tryParse(amount.replaceAll(',', '')) == null ||
+        num.parse(amount.replaceAll(',', '')) <= 0) {
       setState(() => saveError = 'Enter a valid amount');
       return;
     }
@@ -2337,7 +2559,7 @@ class _InlinePaymentFieldsState extends State<_InlinePaymentFields> {
       _PaymentResult(
         paymentType: paymentType,
         subsidyPercentage: subsidyPercentage,
-        paymentAmount: amount,
+        paymentAmount: amount.replaceAll(',', ''),
       ),
     );
   }
@@ -2345,10 +2567,23 @@ class _InlinePaymentFieldsState extends State<_InlinePaymentFields> {
   @override
   Widget build(BuildContext context) {
     final isLoan = _isLoanPaymentType(paymentType);
+    final isCash = paymentType.trim().toLowerCase() == 'cash';
+    final quotation = _normalizedQuotationAmount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (quotation.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Quotation Amount: ₹$quotation',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
         DropdownButtonFormField<String>(
           value: paymentType.trim().isEmpty ? null : paymentType,
           decoration: const InputDecoration(labelText: 'Payment Type'),
@@ -2359,11 +2594,7 @@ class _InlinePaymentFieldsState extends State<_InlinePaymentFields> {
           onChanged: widget.enabled
               ? (value) {
                   if (value == null) return;
-                  setState(() {
-                    paymentType = value;
-                    if (!_isLoanPaymentType(value)) subsidyPercentage = '';
-                    saveError = null;
-                  });
+                  _applyPaymentType(value);
                 }
               : null,
         ),
@@ -2393,9 +2624,14 @@ class _InlinePaymentFieldsState extends State<_InlinePaymentFields> {
         const SizedBox(height: 12),
         TextField(
           controller: amountController,
-          enabled: widget.enabled,
+          // Cash amount comes from quotation; keep editable only for Loan.
+          enabled: widget.enabled && !isCash,
+          readOnly: isCash,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Amount'),
+          decoration: InputDecoration(
+            labelText: isCash ? 'Amount (from Quotation)' : 'Amount',
+            hintText: isLoan ? 'Enter loan amount' : null,
+          ),
           onChanged: (_) {
             if (saveError != null) setState(() => saveError = null);
           },

@@ -65,6 +65,8 @@ class LeadWorkflow {
 
   static const nextStatus = <String, List<String>>{
     'New Lead': ['Rejected', 'Follow Up', 'Converted'],
+    // After Follow Up, Sales can only reject or convert (no second Follow Up).
+    'Follow Up': ['Rejected', 'Converted'],
     'Converted': ['KYC Collected'],
     'KYC Collected': ['Sent To Sales Manager'],
     'Rejected By Sales Manager': ['Converted'],
@@ -234,6 +236,7 @@ class LeadWorkflow {
   static String nextActionLabel(String currentStatus) {
     const labels = <String, String>{
       'New Lead': 'Reject, follow up, or convert',
+      'Follow Up': 'Reject or convert',
       'Converted': 'Mark KYC collected',
       'KYC Collected': 'Send to Sales Manager',
       'Sent To Sales Manager': 'Review lead',

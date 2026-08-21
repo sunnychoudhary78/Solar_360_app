@@ -80,10 +80,21 @@ class InstallationApiService {
       ),
     );
 
-    if (method == 'POST') {
-      await _dio.post(path, data: FormData.fromMap(formDataMap));
-    } else {
-      await _dio.put(path, data: FormData.fromMap(formDataMap));
+    try {
+      if (method == 'POST') {
+        await _dio.post(path, data: FormData.fromMap(formDataMap));
+      } else {
+        await _dio.put(path, data: FormData.fromMap(formDataMap));
+      }
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (data is Map && data['message'] != null) {
+        throw Exception(data['message'].toString());
+      }
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error'].toString());
+      }
+      rethrow;
     }
   }
 }

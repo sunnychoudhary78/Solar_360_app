@@ -8,6 +8,12 @@ void main() {
       expect(next, ['Rejected', 'Follow Up', 'Converted']);
     });
 
+    test('sales can still act after follow up', () {
+      final next = LeadWorkflow.getAllowedNextStatuses('Follow Up', 'Sales');
+      expect(next, ['Rejected', 'Converted']);
+      expect(next, isNot(contains('Follow Up')));
+    });
+
     test('super admin gets sequential next regardless of role status list', () {
       final next = LeadWorkflow.getAllowedNextStatuses(
         'New Lead',

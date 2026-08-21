@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/core/utils/upload_url.dart';
 import 'package:solar_sales/features/installation/presentation/providers/installation_providers.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -39,7 +42,13 @@ class _InstallationFormScreenState
   final applicationNo = TextEditingController();
 
   final List<TextEditingController> spControllers = [TextEditingController()];
+  final ImagePicker _imagePicker = ImagePicker();
+
+  /// Newly picked local image paths (camera / gallery).
   List<String> selectedInstallationImages = [];
+
+  /// Already-uploaded remote/local paths from the server.
+  List<String> existingInstallationImages = [];
 
   bool loading = false;
   String? existingId;
@@ -85,6 +94,23 @@ class _InstallationFormScreenState
         spControllers.add(TextEditingController(text: item?.toString() ?? ''));
       }
     }
+
+    final rawImages = d['installation_images'] ?? d['installationImages'];
+    if (rawImages is List) {
+      existingInstallationImages = rawImages
+          .map((item) {
+            if (item is Map) {
+              return (item['url'] ??
+                      item['path'] ??
+                      item['file'] ??
+                      item.toString())
+                  .toString();
+            }
+            return item?.toString() ?? '';
+          })
+          .where((path) => path.trim().isNotEmpty)
+          .toList();
+    }
   }
 
   @override
@@ -123,7 +149,7 @@ class _InstallationFormScreenState
     });
   }
 
-  bool _requiredMissing() {
+  bool _materialRequiredMissing() {
     return [
       fileNo,
       capacity,
@@ -134,38 +160,88 @@ class _InstallationFormScreenState
     ].any((controller) => controller.text.trim().isEmpty);
   }
 
+  bool get _hasAnyInstallationImages =>
+      selectedInstallationImages.isNotEmpty ||
+      existingInstallationImages.isNotEmpty;
+
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
 
-    if (_requiredMissing()) {
+    if (widget.materialOnly) {
+      if (_materialRequiredMissing()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please fill all required fields')),
+        );
+        return;
+      }
+
+      final panelCountValue = int.tryParse(panelCount.text.trim());
+
+      if (panelCountValue == null || panelCountValue <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter a valid number of panels'),
+          ),
+        );
+        return;
+      }
+
+      final spNumbers = spControllers
+          .map((controller) => controller.text.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+
+      if (spNumbers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please add at least one SP number')),
+        );
+        return;
+      }
+
+      await _persist({
+        'file_no': fileNo.text.trim(),
+        'panel_capacity': capacity.text.trim(),
+        'capacity': capacity.text.trim(),
+        'solar_panel_brand': panelBrand.text.trim(),
+        'number_of_solar_panels': panelCountValue,
+        'invoice_no': invoiceNo.text.trim(),
+        'panel_type': panelType,
+        'dcr_certificate_no': dcrCertificateNo.text.trim(),
+        'application_no': applicationNo.text.trim(),
+        'sp_numbers': spNumbers,
+      });
+      return;
+    }
+
+    // Electrical Engineer: photos-only UI. Preserve material fields in payload.
+    if (_materialRequiredMissing()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields')),
+        const SnackBar(
+          content: Text(
+            'Material details are incomplete. Ask Material Engineer to fill them first.',
+          ),
+        ),
       );
       return;
     }
 
-    final panelCountValue = int.tryParse(panelCount.text.trim());
-
-    if (panelCountValue == null || panelCountValue <= 0) {
+    if (!_hasAnyInstallationImages) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid number of panels')),
+        const SnackBar(
+          content: Text('Please upload at least one installation photo'),
+        ),
       );
       return;
     }
 
+    final panelCountValue = int.tryParse(panelCount.text.trim()) ?? 0;
     final spNumbers = spControllers
         .map((controller) => controller.text.trim())
         .where((value) => value.isNotEmpty)
         .toList();
 
-    if (spNumbers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one SP number')),
-      );
-      return;
-    }
-
-    final body = {
+    // Do NOT send installation_status: Completed — that jumps to Installation Done.
+    await _persist({
       'file_no': fileNo.text.trim(),
       'panel_capacity': capacity.text.trim(),
       'capacity': capacity.text.trim(),
@@ -178,11 +254,11 @@ class _InstallationFormScreenState
       'dcr_certificate_no': dcrCertificateNo.text.trim(),
       'application_no': applicationNo.text.trim(),
       'sp_numbers': spNumbers,
-    };
-    if (!widget.materialOnly) {
-      body['installation_status'] = 'Completed';
-    }
+      'installation_status': 'In Progress',
+    });
+  }
 
+  Future<void> _persist(Map<String, dynamic> body) async {
     setState(() => loading = true);
 
     try {
@@ -209,7 +285,7 @@ class _InstallationFormScreenState
           content: Text(
             widget.materialOnly
                 ? 'Material details saved successfully'
-                : 'Installation details saved successfully',
+                : 'Installation photos saved successfully',
           ),
         ),
       );
@@ -226,20 +302,77 @@ class _InstallationFormScreenState
     }
   }
 
-  Future<void> _pickInstallationImages() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-    );
+  Future<void> _showImageSourceSheet() async {
+    if (loading) return;
 
-    if (!mounted || result == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Take photo'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickFromCamera();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from gallery'),
+                subtitle: const Text('Select one or more images'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickFromGallery();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickFromCamera() async {
+    FocusScope.of(context).unfocus();
+
+    final file = await _imagePicker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
+    if (!mounted || file == null) return;
 
     setState(() {
-      selectedInstallationImages = result.files
-          .map((file) => file.path ?? '')
-          .where((path) => path.trim().isNotEmpty)
-          .toList();
+      if (!selectedInstallationImages.contains(file.path)) {
+        selectedInstallationImages = [...selectedInstallationImages, file.path];
+      }
+    });
+  }
+
+  Future<void> _pickFromGallery() async {
+    FocusScope.of(context).unfocus();
+
+    final files = await _imagePicker.pickMultiImage(imageQuality: 85);
+    if (!mounted || files.isEmpty) return;
+
+    setState(() {
+      final next = [...selectedInstallationImages];
+      for (final file in files) {
+        if (!next.contains(file.path)) next.add(file.path);
+      }
+      selectedInstallationImages = next;
+    });
+  }
+
+  void _removeSelectedImage(int index) {
+    setState(() {
+      selectedInstallationImages = [...selectedInstallationImages]
+        ..removeAt(index);
     });
   }
 
@@ -248,76 +381,67 @@ class _InstallationFormScreenState
     final title = widget.lead.fullName.trim().isEmpty
         ? 'Lead ${widget.lead.leadCode}'
         : widget.lead.fullName;
-    final screenTitle = widget.materialOnly
-        ? 'Material Details'
-        : 'Installation Details';
-    final saveLabel = widget.materialOnly
-        ? 'Save Material Details'
-        : 'Save Installation Details';
+    final screenTitle =
+        widget.materialOnly ? 'Material Details' : 'Installation Form';
+    final saveLabel =
+        widget.materialOnly ? 'Save Material Details' : 'Save Photos';
 
     return Scaffold(
       appBar: AppAppBar(title: screenTitle, subtitle: title),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md + 4),
         children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.md + 4),
-
-          _sectionTitle('Basic Details'),
-          _field('File No *', fileNo),
-          _field('Panel Capacity *', capacity),
-          _field('Solar Panel Brand *', panelBrand),
-          _field(
-            'Number of Panels *',
-            panelCount,
-            keyboard: TextInputType.number,
-            digitsOnly: true,
-          ),
-          _field('Invoice No', invoiceNo),
-
-          const SizedBox(height: 12),
-
-          _sectionTitle('DCR / Non DCR Panel Subsidy'),
-          _panelTypeDropdown(),
-          _field('DCR Certificate No.', dcrCertificateNo),
-          _field('Application No.', applicationNo),
-
-          const SizedBox(height: 12),
-
-          if (!widget.materialOnly) ...[
-            _sectionTitle('Installation Serial Numbers'),
-            _field('Inverter Serial Number', inverterSerialNumber),
-            _field('Battery Serial Number', batterySerialNumber),
-          ],
-          _spSection(),
-          if (!widget.materialOnly) ...[
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: loading ? null : _pickInstallationImages,
-                icon: const Icon(Icons.image_outlined),
-                label: const Text('Add installation images'),
-              ),
+          if (widget.materialOnly) ...[
+            Text(
+              title,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
             ),
-            if (selectedInstallationImages.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...selectedInstallationImages.map(
-                (path) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(path.split('\\').last.split('/').last),
-                ),
-              ),
+            const SizedBox(height: AppSpacing.md + 4),
+            _sectionTitle('Basic Details'),
+            _field('Inverter Serial No *', fileNo),
+            _field('Inverter Panel Capacity *', capacity),
+            _field('Inverter Solar Panel Brand *', panelBrand),
+            _field(
+              'Number of Panels *',
+              panelCount,
+              keyboard: TextInputType.number,
+              digitsOnly: true,
+            ),
+            _field('Invoice No', invoiceNo),
+            const SizedBox(height: 12),
+            _sectionTitle('DCR / Non DCR Panel Subsidy'),
+            _panelTypeDropdown(),
+            _field('DCR Certificate No.', dcrCertificateNo),
+            _field('Application No.', applicationNo),
+            const SizedBox(height: 12),
+            _spSection(editable: true),
+          ] else ...[
+            Text(
+              'Installation Form',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Upload installation photos (required)',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.md + 4),
+            _sectionTitle('Installation Photos *'),
+            _installationPhotosUploader(),
+            if (selectedInstallationImages.isNotEmpty ||
+                existingInstallationImages.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.md),
+              _installationPhotosPreview(),
             ],
           ],
-
           const SizedBox(height: AppSpacing.lg),
-
           SizedBox(
             width: double.infinity,
             height: 54,
@@ -340,6 +464,157 @@ class _InstallationFormScreenState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _installationPhotosUploader() {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: loading ? null : _showImageSourceSheet,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: CustomPaint(
+          painter: _DashedBorderPainter(
+            color: scheme.outlineVariant,
+            radius: AppRadius.lg,
+          ),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.add_photo_alternate_outlined,
+                  size: 36,
+                  color: scheme.primary,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Click to upload installation photos',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Camera or gallery — PNG, JPG or WEBP\nSingle or multiple images',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.35,
+                      ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: loading ? null : _pickFromCamera,
+                      icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                      label: const Text('Camera'),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: loading ? null : _pickFromGallery,
+                      icon: const Icon(Icons.photo_library_outlined, size: 18),
+                      label: const Text('Gallery'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _installationPhotosPreview() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Selected photos (${selectedInstallationImages.length + existingInstallationImages.length})',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 10),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount:
+              selectedInstallationImages.length +
+              existingInstallationImages.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemBuilder: (context, index) {
+            final isLocal = index < selectedInstallationImages.length;
+            final path = isLocal
+                ? selectedInstallationImages[index]
+                : existingInstallationImages[
+                    index - selectedInstallationImages.length];
+
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: isLocal
+                      ? Image.file(
+                          File(path),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _imageFallback(),
+                        )
+                      : Image.network(
+                          resolveUploadUrl(path),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _imageFallback(),
+                        ),
+                ),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: isLocal
+                      ? Material(
+                          color: Colors.black54,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: loading
+                                ? null
+                                : () => _removeSelectedImage(index),
+                            child: const Padding(
+                              padding: EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _imageFallback() {
+    final scheme = Theme.of(context).colorScheme;
+    return ColoredBox(
+      color: scheme.surfaceContainerHighest,
+      child: Icon(Icons.broken_image_outlined, color: scheme.onSurfaceVariant),
     );
   }
 
@@ -378,7 +653,7 @@ class _InstallationFormScreenState
     );
   }
 
-  Widget _spSection() {
+  Widget _spSection({required bool editable}) {
     return AppCard(
       variant: AppCardVariant.outlined,
       padding: const EdgeInsets.all(AppSpacing.md - 2),
@@ -445,5 +720,47 @@ class _InstallationFormScreenState
         decoration: InputDecoration(labelText: label),
       ),
     );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double radius;
+
+  _DashedBorderPainter({required this.color, required this.radius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(radius),
+        ),
+      );
+
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + dashWidth;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.radius != radius;
   }
 }
