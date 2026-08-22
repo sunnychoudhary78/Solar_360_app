@@ -591,7 +591,7 @@ class _SalesTrendChart extends StatelessWidget {
     ]));
   }
 }
-
+    
 class _EmptyChart extends StatelessWidget {
   const _EmptyChart();
   @override
@@ -606,3 +606,4 @@ class _EmptyChart extends StatelessWidget {
     ]))));
   }
 }
+

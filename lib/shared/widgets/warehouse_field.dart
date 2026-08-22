@@ -10,6 +10,7 @@ import 'package:solar_sales/shared/widgets/dialogs.dart';
 class WarehouseField extends ConsumerWidget {
   final String? warehouseId;
   final String? warehouseName;
+  final String? itemId;
   final bool readOnly;
   final bool requiredField;
   final ValueChanged<String?> onChanged;
@@ -18,6 +19,7 @@ class WarehouseField extends ConsumerWidget {
     super.key,
     required this.warehouseId,
     required this.warehouseName,
+    this.itemId,
     required this.readOnly,
     required this.requiredField,
     required this.onChanged,
@@ -151,6 +153,14 @@ class WarehouseField extends ConsumerWidget {
                   ? (v) => v == null || v.isEmpty ? 'Select a warehouse' : null
                   : null,
             ),
+            if (itemId != null &&
+                itemId!.isNotEmpty &&
+                selected != null &&
+                selected.isNotEmpty)
+              _AvailableStockHint(
+                itemId: itemId!,
+                warehouseId: selected,
+              ),
             if (canManage)
               Align(
                 alignment: Alignment.centerLeft,
@@ -163,6 +173,68 @@ class WarehouseField extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _AvailableStockHint extends ConsumerWidget {
+  const _AvailableStockHint({
+    required this.itemId,
+    required this.warehouseId,
+  });
+
+  final String itemId;
+  final String warehouseId;
+
+  int _availableQty(List<StockModel> stock) {
+    for (final row in stock) {
+      if (row.itemId == itemId && row.warehouseId == warehouseId) {
+        return row.currentQuantity;
+      }
+    }
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final stockState = ref.watch(stockListProvider);
+
+    if (stockState.isLoading && stockState.items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8, left: 4),
+        child: Text(
+          'Checking available stock…',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    final available = _availableQty(stockState.items);
+    final isLow = available <= 0;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, left: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 16,
+            color: isLow ? scheme.error : scheme.primary,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Available: $available units',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: isLow ? scheme.error : scheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

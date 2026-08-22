@@ -542,14 +542,35 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                 : scheme.onSurfaceVariant
         : config.color;
 
-    final paired = display.paired;
-
     final source = isTransfer
         ? _transferSource(display, allTransactions)
         : null;
     final destination = isTransfer
         ? _transferDestination(display, allTransactions)
         : null;
+
+    if (isTransfer) {
+      final transferSource = source ?? tx;
+      final analysis = _analyzeTransfer(
+        source: transferSource,
+        destination: destination,
+        allTransactions: allTransactions,
+      );
+
+      return _TransferLedgerCard(
+        itemName: tx.itemName,
+        fromWarehouse: analysis.fromWarehouse,
+        toWarehouse: analysis.toWarehouse,
+        quantity: amount,
+        transferDate: tx.createdAt,
+        config: config,
+        analysisPanel: _buildTransferAnalysisPanel(
+          context: context,
+          theme: theme,
+          analysis: analysis,
+        ),
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -599,40 +620,27 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      if (!isTransfer)
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.storefront_outlined,
-                              size: 15,
-                              color: scheme.outline,
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                tx.warehouseName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.outline,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.storefront_outlined,
+                            size: 15,
+                            color: scheme.outline,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              tx.warehouseName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: scheme.outline,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ],
-                        )
-                      else
-                        Text(
-                          paired == null
-                              ? 'From: ${tx.warehouseName}'
-                              : 'From: ${source?.warehouseName ?? tx.warehouseName}  →  To: ${destination?.warehouseName ?? paired.warehouseName}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
                           ),
-                        ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -671,61 +679,7 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
               ],
             ),
 
-            if (isTransfer) ...[
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(11),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? scheme.surfaceContainerHigh
-                      : scheme.surfaceContainerHighest.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    _buildTransferDetailRow(
-                      context: context,
-                      icon: Icons.arrow_upward_rounded,
-                      label: 'From Warehouse',
-                      value: source?.warehouseName ?? tx.warehouseName,
-                      isSource: true,
-                    ),
-                    const SizedBox(height: 8),
-                    Divider(
-                      height: 1,
-                      color: scheme.outlineVariant.withValues(alpha: 0.5),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTransferDetailRow(
-                      context: context,
-                      icon: Icons.arrow_downward_rounded,
-                      label: 'To Warehouse',
-                      value: destination?.warehouseName ??
-                          (paired?.warehouseName ?? '—'),
-                      isSource: false,
-                    ),
-                    const SizedBox(height: 8),
-                    Divider(
-                      height: 1,
-                      color: scheme.outlineVariant.withValues(alpha: 0.5),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTransferDetailRow(
-                      context: context,
-                      icon: Icons.swap_vert_rounded,
-                      label: 'Transferred Qty',
-                      value: '$amount',
-                      isSource: false,
-                      emphasizeValue: true,
-                    ),
-                  ],
-                ),
-              ),
-            ] else if (isAdjustment) ...[
+            if (isAdjustment) ...[
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
@@ -879,12 +833,370 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     );
   }
 
+  Widget _buildTransferAnalysisPanel({
+    required BuildContext context,
+    required ThemeData theme,
+    required _TransferAnalysis analysis,
+  }) {
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final statusColor = analysis.isLowStock ? scheme.error : const Color(0xFF059669);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? scheme.surfaceContainerHigh
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Transfer analysis',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildTransferMetricRow(
+            context: context,
+            label: 'Item / Product',
+            value: analysis.itemName,
+          ),
+          _buildTransferDetailRow(
+            context: context,
+            icon: Icons.arrow_upward_rounded,
+            label: 'From Warehouse',
+            value: analysis.fromWarehouse,
+            isSource: true,
+          ),
+          const SizedBox(height: 8),
+          _buildTransferDetailRow(
+            context: context,
+            icon: Icons.arrow_downward_rounded,
+            label: 'To Warehouse',
+            value: analysis.toWarehouse,
+            isSource: false,
+          ),
+          const SizedBox(height: 10),
+          Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 10),
+          _buildTransferMetricRow(
+            context: context,
+            label: 'Available (before transfer)',
+            value: '${analysis.availableBeforeSource}',
+            emphasize: true,
+          ),
+          _buildTransferMetricRow(
+            context: context,
+            label: 'Transferred Qty',
+            value: '${analysis.transferredQty}',
+            emphasize: true,
+            valueColor: scheme.primary,
+          ),
+          _buildTransferMetricRow(
+            context: context,
+            label: 'Remaining (source warehouse)',
+            value: '${analysis.remainingAtSource}',
+          ),
+          _buildTransferMetricRow(
+            context: context,
+            label: 'Remaining/Current Stock (destination)',
+            value: '${analysis.destinationBalanceAfter}',
+          ),
+          _buildTransferMetricRow(
+            context: context,
+            label: 'Balanced Qty (total stock)',
+            value: '${analysis.balancedQuantity}',
+          ),
+          _buildTransferMetricRow(
+            context: context,
+            label: 'Shared/Transferred (from source)',
+            value: '${analysis.sharedTransferredQty}',
+          ),
+          _buildTransferMetricRow(
+            context: context,
+            label: 'Min Stock',
+            value: '${analysis.minStock}',
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                'Status',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Text(
+                  analysis.statusLabel,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (analysis.warehouseBreakdown.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Divider(
+              height: 1,
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Stock by warehouse (after transfer)',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...analysis.warehouseBreakdown.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _warehouseDotColor(entry.warehouseId),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        entry.warehouseName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${entry.quantity}',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (analysis.transferDate != null ||
+              (analysis.referenceNumber?.isNotEmpty ?? false) ||
+              (analysis.notes?.isNotEmpty ?? false)) ...[
+            const SizedBox(height: 10),
+            Divider(
+              height: 1,
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 10),
+            if (analysis.transferDate != null)
+              _buildTransferMetricRow(
+                context: context,
+                label: 'Transfer Date',
+                value: formatDateTime(analysis.transferDate),
+              ),
+            if (analysis.referenceNumber?.isNotEmpty ?? false)
+              _buildTransferMetricRow(
+                context: context,
+                label: 'Reference',
+                value: analysis.referenceNumber!,
+              ),
+            if (analysis.notes?.isNotEmpty ?? false)
+              _buildTransferMetricRow(
+                context: context,
+                label: 'Notes',
+                value: analysis.notes!,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransferMetricRow({
+    required BuildContext context,
+    required String label,
+    required String value,
+    bool emphasize = false,
+    Color? valueColor,
+  }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: emphasize ? FontWeight.w800 : FontWeight.w700,
+              color: valueColor ?? scheme.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _warehouseDotColor(String warehouseId) {
+    const palette = [
+      Color(0xFF2563EB),
+      Color(0xFF7C3AED),
+      Color(0xFFEA580C),
+      Color(0xFF0D9488),
+      Color(0xFFDB2777),
+      Color(0xFFCA8A04),
+    ];
+    return palette[warehouseId.hashCode.abs() % palette.length];
+  }
+
+  _TransferAnalysis _analyzeTransfer({
+    required StockTransactionModel source,
+    required StockTransactionModel? destination,
+    required List<StockTransactionModel> allTransactions,
+  }) {
+    final transferredQty = source.quantity.abs();
+    final remainingAtSource = source.balanceAfter;
+    final availableBeforeSource = remainingAtSource + transferredQty;
+    final minStock = source.item?.minStockLevel ?? 0;
+    final at = source.createdAt;
+
+    final breakdown = _warehouseBalancesAtTime(
+      itemId: source.itemId,
+      at: at,
+      allTransactions: allTransactions,
+    );
+
+    final warehouseBreakdown = breakdown.entries
+        .map(
+          (entry) => _WarehouseBreakdownEntry(
+            warehouseId: entry.key,
+            warehouseName: entry.value.name,
+            quantity: entry.value.qty,
+          ),
+        )
+        .toList()
+      ..sort((a, b) => a.warehouseName.compareTo(b.warehouseName));
+
+    final balancedQuantity = warehouseBreakdown.fold<int>(
+      0,
+      (sum, entry) => sum + entry.quantity,
+    );
+
+    final sharedTransferredQty = allTransactions
+        .where(
+          (tx) =>
+              tx.itemId == source.itemId &&
+              tx.warehouseId == source.warehouseId &&
+              tx.transType.toLowerCase() == 'transfer' &&
+              _isOnOrBefore(tx.createdAt, at),
+        )
+        .fold<int>(0, (sum, tx) => sum + tx.quantity.abs());
+
+    final isLowStock = balancedQuantity < minStock;
+
+    return _TransferAnalysis(
+      itemName: source.item?.name ?? source.itemName,
+      fromWarehouse: source.warehouseName,
+      toWarehouse: destination?.warehouseName ?? '—',
+      availableBeforeSource: availableBeforeSource,
+      transferredQty: transferredQty,
+      remainingAtSource: remainingAtSource,
+      destinationBalanceAfter: destination?.balanceAfter ?? 0,
+      balancedQuantity: balancedQuantity,
+      sharedTransferredQty: sharedTransferredQty,
+      minStock: minStock,
+      isLowStock: isLowStock,
+      statusLabel: isLowStock ? 'Low Stock' : 'OK',
+      warehouseBreakdown: warehouseBreakdown,
+      transferDate: at,
+      referenceNumber: source.referenceNumber,
+      notes: source.notes,
+    );
+  }
+
+  Map<String, ({String name, int qty})> _warehouseBalancesAtTime({
+    required String itemId,
+    required DateTime? at,
+    required List<StockTransactionModel> allTransactions,
+  }) {
+    final latest = <String, StockTransactionModel>{};
+
+    for (final tx in allTransactions) {
+      if (tx.itemId != itemId) continue;
+      if (!_isOnOrBefore(tx.createdAt, at)) continue;
+
+      final existing = latest[tx.warehouseId];
+      if (existing == null) {
+        latest[tx.warehouseId] = tx;
+        continue;
+      }
+
+      final txTime = tx.createdAt;
+      final existingTime = existing.createdAt;
+      if (txTime == null) continue;
+      if (existingTime == null || txTime.isAfter(existingTime)) {
+        latest[tx.warehouseId] = tx;
+      }
+    }
+
+    return {
+      for (final entry in latest.entries)
+        entry.key: (name: entry.value.warehouseName, qty: entry.value.balanceAfter),
+    };
+  }
+
+  bool _isOnOrBefore(DateTime? candidate, DateTime? cutoff) {
+    if (cutoff == null) return true;
+    if (candidate == null) return false;
+    return !candidate.isAfter(cutoff);
+  }
+
   Widget _buildTransferDetailRow({
     required BuildContext context,
     required IconData icon,
     required String label,
     required String value,
     required bool isSource,
+    String? secondaryValue,
     bool emphasizeValue = false,
   }) {
     final theme = Theme.of(context);
@@ -917,6 +1229,16 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
                   color: emphasizeValue ? accent : scheme.onSurface,
                 ),
               ),
+              if (secondaryValue != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  secondaryValue,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -1322,19 +1644,155 @@ class _MovementSheetState extends State<_MovementSheet> {
     super.dispose();
   }
 
-  int get _availableQuantity {
-    if (!(_isStockOut || _isTransfer || _isAdjustment)) return 0;
-
+  int _quantityAtWarehouse(String? warehouseId) {
+    if (warehouseId == null || warehouseId.isEmpty) return 0;
     for (final stockItem in widget.stock) {
       if (stockItem.itemId == _itemId &&
-          stockItem.warehouseId == _warehouseId) {
+          stockItem.warehouseId == warehouseId) {
         return stockItem.currentQuantity;
       }
     }
     return 0;
   }
 
+  /// Warehouse-specific available stock at the selected From / source warehouse.
+  int get _availableQuantity => _quantityAtWarehouse(_warehouseId);
+
+  Color _warehouseDotColor(String warehouseId) {
+    const palette = [
+      Color(0xFF2563EB),
+      Color(0xFF7C3AED),
+      Color(0xFFEA580C),
+      Color(0xFF0D9488),
+      Color(0xFFDB2777),
+      Color(0xFFCA8A04),
+    ];
+    return palette[warehouseId.hashCode.abs() % palette.length];
+  }
+
+  List<({String id, String name, int qty})> get _warehouseStockLines {
+    final lines = widget.warehouses
+        .map(
+          (warehouse) => (
+            id: warehouse.id,
+            name: warehouse.name,
+            qty: _quantityAtWarehouse(warehouse.id),
+          ),
+        )
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return lines;
+  }
+
+  int get _totalAvailableStock =>
+      _warehouseStockLines.fold<int>(0, (sum, line) => sum + line.qty);
+
+  Widget _buildWarehouseStockPanel(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final lines = _warehouseStockLines;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? scheme.surfaceContainerHigh
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Warehouse Stock',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (lines.isEmpty)
+            Text(
+              'No stock in any warehouse',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            )
+          else
+            ...lines.map(
+              (line) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _warehouseDotColor(line.id),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        line.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${line.qty} units',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: line.qty > 0
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          const Divider(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Total Available',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                '${_totalAvailableStock} units',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: scheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   int get _currentQuantity => _availableQuantity;
+
+  String _warehouseName(String? warehouseId) {
+    if (warehouseId == null) return '—';
+    for (final warehouse in widget.warehouses) {
+      if (warehouse.id == warehouseId) return warehouse.name;
+    }
+    return '—';
+  }
 
   int get _enteredQuantity =>
       int.tryParse(_quantityController.text.trim()) ?? 0;
@@ -1556,72 +2014,46 @@ class _MovementSheetState extends State<_MovementSheet> {
 
               if (_isStockOut || _isTransfer || _isAdjustment) ...[
                 const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? scheme.surfaceContainerHigh
-                        : scheme.surfaceContainerHighest.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: scheme.outlineVariant.withValues(alpha: 0.7),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.inventory_2_outlined,
-                            size: 18,
-                            color: scheme.primary,
+                _isTransfer
+                    ? _buildWarehouseStockPanel(context)
+                    : Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? scheme.surfaceContainerHigh
+                              : scheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: scheme.outlineVariant.withValues(alpha: 0.7),
                           ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'Current Stock',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          Text(
-                            '$_currentQuantity',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_isTransfer) ...[
-                        const SizedBox(height: 8),
-                        Row(
+                        ),
+                        child: Row(
                           children: [
                             Icon(
-                              Icons.swap_horiz_rounded,
-                              size: 17,
+                              Icons.inventory_2_outlined,
+                              size: 18,
                               color: scheme.primary,
                             ),
-                            const SizedBox(width: 7),
-                            const Expanded(
+                            const SizedBox(width: 8),
+                            Expanded(
                               child: Text(
-                                'Available at source',
-                                style: TextStyle(
+                                'Current stock · ${_warehouseName(_warehouseId)}',
+                                style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
                             Text(
                               '$_currentQuantity',
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                fontWeight: FontWeight.w800,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ],
-                  ),
-                ),
+                      ),
               ],
 
               const SizedBox(height: 12),
@@ -1816,4 +2248,184 @@ class _TransConfig {
     required this.color,
     required this.icon,
   });
+}
+
+class _TransferLedgerCard extends StatefulWidget {
+  const _TransferLedgerCard({
+    required this.itemName,
+    required this.fromWarehouse,
+    required this.toWarehouse,
+    required this.quantity,
+    required this.transferDate,
+    required this.config,
+    required this.analysisPanel,
+  });
+
+  final String itemName;
+  final String fromWarehouse;
+  final String toWarehouse;
+  final int quantity;
+  final DateTime? transferDate;
+  final _TransConfig config;
+  final Widget analysisPanel;
+
+  @override
+  State<_TransferLedgerCard> createState() => _TransferLedgerCardState();
+}
+
+class _TransferLedgerCardState extends State<_TransferLedgerCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final compactLine =
+        '${widget.fromWarehouse} → ${widget.toWarehouse}  |  ${widget.quantity} Units  |  ${formatDate(widget.transferDate)}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _expanded
+              ? widget.config.color.withValues(alpha: 0.45)
+              : scheme.outlineVariant.withValues(alpha: isDark ? 0.3 : 0.55),
+          width: _expanded ? 1.4 : 1,
+        ),
+        boxShadow: _expanded
+            ? [
+                BoxShadow(
+                  color: widget.config.color.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(12, 12, 12, _expanded ? 14 : 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: widget.config.color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        widget.config.icon,
+                        color: widget.config.color,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.itemName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            compactLine,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      _expanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+                if (_expanded) ...[
+                  const SizedBox(height: 12),
+                  widget.analysisPanel,
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TransferAnalysis {
+  const _TransferAnalysis({
+    required this.itemName,
+    required this.fromWarehouse,
+    required this.toWarehouse,
+    required this.availableBeforeSource,
+    required this.transferredQty,
+    required this.remainingAtSource,
+    required this.destinationBalanceAfter,
+    required this.balancedQuantity,
+    required this.sharedTransferredQty,
+    required this.minStock,
+    required this.isLowStock,
+    required this.statusLabel,
+    required this.warehouseBreakdown,
+    required this.transferDate,
+    required this.referenceNumber,
+    required this.notes,
+  });
+
+  final String itemName;
+  final String fromWarehouse;
+  final String toWarehouse;
+  final int availableBeforeSource;
+  final int transferredQty;
+  final int remainingAtSource;
+  final int destinationBalanceAfter;
+  final int balancedQuantity;
+  final int sharedTransferredQty;
+  final int minStock;
+  final bool isLowStock;
+  final String statusLabel;
+  final List<_WarehouseBreakdownEntry> warehouseBreakdown;
+  final DateTime? transferDate;
+  final String? referenceNumber;
+  final String? notes;
+}
+
+class _WarehouseBreakdownEntry {
+  const _WarehouseBreakdownEntry({
+    required this.warehouseId,
+    required this.warehouseName,
+    required this.quantity,
+  });
+
+  final String warehouseId;
+  final String warehouseName;
+  final int quantity;
 }

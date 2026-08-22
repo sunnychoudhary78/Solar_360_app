@@ -25,6 +25,9 @@ class StockScreen extends ConsumerWidget {
     final warehouses = ref.watch(warehousesProvider);
     final canUpdate = ref.watch(authProvider).hasPermission('inventory.update');
     final theme = Theme.of(context);
+    final groupedStock = state.warehouseId == null
+        ? _groupStockByItem(state.items)
+        : const <_GroupedStockEntry>[];
 
     return Scaffold(
       appBar: AppAppBar(
@@ -184,6 +187,7 @@ class StockScreen extends ConsumerWidget {
                   ),
                   label: const Text('Low Stock'),
                   selected: state.lowStockOnly,
+                  showCheckmark: false,
                   selectedColor: theme.colorScheme.errorContainer,
                   labelStyle: TextStyle(
                     color: state.lowStockOnly
@@ -225,7 +229,24 @@ class StockScreen extends ConsumerWidget {
                                   ),
                                 ],
                               )
-                            : ListView.separated(
+                            : state.warehouseId == null
+                                ? ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      16,
+                                      16,
+                                      80,
+                                    ),
+                                    itemCount: groupedStock.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 12),
+                                    itemBuilder: (context, index) {
+                                      return _GroupedStockCard(
+                                        entry: groupedStock[index],
+                                      );
+                                    },
+                                  )
+                                : ListView.separated(
                                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
                                 itemCount: state.items.length,
                                 separatorBuilder: (_, __) =>
@@ -462,9 +483,32 @@ Future<void> _showMoveSheet(
     builder: (context) {
       return StatefulBuilder(
         builder: (context, setModalState) {
+          final fromAvailable = availableQty(itemId, fromWarehouseId);
+          final toAvailable = availableQty(itemId, toWarehouseId);
+          final warehouseAvailable = availableQty(itemId, warehouseId);
           final available = type == _MoveType.stockOut
-              ? availableQty(itemId, warehouseId)
-              : 0;
+              ? warehouseAvailable
+              : type == _MoveType.transfer
+                  ? fromAvailable
+                  : 0;
+          final totalAcrossWarehouses = () {
+            if (itemId == null) return 0;
+            var sum = 0;
+            for (final w in warehouses) {
+              sum += availableQty(itemId, w.id);
+            }
+            return sum;
+          }();
+          final warehouseStockLines = warehouses
+              .map(
+                (w) => (
+                  id: w.id,
+                  name: w.name,
+                  qty: availableQty(itemId, w.id),
+                ),
+              )
+              .toList()
+            ..sort((a, b) => a.name.compareTo(b.name));
 
           return Padding(
             padding: EdgeInsets.only(
@@ -576,6 +620,85 @@ Future<void> _showMoveSheet(
                           return null;
                         },
                       ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .outlineVariant
+                                .withValues(alpha: 0.7),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Warehouse Stock',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 10),
+                            ...warehouseStockLines.map(
+                              (line) => Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: _warehouseDotColor(line.id),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text(line.name)),
+                                    Text(
+                                      '${line.qty} units',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 16),
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Total Available',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                                Text(
+                                  '$totalAcrossWarehouses units',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     ] else ...[
                       DropdownButtonFormField<String>(
                         value: warehouseId,
@@ -625,6 +748,7 @@ Future<void> _showMoveSheet(
                         ),
                       ),
                       keyboardType: TextInputType.number,
+                      onChanged: (_) => setModalState(() {}),
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                         LengthLimitingTextInputFormatter(8),
@@ -635,7 +759,8 @@ Future<void> _showMoveSheet(
                         }
                         final base = AppValidators.positiveNumber(v, 'Quantity');
                         if (base != null) return base;
-                        if (type == _MoveType.stockOut) {
+                        if (type == _MoveType.stockOut ||
+                            type == _MoveType.transfer) {
                           final q = int.tryParse(v?.trim() ?? '') ?? 0;
                           if (q > available) {
                             return 'Quantity exceeds available stock ($available)';
@@ -749,5 +874,185 @@ Future<void> _showMoveSheet(
   } catch (e) {
     ref.read(globalLoadingProvider.notifier).hide();
     ref.read(globalLoadingProvider.notifier).showApiError(e);
+  }
+}
+
+class _GroupedStockEntry {
+  const _GroupedStockEntry({
+    required this.itemName,
+    required this.minStock,
+    required this.totalQuantity,
+    required this.isLowStock,
+    required this.warehouses,
+  });
+
+  final String itemName;
+  final int minStock;
+  final int totalQuantity;
+  final bool isLowStock;
+  final List<StockModel> warehouses;
+}
+
+List<_GroupedStockEntry> _groupStockByItem(List<StockModel> items) {
+  final grouped = <String, List<StockModel>>{};
+  for (final row in items) {
+    grouped.putIfAbsent(row.itemId, () => []).add(row);
+  }
+
+  final entries = grouped.entries.map((entry) {
+    final rows = entry.value
+      ..sort((a, b) => a.warehouseName.compareTo(b.warehouseName));
+    final first = rows.first;
+    return _GroupedStockEntry(
+      itemName: first.itemName,
+      minStock: first.minStock,
+      totalQuantity: first.totalQuantity,
+      isLowStock: first.isLowStock,
+      warehouses: rows,
+    );
+  }).toList()
+    ..sort((a, b) => a.itemName.compareTo(b.itemName));
+
+  return entries;
+}
+
+Color _warehouseDotColor(String warehouseId) {
+  const palette = [
+    Color(0xFF2563EB),
+    Color(0xFF7C3AED),
+    Color(0xFFEA580C),
+    Color(0xFF0D9488),
+    Color(0xFFDB2777),
+    Color(0xFFCA8A04),
+  ];
+  return palette[warehouseId.hashCode.abs() % palette.length];
+}
+
+class _GroupedStockCard extends StatelessWidget {
+  const _GroupedStockCard({required this.entry});
+
+  final _GroupedStockEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final statusColor =
+        entry.isLowStock ? Colors.orange.shade800 : Colors.green.shade700;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: entry.isLowStock
+              ? Colors.orange.withAlpha(150)
+              : scheme.outline.withAlpha(30),
+          width: entry.isLowStock ? 1.5 : 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              entry.itemName,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Stock by warehouse',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...entry.warehouses.map(
+              (row) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _warehouseDotColor(row.warehouseId),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        row.warehouseName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${row.currentQuantity}',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _StockSummaryChip(label: 'Total Qty', value: '${entry.totalQuantity}'),
+                const SizedBox(width: 8),
+                _StockSummaryChip(label: 'Min', value: '${entry.minStock}'),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    entry.isLowStock ? 'Low Stock' : 'OK',
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StockSummaryChip extends StatelessWidget {
+  const _StockSummaryChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$label: $value',
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+      ),
+    );
   }
 }

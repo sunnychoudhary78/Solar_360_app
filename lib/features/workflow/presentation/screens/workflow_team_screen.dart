@@ -78,6 +78,15 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
                   onRetry: () => ref.invalidate(allLeadsProvider),
                 ),
                 data: (leads) {
+                  if (!LeadWorkflow.isAdminRole(auth.effectiveRoleName) &&
+                      !auth.isCompanyAdmin) {
+                    return const EmptyState(
+                      title: 'Workflow Desk unavailable',
+                      subtitle:
+                          'Only Company Admin can open the cross-team pipeline.',
+                      icon: Icons.lock_outline_rounded,
+                    );
+                  }
                   final filtered = _filterLeadsForRole(leads, auth);
                   return _Dashboard(
                     leads: filtered,
@@ -128,7 +137,9 @@ class _WorkflowTeamScreenState extends ConsumerState<WorkflowTeamScreen> {
   }
 }
 
-class _Dashboard extends StatelessWidget {
+enum _PipelineFilter { active, completed, rejected }
+
+class _Dashboard extends StatefulWidget {
   const _Dashboard({
     required this.leads,
     required this.roleName,
@@ -138,6 +149,23 @@ class _Dashboard extends StatelessWidget {
   final List<LeadModel> leads;
   final String roleName;
   final String title;
+
+  @override
+  State<_Dashboard> createState() => _DashboardState();
+}
+
+class _DashboardState extends State<_Dashboard> {
+  _PipelineFilter _filter = _PipelineFilter.active;
+
+  static bool _isRejected(LeadModel lead) =>
+      lead.status.trim() == 'Rejected';
+
+  static bool _isCompleted(LeadModel lead) =>
+      lead.status.trim() == 'Final Complete';
+
+  /// In-progress leads only — excludes Rejected and Final Complete.
+  static bool _isActiveLead(LeadModel lead) =>
+      !_isRejected(lead) && !_isCompleted(lead);
 
   IconData _roleIcon(String roleKey) {
     switch (roleKey) {
@@ -181,12 +209,65 @@ class _Dashboard extends StatelessWidget {
     }
   }
 
+  List<LeadModel> get _filteredLeads {
+    switch (_filter) {
+      case _PipelineFilter.active:
+        return widget.leads.where(_isActiveLead).toList();
+      case _PipelineFilter.completed:
+        return widget.leads.where(_isCompleted).toList();
+      case _PipelineFilter.rejected:
+        return widget.leads.where(_isRejected).toList();
+    }
+  }
+
+  String get _emptyMessage {
+    switch (_filter) {
+      case _PipelineFilter.active:
+        return 'No active leads in your queue';
+      case _PipelineFilter.completed:
+        return 'No completed leads';
+      case _PipelineFilter.rejected:
+        return 'No rejected leads';
+    }
+  }
+
+  Widget _filterTile({
+    required String label,
+    required String value,
+    required IconData icon,
+    required _PipelineFilter filter,
+    required ColorScheme scheme,
+  }) {
+    final selected = _filter == filter;
+    return Expanded(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.55)
+                : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: MetricTile(
+          label: label,
+          value: value,
+          icon: icon,
+          compact: true,
+          onTap: () => setState(() => _filter = filter),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final roleKey = LeadWorkflow.resolveRoleKey(roleName);
-    final active = leads.where((l) => l.isActive).length;
-    final completed = leads.where((l) => l.status == 'Final Complete').length;
+    final roleKey = LeadWorkflow.resolveRoleKey(widget.roleName);
+    final active = widget.leads.where(_isActiveLead).length;
+    final completed = widget.leads.where(_isCompleted).length;
+    final rejected = widget.leads.where(_isRejected).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -194,8 +275,8 @@ class _Dashboard extends StatelessWidget {
         PageHeader(
           icon: _roleIcon(roleKey),
           greeting: _deskLabel(roleKey),
-          title: title,
-          subtitle: roleName,
+          title: widget.title,
+          subtitle: widget.roleName,
           trailing: StatusPill(
             label: _deskLabel(roleKey),
             color: scheme.primary,
@@ -205,22 +286,28 @@ class _Dashboard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
           child: Row(
             children: [
-              Expanded(
-                child: MetricTile(
-                  label: 'Active',
-                  value: '$active',
-                  icon: Icons.groups_rounded,
-                  compact: true,
-                ),
+              _filterTile(
+                label: 'Active',
+                value: '$active',
+                icon: Icons.groups_rounded,
+                filter: _PipelineFilter.active,
+                scheme: scheme,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: MetricTile(
-                  label: 'Completed',
-                  value: '$completed',
-                  icon: Icons.check_circle_outline,
-                  compact: true,
-                ),
+              const SizedBox(width: 8),
+              _filterTile(
+                label: 'Completed',
+                value: '$completed',
+                icon: Icons.check_circle_outline,
+                filter: _PipelineFilter.completed,
+                scheme: scheme,
+              ),
+              const SizedBox(width: 8),
+              _filterTile(
+                label: 'Rejected',
+                value: '$rejected',
+                icon: Icons.cancel_outlined,
+                filter: _PipelineFilter.rejected,
+                scheme: scheme,
               ),
             ],
           ),
@@ -232,8 +319,8 @@ class _Dashboard extends StatelessWidget {
         ),
         Expanded(
           child: LeadsTable(
-            leads: leads,
-            emptyMessage: 'No leads in your queue',
+            leads: _filteredLeads,
+            emptyMessage: _emptyMessage,
           ),
         ),
       ],

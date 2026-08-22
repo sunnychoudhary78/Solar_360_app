@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
-import 'package:solar_sales/core/workflow/lead_workflow.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
@@ -29,18 +28,8 @@ class SolarHomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
-    final roleKey = auth.workflowRoleKey;
-
-    if (roleKey == 'Document Administrator' ||
-        roleKey == 'Bank Process' ||
-        roleKey == 'Finance Manager' ||
-        roleKey == 'Finance User' ||
-        roleKey == 'Installation Manager' ||
-        roleKey == 'Material Engineer' ||
-        roleKey == 'Electrical Engineer') {
-      return WorkflowTeamScreen(titleOverride: auth.roleTitle);
-    }
-
+    // Workflow Desk / Admin Pipeline is Company Admin only — other roles
+    // use the shared home (Leads, Create Lead, Explore), not a role desk.
     return _SalesAdminHome(auth: auth);
   }
 }
@@ -261,8 +250,7 @@ class _SolarHomeContent extends ConsumerWidget {
                 ),
               ),
             ).appFadeSlide(index: 1),
-          if (LeadWorkflow.isAdminRole(auth.effectiveRoleName) &&
-              _canReadLeads)
+          if (auth.isCompanyAdmin && _canReadLeads)
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,

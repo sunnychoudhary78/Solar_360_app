@@ -8,6 +8,8 @@ import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
 import 'package:solar_sales/features/items/data/models/item_model.dart';
 import 'package:solar_sales/features/items/presentation/providers/item_providers.dart';
+import 'package:solar_sales/features/inventory/data/models/inventory_models.dart';
+import 'package:solar_sales/features/inventory/presentation/providers/inventory_providers.dart';
 import 'package:solar_sales/shared/constants/item_units.dart';
 import 'package:solar_sales/shared/models/party_address_model.dart';
 import 'package:solar_sales/shared/providers/branding_providers.dart';
@@ -1241,6 +1243,26 @@ class _QuotationFormScreenState
     final line = _lines[index];
     final theme =
         Theme.of(context);
+    final stockByItem = _stockSummaryByItem(
+      ref.watch(stockListProvider).items,
+    );
+
+    String itemPickerLabel(ItemModel item) {
+      final stock = _itemStockSummary(item, stockByItem);
+      final whLabel =
+          stock.warehouseCount == 1 ? '1 wh' : '${stock.warehouseCount} wh';
+      return '${item.name} — ${formatInr(item.sellingPrice)} / ${ItemUnits.labelFor(item.unit)} · $whLabel · stock ${stock.total}';
+    }
+
+    ItemModel? selectedItem;
+    if (line.itemId != null) {
+      for (final it in approved) {
+        if (it.id == line.itemId) {
+          selectedItem = it;
+          break;
+        }
+      }
+    }
 
     return Card(
       elevation: 0,
@@ -1342,12 +1364,14 @@ class _QuotationFormScreenState
                 return approved
                     .map(
                   (it) {
+                    final stock =
+                        _itemStockSummary(it, stockByItem);
                     return Align(
                       alignment:
                           Alignment
                               .centerLeft,
                       child: Text(
-                        '${it.name} (${formatInr(it.sellingPrice)})',
+                        '${it.name} — ${formatInr(it.sellingPrice)} · stock ${stock.total}',
                         overflow:
                             TextOverflow
                                 .ellipsis,
@@ -1363,11 +1387,11 @@ class _QuotationFormScreenState
                     DropdownMenuItem(
                   value: it.id,
                   child: Text(
-                    '${it.name} (${formatInr(it.sellingPrice)}, ${ItemUnits.labelFor(it.unit)}, GST ${it.gstPercent}%)',
+                    itemPickerLabel(it),
                     overflow:
                         TextOverflow
                             .ellipsis,
-                    maxLines: 1,
+                    maxLines: 2,
                   ),
                 ),
               )
@@ -1413,6 +1437,32 @@ class _QuotationFormScreenState
                       : null,
             ),
 
+            if (selectedItem != null) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Price: ${formatInr(selectedItem.sellingPrice)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Stock: ${_itemStockSummary(selectedItem, stockByItem).total} units',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(
               height: 12,
             ),
@@ -1422,6 +1472,7 @@ class _QuotationFormScreenState
                   line.warehouseId,
               warehouseName:
                   line.warehouseName,
+              itemId: line.itemId,
               readOnly: false,
               requiredField: true,
               onChanged: (id) {
@@ -1755,4 +1806,56 @@ class _QuotationFormScreenState
         )
         .toList();
   }
+}
+
+class _ItemStockSummary {
+  const _ItemStockSummary({
+    required this.total,
+    required this.warehouseCount,
+  });
+
+  final int total;
+  final int warehouseCount;
+}
+
+Map<String, _ItemStockSummary> _stockSummaryByItem(List<StockModel> stock) {
+  final totals = <String, int>{};
+  final warehouses = <String, Set<String>>{};
+
+  for (final row in stock) {
+    totals[row.itemId] = (totals[row.itemId] ?? 0) + row.currentQuantity;
+    warehouses.putIfAbsent(row.itemId, () => {}).add(row.warehouseId);
+  }
+
+  return {
+    for (final entry in totals.entries)
+      entry.key: _ItemStockSummary(
+        total: entry.value,
+        warehouseCount: warehouses[entry.key]?.length ?? 0,
+      ),
+  };
+}
+
+_ItemStockSummary _itemStockSummary(
+  ItemModel item,
+  Map<String, _ItemStockSummary> stockByItem,
+) {
+  if (item.stockLevels.isNotEmpty) {
+    final total = item.totalQuantity ??
+        item.stockLevels.fold<int>(
+          0,
+          (sum, level) => sum + level.currentQuantity,
+        );
+    final warehouseCount = item.stockLevels
+        .where((level) => level.currentQuantity > 0)
+        .length;
+    return _ItemStockSummary(
+      total: total,
+      warehouseCount:
+          warehouseCount > 0 ? warehouseCount : item.stockLevels.length,
+    );
+  }
+
+  return stockByItem[item.id] ??
+      const _ItemStockSummary(total: 0, warehouseCount: 0);
 }
