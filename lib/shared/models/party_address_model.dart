@@ -57,16 +57,44 @@ class PartyAddressModel {
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'address': address,
-        'city': city,
-        'state': state,
-        'pincode': pincode,
-        'gst_number': gstNumber,
-        'aadhar_number': aadharNumber,
-        'phone': phone,
-        'email': email,
+        'name': name.trim(),
+        'address': address.trim(),
+        'city': city.trim(),
+        'state': state.trim(),
+        'pincode': pincode.trim(),
+        'gst_number': gstNumber.trim(),
+        'aadhar_number': aadharNumber.replaceAll(RegExp(r'\D'), ''),
+        'phone': phone.trim(),
+        'email': email.trim(),
       };
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is PartyAddressModel &&
+            name == other.name &&
+            address == other.address &&
+            city == other.city &&
+            state == other.state &&
+            pincode == other.pincode &&
+            gstNumber == other.gstNumber &&
+            aadharNumber == other.aadharNumber &&
+            phone == other.phone &&
+            email == other.email;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        name,
+        address,
+        city,
+        state,
+        pincode,
+        gstNumber,
+        aadharNumber,
+        phone,
+        email,
+      );
 
   PartyAddressModel copyWith({
     String? name,

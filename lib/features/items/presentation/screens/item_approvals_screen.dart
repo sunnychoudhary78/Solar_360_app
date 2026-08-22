@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
-import 'package:solar_sales/shared/constants/item_categories.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
@@ -11,6 +10,7 @@ import 'package:solar_sales/shared/widgets/dialogs.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:solar_sales/shared/widgets/premium_ui.dart';
 
+import '../providers/item_category_providers.dart';
 import '../providers/item_providers.dart';
 
 class ItemApprovalsScreen extends ConsumerWidget {
@@ -19,6 +19,7 @@ class ItemApprovalsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(pendingItemsProvider);
+    final categories = ref.watch(itemCategoriesProvider).value;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -60,7 +61,7 @@ class ItemApprovalsScreen extends ConsumerWidget {
                 final item = items[index];
                 final subtitle = [
                   if (item.category != null)
-                    ItemCategories.labelFor(item.category),
+                    itemCategoryLabel(categories, item.category),
                   if (item.sku != null) 'SKU: ${item.sku}',
                   formatInr(item.sellingPrice),
                 ].join(' · ');

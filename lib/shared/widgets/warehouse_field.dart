@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/inventory/data/models/inventory_models.dart';
 import 'package:solar_sales/features/inventory/presentation/providers/inventory_providers.dart';
+import 'package:solar_sales/features/inventory/presentation/utils/stock_movement_utils.dart';
 import 'package:solar_sales/shared/widgets/dialogs.dart';
 
 /// Dropdown for selecting an active warehouse, with optional manage link.
@@ -11,6 +12,8 @@ class WarehouseField extends ConsumerWidget {
   final String? warehouseId;
   final String? warehouseName;
   final String? itemId;
+  final Iterable<String>? itemWarehouseIds;
+  final bool restrictToItemWarehouses;
   final bool readOnly;
   final bool requiredField;
   final ValueChanged<String?> onChanged;
@@ -20,6 +23,8 @@ class WarehouseField extends ConsumerWidget {
     required this.warehouseId,
     required this.warehouseName,
     this.itemId,
+    this.itemWarehouseIds,
+    this.restrictToItemWarehouses = true,
     required this.readOnly,
     required this.requiredField,
     required this.onChanged,
@@ -33,6 +38,7 @@ class WarehouseField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final warehousesAsync = ref.watch(warehousesProvider);
+    final stockRows = ref.watch(stockListProvider).items;
     final canManage = ref.watch(authProvider).hasPermission('inventory.create') ||
         ref.watch(authProvider).hasPermission('inventory.update') ||
         ref.watch(authProvider).hasPermission('inventory.read');
@@ -85,37 +91,57 @@ class WarehouseField extends ConsumerWidget {
         ],
       ),
       data: (warehouses) {
-        if (warehouses.isEmpty) {
+        final options = warehousesForItemSelection(
+          itemId: itemId,
+          allWarehouses: warehouses,
+          stockRows: stockRows,
+          itemWarehouseIds: itemWarehouseIds,
+          restrictToItem: restrictToItemWarehouses,
+        );
+
+        if (options.isEmpty) {
+          final message = itemId != null &&
+                  itemId!.isNotEmpty &&
+                  restrictToItemWarehouses
+              ? 'This item is not assigned to any warehouse yet.'
+              : 'No active warehouses yet. Create one before continuing.';
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'No active warehouses yet. Create one before continuing.',
-                style: Theme.of(context).textTheme.bodyMedium,
+                message,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: itemId != null && itemId!.isNotEmpty
+                          ? Theme.of(context).colorScheme.error
+                          : null,
+                    ),
               ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () async {
-                  final opened = await showWarehouseUnavailableDialog(
-                    context,
-                    message:
-                        'Create a warehouse first, then come back to assign it.',
-                  );
-                  if (opened) invalidateWarehouseProviders(ref);
-                },
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Add Warehouse'),
-              ),
+              if (itemId == null || itemId!.isEmpty) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () async {
+                    final opened = await showWarehouseUnavailableDialog(
+                      context,
+                      message:
+                          'Create a warehouse first, then come back to assign it.',
+                    );
+                    if (opened) invalidateWarehouseProviders(ref);
+                  },
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add Warehouse'),
+                ),
+              ],
             ],
           );
         }
 
-        final ids = warehouses.map((w) => w.id).toSet();
+        final ids = options.map((w) => w.id).toSet();
         final selected = ids.contains(warehouseId) ? warehouseId : null;
+        final effectiveSelected = selected ?? options.first.id;
 
-        if (selected == null && warehouses.length == 1) {
+        if (selected == null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            onChanged(warehouses.first.id);
+            onChanged(options.first.id);
           });
         }
 
@@ -123,8 +149,8 @@ class WarehouseField extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DropdownButtonFormField<String>(
-              key: ValueKey(selected ?? 'warehouse-none'),
-              initialValue: selected,
+              key: ValueKey('${itemId ?? 'all'}-$effectiveSelected'),
+              initialValue: effectiveSelected,
               isExpanded: true,
               decoration: InputDecoration(
                 labelText: requiredField ? 'Warehouse *' : 'Warehouse',
@@ -137,7 +163,7 @@ class WarehouseField extends ConsumerWidget {
                   vertical: 12,
                 ),
               ),
-              items: warehouses
+              items: options
                   .map(
                     (WarehouseModel w) => DropdownMenuItem(
                       value: w.id,
@@ -155,11 +181,10 @@ class WarehouseField extends ConsumerWidget {
             ),
             if (itemId != null &&
                 itemId!.isNotEmpty &&
-                selected != null &&
-                selected.isNotEmpty)
+                effectiveSelected.isNotEmpty)
               _AvailableStockHint(
                 itemId: itemId!,
-                warehouseId: selected,
+                warehouseId: effectiveSelected,
               ),
             if (canManage)
               Align(
@@ -186,15 +211,6 @@ class _AvailableStockHint extends ConsumerWidget {
   final String itemId;
   final String warehouseId;
 
-  int _availableQty(List<StockModel> stock) {
-    for (final row in stock) {
-      if (row.itemId == itemId && row.warehouseId == warehouseId) {
-        return row.currentQuantity;
-      }
-    }
-    return 0;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -213,7 +229,11 @@ class _AvailableStockHint extends ConsumerWidget {
       );
     }
 
-    final available = _availableQty(stockState.items);
+    final available = availableQtyAtWarehouse(
+      itemId,
+      warehouseId,
+      stockState.items,
+    );
     final isLow = available <= 0;
 
     return Padding(

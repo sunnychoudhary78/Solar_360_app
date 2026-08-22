@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
-import 'package:solar_sales/shared/constants/item_categories.dart';
 import 'package:solar_sales/shared/constants/item_units.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -14,6 +13,7 @@ import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:solar_sales/shared/widgets/premium_ui.dart';
 import 'package:solar_sales/shared/widgets/rejection_banner.dart';
 
+import '../providers/item_category_providers.dart';
 import '../providers/item_providers.dart';
 
 class ItemDetailScreen extends ConsumerWidget {
@@ -25,6 +25,7 @@ class ItemDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(itemDetailProvider(itemId));
     final auth = ref.watch(authProvider);
+    final categories = ref.watch(itemCategoriesProvider).value;
     final scheme = Theme.of(context).colorScheme;
 
     return async.when(
@@ -95,8 +96,8 @@ class ItemDetailScreen extends ConsumerWidget {
                   children: [
                     DocumentDetailHeader(
                       title: item.name,
-                      subtitle:
-                          item.sku ?? ItemCategories.labelFor(item.category),
+                      subtitle: item.sku ??
+                          itemCategoryLabel(categories, item.category),
                       status: item.status,
                       icon: Icons.inventory_2_outlined,
                       meta: meta,
@@ -114,7 +115,7 @@ class ItemDetailScreen extends ConsumerWidget {
                           _InfoRow('SKU', item.sku ?? '—'),
                           _InfoRow(
                             'Category',
-                            ItemCategories.labelFor(item.category),
+                            itemCategoryLabel(categories, item.category),
                           ),
                           _InfoRow('HSN', item.hsnCode ?? '—'),
                           _InfoRow('SAC', item.sacCode ?? '—'),

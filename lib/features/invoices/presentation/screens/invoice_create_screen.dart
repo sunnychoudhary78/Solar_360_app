@@ -356,9 +356,6 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                           ),
                           const SizedBox(height: 16),
                           PartyAddressEditor(
-                            key: ValueKey(
-                              'bill_${_billTo.name}_${_billTo.address}',
-                            ),
                             title: 'Bill To',
                             party: _billTo,
                             onChanged: (p) => setState(() {
@@ -379,9 +376,6 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                           if (!_shipSameAsBill) ...[
                             const SizedBox(height: 12),
                             PartyAddressEditor(
-                              key: ValueKey(
-                                'ship_${_shipTo.name}_${_shipTo.address}',
-                              ),
                               title: 'Ship To',
                               party: _shipTo,
                               onChanged: (p) => setState(() => _shipTo = p),

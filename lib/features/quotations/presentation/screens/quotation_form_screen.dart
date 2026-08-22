@@ -6,6 +6,7 @@ import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
+import 'package:solar_sales/features/inventory/presentation/utils/stock_movement_utils.dart';
 import 'package:solar_sales/features/items/data/models/item_model.dart';
 import 'package:solar_sales/features/items/presentation/providers/item_providers.dart';
 import 'package:solar_sales/features/inventory/data/models/inventory_models.dart';
@@ -88,6 +89,10 @@ class _QuotationFormScreenState
   void initState() {
     super.initState();
     _attachLineListeners(_lines.first);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(stockListProvider.notifier).refresh();
+    });
   }
 
   void _attachLineListeners(_LineDraft line) {
@@ -571,6 +576,9 @@ class _QuotationFormScreenState
 
     final brandingAsync =
         ref.watch(solarBrandingProvider);
+
+    // Ensure stock levels are loaded for item picker labels and availability hints.
+    ref.watch(stockListProvider);
 
     final theme =
         Theme.of(context);
@@ -1246,6 +1254,7 @@ class _QuotationFormScreenState
     final stockByItem = _stockSummaryByItem(
       ref.watch(stockListProvider).items,
     );
+    final stockRows = ref.watch(stockListProvider).items;
 
     String itemPickerLabel(ItemModel item) {
       final stock = _itemStockSummary(item, stockByItem);
@@ -1428,6 +1437,20 @@ class _QuotationFormScreenState
                         item.description
                             ?.trim() ??
                         '';
+
+                    final assignedIds = item.stockLevels
+                        .map((level) => level.warehouseId)
+                        .where((id) => id.isNotEmpty)
+                        .toList();
+                    if (assignedIds.length == 1) {
+                      line.warehouseId = assignedIds.first;
+                      line.warehouseName =
+                          item.stockLevels.first.warehouseName;
+                    } else if (line.warehouseId != null &&
+                        !assignedIds.contains(line.warehouseId)) {
+                      line.warehouseId = null;
+                      line.warehouseName = null;
+                    }
                   }
                 });
               },
@@ -1441,23 +1464,63 @@ class _QuotationFormScreenState
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.only(left: 4),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Text(
-                        'Price: ${formatInr(selectedItem.sellingPrice)}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Price: ${formatInr(selectedItem.sellingPrice)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
+                        Text(
+                          'Total stock: ${_itemStockSummary(selectedItem, stockByItem).total} units',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      'Stock: ${_itemStockSummary(selectedItem, stockByItem).total} units',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w700,
+                    if (line.warehouseId != null &&
+                        line.warehouseId!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.inventory_2_outlined,
+                            size: 16,
+                            color: _itemStockAtWarehouse(
+                                      selectedItem,
+                                      line.warehouseId,
+                                      stockRows,
+                                    ) >
+                                    0
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.error,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Available at warehouse: ${_itemStockAtWarehouse(selectedItem, line.warehouseId, stockRows)} units',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: _itemStockAtWarehouse(
+                                        selectedItem,
+                                        line.warehouseId,
+                                        stockRows,
+                                      ) >
+                                      0
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.error,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -1473,6 +1536,9 @@ class _QuotationFormScreenState
               warehouseName:
                   line.warehouseName,
               itemId: line.itemId,
+              itemWarehouseIds: selectedItem?.stockLevels
+                  .map((level) => level.warehouseId)
+                  .where((id) => id.isNotEmpty),
               readOnly: false,
               requiredField: true,
               onChanged: (id) {
@@ -1841,21 +1907,39 @@ _ItemStockSummary _itemStockSummary(
   Map<String, _ItemStockSummary> stockByItem,
 ) {
   if (item.stockLevels.isNotEmpty) {
-    final total = item.totalQuantity ??
-        item.stockLevels.fold<int>(
-          0,
-          (sum, level) => sum + level.currentQuantity,
-        );
+    final parsedTotal = item.stockLevels.fold<int>(
+      0,
+      (sum, level) => sum + level.currentQuantity,
+    );
+    final total = item.totalQuantity ?? parsedTotal;
     final warehouseCount = item.stockLevels
         .where((level) => level.currentQuantity > 0)
         .length;
-    return _ItemStockSummary(
-      total: total,
-      warehouseCount:
-          warehouseCount > 0 ? warehouseCount : item.stockLevels.length,
-    );
+    if (total > 0 || parsedTotal > 0) {
+      return _ItemStockSummary(
+        total: total > 0 ? total : parsedTotal,
+        warehouseCount:
+            warehouseCount > 0 ? warehouseCount : item.stockLevels.length,
+      );
+    }
   }
 
   return stockByItem[item.id] ??
       const _ItemStockSummary(total: 0, warehouseCount: 0);
+}
+
+int _itemStockAtWarehouse(
+  ItemModel item,
+  String? warehouseId,
+  List<StockModel> stockRows,
+) {
+  if (warehouseId == null || warehouseId.isEmpty) return 0;
+
+  for (final level in item.stockLevels) {
+    if (level.warehouseId == warehouseId) {
+      return level.currentQuantity;
+    }
+  }
+
+  return availableQtyAtWarehouse(item.id, warehouseId, stockRows);
 }

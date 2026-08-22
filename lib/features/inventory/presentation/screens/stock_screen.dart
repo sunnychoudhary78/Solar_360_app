@@ -13,6 +13,7 @@ import 'package:solar_sales/shared/widgets/dialogs.dart';
 
 import '../../data/models/inventory_models.dart';
 import '../providers/inventory_providers.dart';
+import '../utils/stock_movement_utils.dart';
 
 enum _MoveType { stockIn, stockOut, transfer, adjustment }
 
@@ -445,22 +446,27 @@ Future<void> _showMoveSheet(
     return;
   }
 
-  final stockLevels = await ref.read(inventoryRepositoryProvider).getStock();
+  final stockLevels = await ref
+      .read(inventoryRepositoryProvider)
+      .getStock(approvedOnly: false);
   if (!context.mounted) return;
 
-  int availableQty(String? iId, String? wId) {
-    if (iId == null || wId == null) return 0;
-    for (final s in stockLevels) {
-      if (s.itemId == iId && s.warehouseId == wId) {
-        return s.currentQuantity;
-      }
-    }
-    return 0;
-  }
+  int availableQty(String? iId, String? wId) =>
+      availableQtyAtWarehouse(iId, wId, stockLevels);
 
   final formKey = GlobalKey<FormState>();
   String? itemId = moveItems.first.id;
-  String? warehouseId = warehouses.first.id;
+  String? warehouseId;
+  if (type == _MoveType.stockIn) {
+    final assigned = warehousesAssignedToItem(
+      itemId,
+      warehouses,
+      stockLevels,
+    );
+    warehouseId = assigned.isNotEmpty ? assigned.first.id : null;
+  } else {
+    warehouseId = warehouses.first.id;
+  }
   String? fromWarehouseId = warehouses.first.id;
   String? toWarehouseId =
       warehouses.length > 1 ? warehouses[1].id : warehouses.first.id;
@@ -486,6 +492,11 @@ Future<void> _showMoveSheet(
           final fromAvailable = availableQty(itemId, fromWarehouseId);
           final toAvailable = availableQty(itemId, toWarehouseId);
           final warehouseAvailable = availableQty(itemId, warehouseId);
+          final stockInWarehouses = type == _MoveType.stockIn
+              ? warehousesAssignedToItem(itemId, warehouses, stockLevels)
+              : warehouses;
+          final warehouseOptions =
+              type == _MoveType.stockIn ? stockInWarehouses : warehouses;
           final available = type == _MoveType.stockOut
               ? warehouseAvailable
               : type == _MoveType.transfer
@@ -563,7 +574,18 @@ Future<void> _showMoveSheet(
                             ),
                           )
                           .toList(),
-                      onChanged: (v) => setModalState(() => itemId = v),
+                      onChanged: (v) => setModalState(() {
+                        itemId = v;
+                        if (type == _MoveType.stockIn) {
+                          final assigned = warehousesAssignedToItem(
+                            v,
+                            warehouses,
+                            stockLevels,
+                          );
+                          warehouseId =
+                              assigned.isNotEmpty ? assigned.first.id : null;
+                        }
+                      }),
                       validator: (v) =>
                           v == null || v.isEmpty ? 'Select an item' : null,
                     ),
@@ -700,27 +722,59 @@ Future<void> _showMoveSheet(
                         ),
                       ),
                     ] else ...[
-                      DropdownButtonFormField<String>(
-                        value: warehouseId,
-                        decoration: InputDecoration(
-                          labelText: 'Warehouse *',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                      if (type == _MoveType.stockIn &&
+                          warehouseOptions.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'This item is not assigned to any warehouse yet.',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
                           ),
+                        )
+                      else
+                        DropdownButtonFormField<String>(
+                          value: warehouseOptions
+                                  .any((w) => w.id == warehouseId)
+                              ? warehouseId
+                              : null,
+                          decoration: InputDecoration(
+                            labelText: 'Warehouse *',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          items: warehouseOptions
+                              .map(
+                                (WarehouseModel w) => DropdownMenuItem(
+                                  value: w.id,
+                                  child: Text(w.name),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setModalState(() => warehouseId = v),
+                          validator: (v) => v == null || v.isEmpty
+                              ? 'Select a warehouse'
+                              : null,
                         ),
-                        items: warehouses
-                            .map(
-                              (WarehouseModel w) => DropdownMenuItem(
-                                value: w.id,
-                                child: Text(w.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) =>
-                            setModalState(() => warehouseId = v),
-                        validator: (v) => v == null || v.isEmpty
-                            ? 'Select a warehouse'
-                            : null,
+                    ],
+                    if (type == _MoveType.stockIn &&
+                        warehouseId != null &&
+                        warehouseOptions.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Text(
+                          'Available Stock: $warehouseAvailable',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                        ),
                       ),
                     ],
                     if (type == _MoveType.stockOut) ...[

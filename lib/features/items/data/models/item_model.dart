@@ -21,7 +21,7 @@ class StockLevelModel {
       id: asString(json['id']),
       itemId: asString(json['item_id']),
       warehouseId: asString(json['warehouse_id']),
-      currentQuantity: asInt(json['current_quantity']),
+      currentQuantity: asInt(json['current_quantity'] ?? json['quantity']),
       warehouseName: warehouse is Map
           ? asString(warehouse['name'])
           : json['warehouse_name']?.toString(),

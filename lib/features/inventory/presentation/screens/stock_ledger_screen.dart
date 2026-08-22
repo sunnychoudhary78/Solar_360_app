@@ -13,6 +13,7 @@ import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/paginated_list_view.dart';
 
 import '../providers/inventory_providers.dart';
+import '../utils/stock_movement_utils.dart';
 
 
 class StockLedgerScreen extends ConsumerStatefulWidget {
@@ -1372,13 +1373,14 @@ class _StockLedgerScreenState extends ConsumerState<StockLedgerScreen> {
     }
 
     List<StockModel> stock = const [];
-    if (normalized == 'out' ||
+    if (normalized == 'in' ||
+        normalized == 'out' ||
         normalized == 'adjustment' ||
         normalized == 'transfer') {
       try {
         stock = await ref
             .read(inventoryRepositoryProvider)
-            .getStock();
+            .getStock(approvedOnly: false);
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1622,13 +1624,25 @@ class _MovementSheetState extends State<_MovementSheet> {
   bool get _isTransfer => widget.type == 'transfer';
   bool get _isAdjustment => widget.type == 'adjustment';
   bool get _isStockOut => widget.type == 'out';
+  bool get _isStockIn => widget.type == 'in';
+
+  List<WarehouseModel> get _warehouseOptions => _isStockIn
+      ? warehousesAssignedToItem(_itemId, widget.warehouses, widget.stock)
+      : widget.warehouses;
 
   @override
   void initState() {
     super.initState();
 
     _itemId = widget.items.first.id;
-    _warehouseId = widget.warehouses.first.id;
+    final assigned = warehousesAssignedToItem(
+      _itemId,
+      widget.warehouses,
+      widget.stock,
+    );
+    _warehouseId = _isStockIn
+        ? (assigned.isNotEmpty ? assigned.first.id : widget.warehouses.first.id)
+        : widget.warehouses.first.id;
 
     if (_isTransfer && widget.warehouses.length > 1) {
       _toWarehouseId = widget.warehouses[1].id;
@@ -1948,36 +1962,59 @@ class _MovementSheetState extends State<_MovementSheet> {
                   setState(() {
                     _itemId = value;
                     _quantityController.clear();
+                    if (_isStockIn) {
+                      final assigned = warehousesAssignedToItem(
+                        value,
+                        widget.warehouses,
+                        widget.stock,
+                      );
+                      _warehouseId = assigned.isNotEmpty
+                          ? assigned.first.id
+                          : widget.warehouses.first.id;
+                    }
                   });
                 },
               ),
 
               const SizedBox(height: 12),
 
-              _buildDropdown<String>(
-                context: context,
-                label: _isTransfer ? 'From Warehouse *' : 'Warehouse *',
-                value: _warehouseId,
-                icon: Icons.warehouse_outlined,
-                items: widget.warehouses
-                    .map(
-                      (warehouse) => DropdownMenuItem<String>(
-                        value: warehouse.id,
-                        child: Text(
-                          warehouse.name,
-                          overflow: TextOverflow.ellipsis,
+              if (_isStockIn && _warehouseOptions.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'This item is not assigned to any warehouse yet.',
+                    style: TextStyle(color: scheme.error),
+                  ),
+                )
+              else
+                _buildDropdown<String>(
+                  context: context,
+                  label: _isTransfer ? 'From Warehouse *' : 'Warehouse *',
+                  value: _warehouseOptions.any((w) => w.id == _warehouseId)
+                      ? _warehouseId
+                      : (_warehouseOptions.isNotEmpty
+                          ? _warehouseOptions.first.id
+                          : _warehouseId),
+                  icon: Icons.warehouse_outlined,
+                  items: _warehouseOptions
+                      .map(
+                        (warehouse) => DropdownMenuItem<String>(
+                          value: warehouse.id,
+                          child: Text(
+                            warehouse.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _warehouseId = value;
-                    _quantityController.clear();
-                  });
-                },
-              ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _warehouseId = value;
+                      _quantityController.clear();
+                    });
+                  },
+                ),
 
               if (_isTransfer) ...[
                 const SizedBox(height: 12),
@@ -2012,7 +2049,7 @@ class _MovementSheetState extends State<_MovementSheet> {
                 ),
               ],
 
-              if (_isStockOut || _isTransfer || _isAdjustment) ...[
+              if (_isStockIn || _isStockOut || _isTransfer || _isAdjustment) ...[
                 const SizedBox(height: 10),
                 _isTransfer
                     ? _buildWarehouseStockPanel(context)

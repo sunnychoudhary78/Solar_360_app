@@ -14,6 +14,7 @@ import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:solar_sales/shared/widgets/warehouse_field.dart';
 
 import '../../data/models/item_model.dart';
+import '../providers/item_category_providers.dart';
 import '../providers/item_providers.dart';
 
 class ItemFormScreen extends ConsumerStatefulWidget {
@@ -248,22 +249,10 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  DropdownButtonFormField<String>(
+                  _CategoryField(
                     value: _category,
-                    decoration: const InputDecoration(labelText: 'Category *'),
-                    items: ItemCategories.options
-                        .map(
-                          (c) => DropdownMenuItem(
-                            value: c.value,
-                            child: Text(c.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: readOnly
-                        ? null
-                        : (v) => setState(() => _category = v),
-                    validator: (v) =>
-                        v == null || v.isEmpty ? 'Select a category' : null,
+                    readOnly: readOnly,
+                    onChanged: (v) => setState(() => _category = v),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextFormField(
@@ -423,6 +412,70 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CategoryField extends ConsumerWidget {
+  final String? value;
+  final bool readOnly;
+  final ValueChanged<String?> onChanged;
+
+  const _CategoryField({
+    required this.value,
+    required this.readOnly,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categoriesAsync = ref.watch(itemCategoriesProvider);
+
+    return categoriesAsync.when(
+      loading: () => DropdownButtonFormField<String>(
+        value: value,
+        decoration: const InputDecoration(labelText: 'Category *'),
+        items: const [],
+        onChanged: null,
+      ),
+      error: (_, __) => DropdownButtonFormField<String>(
+        value: value,
+        decoration: const InputDecoration(labelText: 'Category *'),
+        items: ItemCategories.options
+            .map(
+              (c) => DropdownMenuItem(
+                value: c.value,
+                child: Text(c.label),
+              ),
+            )
+            .toList(),
+        onChanged: readOnly ? null : onChanged,
+        validator: (v) =>
+            v == null || v.isEmpty ? 'Select a category' : null,
+      ),
+      data: (allCategories) {
+        final options = selectableItemCategories(
+          allCategories,
+          currentValue: value,
+        );
+        return DropdownButtonFormField<String>(
+          value: value,
+          decoration: const InputDecoration(labelText: 'Category *'),
+          items: options
+              .map(
+                (c) => DropdownMenuItem(
+                  value: c.value,
+                  child: Text(
+                    c.isActive ? c.label : '${c.label} (hidden)',
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: readOnly ? null : onChanged,
+          validator: (v) =>
+              v == null || v.isEmpty ? 'Select a category' : null,
+        );
+      },
     );
   }
 }

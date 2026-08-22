@@ -51,17 +51,27 @@ class _PartyAddressEditorState extends State<PartyAddressEditor> {
   @override
   void didUpdateWidget(covariant PartyAddressEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.party != widget.party) {
-      _name.text = widget.party.name;
-      _address.text = widget.party.address;
-      _city.text = widget.party.city;
-      _state.text = widget.party.state;
-      _pincode.text = widget.party.pincode;
-      _gst.text = widget.party.gstNumber;
-      _aadhar.text = widget.party.aadharNumber;
-      _phone.text = widget.party.phone;
-      _email.text = widget.party.email;
-    }
+    if (oldWidget.party == widget.party) return;
+    _syncController(_name, widget.party.name);
+    _syncController(_address, widget.party.address);
+    _syncController(_city, widget.party.city);
+    _syncController(_state, widget.party.state);
+    _syncController(_pincode, widget.party.pincode);
+    _syncController(_gst, widget.party.gstNumber);
+    _syncController(_aadhar, widget.party.aadharNumber);
+    _syncController(_phone, widget.party.phone);
+    _syncController(_email, widget.party.email);
+  }
+
+  void _syncController(TextEditingController controller, String value) {
+    if (controller.text == value) return;
+    final offset = controller.selection.baseOffset;
+    controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(
+        offset: offset.clamp(0, value.length),
+      ),
+    );
   }
 
   @override
@@ -81,15 +91,15 @@ class _PartyAddressEditorState extends State<PartyAddressEditor> {
   void _emit() {
     widget.onChanged(
       PartyAddressModel(
-        name: _name.text.trim(),
-        address: _address.text.trim(),
-        city: _city.text.trim(),
-        state: _state.text.trim(),
-        pincode: _pincode.text.trim(),
-        gstNumber: _gst.text.trim(),
+        name: _name.text,
+        address: _address.text,
+        city: _city.text,
+        state: _state.text,
+        pincode: _pincode.text,
+        gstNumber: _gst.text,
         aadharNumber: _aadhar.text.replaceAll(RegExp(r'\D'), ''),
-        phone: _phone.text.trim(),
-        email: _email.text.trim(),
+        phone: _phone.text,
+        email: _email.text,
       ),
     );
   }

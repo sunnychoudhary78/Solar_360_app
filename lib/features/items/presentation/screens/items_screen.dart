@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
-import 'package:solar_sales/shared/constants/item_categories.dart';
 import 'package:solar_sales/shared/constants/item_units.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -13,6 +12,7 @@ import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:solar_sales/shared/widgets/premium_ui.dart';
 
+import '../providers/item_category_providers.dart';
 import '../providers/item_providers.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
@@ -52,6 +52,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(itemListProvider);
     final authState = ref.watch(authProvider);
+    final categories = ref.watch(itemCategoriesProvider).value;
     final canCreate = authState.hasPermission('item.create');
     final canApprove = authState.hasPermission('item.approve');
     final scheme = Theme.of(context).colorScheme;
@@ -168,6 +169,10 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                                 final item = state.items[index];
                                 return _ItemTileCard(
                                   item: item,
+                                  categoryLabel: itemCategoryLabel(
+                                    categories,
+                                    item.category,
+                                  ),
                                   onTap: () => Navigator.pushNamed(
                                     context,
                                     '/items/detail',
@@ -186,10 +191,12 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
 
 class _ItemTileCard extends StatelessWidget {
   final dynamic item;
+  final String categoryLabel;
   final VoidCallback onTap;
 
   const _ItemTileCard({
     required this.item,
+    required this.categoryLabel,
     required this.onTap,
   });
 
@@ -230,7 +237,7 @@ class _ItemTileCard extends StatelessWidget {
               if (item.category != null)
                 _MetaChip(
                   icon: Icons.category_outlined,
-                  label: ItemCategories.labelFor(item.category),
+                  label: categoryLabel,
                 ),
               if (item.sku != null)
                 _MetaChip(
