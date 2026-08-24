@@ -393,25 +393,11 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                           setState(() => _paymentMode = v),
                     ),
                     const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Text(
-                          'Line Items',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        OutlinedButton.icon(
-                          onPressed: () => setState(() {
-                            final line = _LineDraft();
-                            _attachLineListeners(line);
-                            _lines.add(line);
-                          }),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Add Item'),
-                        ),
-                      ],
+                    Text(
+                      'Line Items',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     itemsAsync.when(
@@ -480,12 +466,23 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                     const SizedBox(height: 28),
                     SizedBox(
                       width: double.infinity,
-                      height: 48,
                       child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                        ),
                         onPressed: _loading ? null : _create,
                         child: const Text(
                           'Create invoice',
-                          style: TextStyle(fontSize: 16),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            height: 1.2,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),

@@ -107,10 +107,13 @@ class InvoiceApiService {
     return InvoiceModel.fromJson(Map<String, dynamic>.from(res as Map));
   }
 
-  Future<StockCheckResult> stockCheck(String id, String warehouseId) async {
+  Future<StockCheckResult> stockCheck(String id, {String? warehouseId}) async {
     final res = await _api.get(
       ApiEndpoints.invoiceStockCheck(id),
-      queryParams: {'warehouseId': warehouseId},
+      queryParams: {
+        if (warehouseId != null && warehouseId.isNotEmpty)
+          'warehouseId': warehouseId,
+      },
     );
     return StockCheckResult.fromJson(Map<String, dynamic>.from(res as Map));
   }

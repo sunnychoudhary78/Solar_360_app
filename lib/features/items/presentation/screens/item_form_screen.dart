@@ -161,6 +161,9 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
               _fill(item);
               setState(() => _initialized = true);
             });
+            // Wait until saved fields (including category) are applied so
+            // DropdownButtonFormField initialValue is not null on first paint.
+            return const Scaffold(body: LoadingState());
           }
           return _buildForm();
         },
@@ -441,11 +444,14 @@ class _CategoryField extends ConsumerWidget {
     final categoriesAsync = ref.watch(itemCategoriesProvider);
 
     return categoriesAsync.when(
-      loading: () => DropdownButtonFormField<String>(
-        value: value,
+      loading: () => InputDecorator(
         decoration: const InputDecoration(labelText: 'Category *'),
-        items: const [],
-        onChanged: null,
+        child: Text(
+          (value != null && value!.isNotEmpty) ? value! : 'Loading…',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
       ),
       error: (e, _) => InputDecorator(
         decoration: InputDecoration(
@@ -470,10 +476,18 @@ class _CategoryField extends ConsumerWidget {
           allCategories,
           currentValue: value,
         );
-        final effectiveValue =
-            options.any((c) => c.value == value) ? value : null;
+        final matched = matchItemCategory(options, value);
+        final effectiveValue = matched?.value;
+        if (effectiveValue != null &&
+            value != null &&
+            value != effectiveValue) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            onChanged(effectiveValue);
+          });
+        }
         return DropdownButtonFormField<String>(
-          value: effectiveValue,
+          key: ValueKey('item-category-$effectiveValue'),
+          initialValue: effectiveValue,
           decoration: const InputDecoration(labelText: 'Category *'),
           items: options
               .map(

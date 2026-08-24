@@ -22,6 +22,8 @@ import 'package:solar_sales/shared/widgets/rejection_banner.dart';
 
 import '../../data/models/invoice_model.dart';
 import '../providers/invoice_providers.dart';
+import '../utils/invoice_warehouse_stock.dart';
+import '../widgets/invoice_stock_plan_panel.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
   final String invoiceId;
@@ -108,7 +110,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
             ),
           if (canApprove && isPending) ...[
             FilledButton(
-              onPressed: () => _approve(context, ref),
+              onPressed: () => _approve(context, ref, inv),
               child: const Text('Approve'),
             ),
             OutlinedButton(
@@ -257,7 +259,43 @@ class InvoiceDetailScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _approve(BuildContext context, WidgetRef ref) async {
+  Future<StockCheckResult> _stockCheckForPreferredWarehouse(
+    WidgetRef ref,
+    InvoiceModel invoice,
+    List<WarehouseModel> warehouses,
+    String? preferredWarehouseId,
+  ) async {
+    await ref.read(stockListProvider.notifier).refresh();
+    final stockRows = ref.read(stockListProvider).items;
+    final local = buildInvoiceDeductionPlan(
+      items: invoice.items,
+      stockRows: stockRows,
+      warehouses: warehouses,
+      preferredWarehouseId: preferredWarehouseId,
+    );
+    try {
+      final api = await ref.read(invoiceRepositoryProvider).stockCheck(
+            invoice.id,
+            warehouseId: preferredWarehouseId,
+          );
+      return mergeDeductionPlans(
+        local: local,
+        api: api,
+        stockRows: stockRows,
+      );
+    } catch (e) {
+      if (stockRows.isNotEmpty && invoice.items.isNotEmpty) {
+        return enrichAllocationAvailability(local, stockRows);
+      }
+      return StockCheckResult(ok: false, message: cleanError(e));
+    }
+  }
+
+  Future<void> _approve(
+    BuildContext context,
+    WidgetRef ref,
+    InvoiceModel invoice,
+  ) async {
     late final List<WarehouseModel> warehouses;
     try {
       warehouses = await ref.read(warehousesProvider.future);
@@ -276,7 +314,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
       return;
     }
 
-    String? warehouseId = warehouses.first.id;
+    String? preferredWarehouseId = warehouses.first.id;
     StockCheckResult? stockCheck;
 
     final confirmed = await showModalBottomSheet<bool>(
@@ -285,80 +323,107 @@ class InvoiceDetailScreen extends ConsumerWidget {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            Future<void> runCheck(String? id) async {
+              try {
+                final result = await _stockCheckForPreferredWarehouse(
+                  ref,
+                  invoice,
+                  warehouses,
+                  id,
+                );
+                setModalState(() => stockCheck = result);
+              } catch (e) {
+                setModalState(
+                  () => stockCheck = StockCheckResult(
+                    ok: false,
+                    message: cleanError(e),
+                  ),
+                );
+              }
+            }
+
+            if (stockCheck == null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                runCheck(preferredWarehouseId);
+              });
+            }
+
+            final theme = Theme.of(context);
+
             return Padding(
               padding: EdgeInsets.only(
                 left: 16,
                 right: 16,
                 top: 16,
-                bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+                bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Approve invoice',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: warehouseId,
-                    decoration: const InputDecoration(labelText: 'Warehouse *'),
-                    items: warehouses
-                        .map(
-                          (w) => DropdownMenuItem(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Approve invoice',
+                      style: theme.textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Stock is deducted from the warehouse that holds each item. '
+                      'Choose a preferred warehouse to use first when it has stock.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String?>(
+                      initialValue: preferredWarehouseId,
+                      decoration: const InputDecoration(
+                        labelText: 'Preferred warehouse (optional)',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('No preference'),
+                        ),
+                        ...warehouses.map(
+                          (w) => DropdownMenuItem<String?>(
                             value: w.id,
                             child: Text(w.name),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (v) async {
-                      setModalState(() {
-                        warehouseId = v;
-                        stockCheck = null;
-                      });
-                      if (v == null) return;
-                      try {
-                        final result = await ref
-                            .read(invoiceRepositoryProvider)
-                            .stockCheck(invoiceId, v);
-                        setModalState(() => stockCheck = result);
-                      } catch (e) {
-                        setModalState(
-                          () => stockCheck = StockCheckResult(
-                            ok: false,
-                            message: cleanError(e),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  if (stockCheck != null) ...[
-                    Text(
-                      stockCheck!.ok
-                          ? 'Stock available'
-                          : (stockCheck!.message ?? 'Insufficient stock'),
-                      style: TextStyle(
-                        color: stockCheck!.ok ? Colors.green : Colors.red,
-                      ),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        setModalState(() {
+                          preferredWarehouseId = v;
+                          stockCheck = null;
+                        });
+                        runCheck(v);
+                      },
                     ),
-                    ...stockCheck!.lines.map(
-                      (l) => Text(
-                        '${l.itemName ?? 'Item'}: need ${l.requiredQty}, have ${l.availableQty}',
+                    const SizedBox(height: 12),
+                    if (stockCheck == null)
+                      const LinearProgressIndicator()
+                    else
+                      InvoiceStockPlanPanel(stockCheck: stockCheck!),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 14,
+                        ),
+                      ),
+                      onPressed: stockCheck == null || !stockCheck!.ok
+                          ? null
+                          : () => Navigator.pop(context, true),
+                      child: const Text(
+                        'Approve & deduct stock',
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed:
-                        warehouseId == null ||
-                            (stockCheck != null && !stockCheck!.ok)
-                        ? null
-                        : () => Navigator.pop(context, true),
-                    child: const Text('Approve & deduct stock'),
-                  ),
-                ],
+                ),
               ),
             );
           },
@@ -366,18 +431,21 @@ class InvoiceDetailScreen extends ConsumerWidget {
       },
     );
 
-    if (confirmed != true || warehouseId == null) return;
+    if (confirmed != true) return;
 
-    if (stockCheck == null) {
+    if (stockCheck == null || !stockCheck!.ok) {
       try {
-        stockCheck = await ref
-            .read(invoiceRepositoryProvider)
-            .stockCheck(invoiceId, warehouseId!);
+        stockCheck = await _stockCheckForPreferredWarehouse(
+          ref,
+          invoice,
+          warehouses,
+          preferredWarehouseId,
+        );
       } catch (e) {
         ref.read(globalLoadingProvider.notifier).showApiError(e);
         return;
       }
-      if (stockCheck != null && !stockCheck!.ok) {
+      if (!stockCheck!.ok) {
         ref
             .read(globalLoadingProvider.notifier)
             .showError(stockCheck!.message ?? 'Insufficient stock');
@@ -385,11 +453,20 @@ class InvoiceDetailScreen extends ConsumerWidget {
       }
     }
 
+    // Approve API still requires a warehouse id; use preferred or first
+    // allocation / first active warehouse.
+    final approveWarehouseId = preferredWarehouseId ??
+        stockCheck!.allocations
+            .map((a) => a.warehouseId)
+            .whereType<String>()
+            .firstOrNull ??
+        warehouses.first.id;
+
     ref.read(globalLoadingProvider.notifier).showLoading('Approving...');
     try {
       await ref
           .read(invoiceRepositoryProvider)
-          .approve(invoiceId, warehouseId!);
+          .approve(invoiceId, approveWarehouseId);
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showSuccess('Invoice approved');
       ref.invalidate(invoiceDetailProvider(invoiceId));

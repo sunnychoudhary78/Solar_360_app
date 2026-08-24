@@ -18,6 +18,27 @@ class LeadApiService {
     return parts.isEmpty ? path : parts.last;
   }
 
+  bool _isExistingRemotePath(String path) {
+    final normalized = path.trim().replaceAll('\\', '/');
+    if (normalized.isEmpty) return false;
+    final lower = normalized.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return true;
+    }
+    if (lower.startsWith('/api/uploads/') ||
+        lower.startsWith('api/uploads/') ||
+        lower.startsWith('/uploads/') ||
+        lower.startsWith('uploads/') ||
+        lower.startsWith('leads/')) {
+      return true;
+    }
+    if (normalized.startsWith('/') ||
+        RegExp(r'^[a-zA-Z]:[/\\]').hasMatch(normalized)) {
+      return false;
+    }
+    return true;
+  }
+
   Future<void> createLead(
     Map<String, dynamic> data, {
     Map<String, String>? singleFilePaths,
@@ -80,60 +101,64 @@ class LeadApiService {
     Map<String, dynamic> formDataMap, {
     List<Map<String, String>>? additionalImageEntries,
     List<Map<String, String>>? additionalDocumentEntries,
+    bool alwaysSendMeta = false,
   }) async {
-    final imageEntries = (additionalImageEntries ?? [])
-        .where(
-          (item) =>
-              (item['path'] ?? '').trim().isNotEmpty &&
-              (item['title'] ?? '').trim().isNotEmpty,
-        )
-        .toList();
+    Future<void> attach({
+      required String metaField,
+      required String filesField,
+      required List<Map<String, String>>? entries,
+    }) async {
+      final items = (entries ?? [])
+          .where(
+            (item) =>
+                (item['title'] ?? '').trim().isNotEmpty &&
+                (item['path'] ?? '').trim().isNotEmpty,
+          )
+          .toList();
 
-    if (imageEntries.isNotEmpty) {
-      formDataMap['additional_images_entries_json'] = jsonEncode(
-        imageEntries
-            .map(
-              (item) => {'title': item['title']!.trim(), 'existingPath': null},
-            )
-            .toList(),
-      );
+      if (items.isEmpty) {
+        // On edit, send [] so intentional clears persist; otherwise omit.
+        if (alwaysSendMeta) {
+          formDataMap[metaField] = '[]';
+        }
+        return;
+      }
 
-      formDataMap['additional_images_files'] = await Future.wait(
-        imageEntries.map(
-          (item) => MultipartFile.fromFile(
-            item['path']!.trim(),
-            filename: _fileName(item['path']!.trim()),
-          ),
-        ),
-      );
+      final meta = <Map<String, dynamic>>[];
+      final files = <MultipartFile>[];
+
+      for (final item in items) {
+        final title = item['title']!.trim();
+        final path = item['path']!.trim();
+        if (_isExistingRemotePath(path)) {
+          meta.add({'title': title, 'existingPath': path});
+        } else {
+          meta.add({'title': title, 'existingPath': null});
+          files.add(
+            await MultipartFile.fromFile(
+              path,
+              filename: _fileName(path),
+            ),
+          );
+        }
+      }
+
+      formDataMap[metaField] = jsonEncode(meta);
+      if (files.isNotEmpty) {
+        formDataMap[filesField] = files;
+      }
     }
 
-    final documentEntries = (additionalDocumentEntries ?? [])
-        .where(
-          (item) =>
-              (item['path'] ?? '').trim().isNotEmpty &&
-              (item['title'] ?? '').trim().isNotEmpty,
-        )
-        .toList();
-
-    if (documentEntries.isNotEmpty) {
-      formDataMap['additional_documents_entries_json'] = jsonEncode(
-        documentEntries
-            .map(
-              (item) => {'title': item['title']!.trim(), 'existingPath': null},
-            )
-            .toList(),
-      );
-
-      formDataMap['additional_documents_files'] = await Future.wait(
-        documentEntries.map(
-          (item) => MultipartFile.fromFile(
-            item['path']!.trim(),
-            filename: _fileName(item['path']!.trim()),
-          ),
-        ),
-      );
-    }
+    await attach(
+      metaField: 'additional_images_entries_json',
+      filesField: 'additional_images_files',
+      entries: additionalImageEntries,
+    );
+    await attach(
+      metaField: 'additional_documents_entries_json',
+      filesField: 'additional_documents_files',
+      entries: additionalDocumentEntries,
+    );
   }
 
   Future<List<LeadModel>> getAllLeads() async {
@@ -234,8 +259,12 @@ class LeadApiService {
     if (singleFilePaths != null) {
       for (final entry in singleFilePaths.entries) {
         final filePath = entry.value.trim();
-        if (filePath.isEmpty) continue;
-        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+        if (filePath.isEmpty) {
+          // Explicit clear of a previously saved single-slot file.
+          formDataMap[entry.key] = '';
+          continue;
+        }
+        if (_isExistingRemotePath(filePath)) {
           continue;
         }
 
@@ -248,7 +277,7 @@ class LeadApiService {
 
     final registrationFiles = (registrationImagePaths ?? [])
         .map((path) => path.trim())
-        .where((path) => path.isNotEmpty)
+        .where((path) => path.isNotEmpty && !_isExistingRemotePath(path))
         .toList();
     if (registrationFiles.isNotEmpty) {
       formDataMap['registration_images'] = await Future.wait(
@@ -262,6 +291,7 @@ class LeadApiService {
       formDataMap,
       additionalImageEntries: additionalImageEntries,
       additionalDocumentEntries: additionalDocumentEntries,
+      alwaysSendMeta: true,
     );
 
     try {

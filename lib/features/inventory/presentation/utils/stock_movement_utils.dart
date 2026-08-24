@@ -64,10 +64,13 @@ int availableQtyAtWarehouse(
   List<StockModel> stockLevels,
 ) {
   if (itemId == null || warehouseId == null) return 0;
+  var total = 0;
+  var found = false;
   for (final row in stockLevels) {
     if (row.itemId == itemId && row.warehouseId == warehouseId) {
-      return row.currentQuantity;
+      found = true;
+      total += row.currentQuantity;
     }
   }
-  return 0;
+  return found ? total : 0;
 }

@@ -19,6 +19,22 @@ final itemCategoriesProvider =
     FutureProvider<List<ItemCategoryModel>>((ref) async {
   return ref.watch(itemCategoryApiServiceProvider).list(includeInactive: true);
 });
+
+/// Match a saved item category by stored value, or by label as a fallback.
+ItemCategoryModel? matchItemCategory(
+  Iterable<ItemCategoryModel> categories,
+  String? raw,
+) {
+  if (raw == null || raw.isEmpty) return null;
+  for (final category in categories) {
+    if (category.value == raw) return category;
+  }
+  for (final category in categories) {
+    if (category.label == raw) return category;
+  }
+  return null;
+}
+
 /// Active categories only — for Item Master / create-item dropdowns.
 List<ItemCategoryModel> selectableItemCategories(
   List<ItemCategoryModel> all, {
@@ -27,12 +43,11 @@ List<ItemCategoryModel> selectableItemCategories(
   final active = all.where((c) => c.isActive).toList();
   if (currentValue == null || currentValue.isEmpty) return active;
 
-  final hasCurrent = active.any((c) => c.value == currentValue);
-  if (hasCurrent) return active;
+  final current = matchItemCategory(all, currentValue);
+  if (current == null) return active;
+  if (active.any((c) => c.value == current.value)) return active;
 
   // Keep a previously saved (now hidden) category selectable while editing.
-  final current = all.where((c) => c.value == currentValue).firstOrNull;
-  if (current == null) return active;
   return [...active, current];
 }
 

@@ -8,6 +8,7 @@ import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
 import 'package:solar_sales/features/shell/presentation/nav_destinations.dart';
+import 'package:solar_sales/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:solar_sales/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:solar_sales/shared/constants/role_taglines.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
@@ -16,6 +17,7 @@ import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/home/shared_home_layout.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
+import 'package:solar_sales/shared/widgets/unread_badge.dart';
 
 import '../../data/models/dashboard_model.dart';
 import '../providers/dashboard_providers.dart';
@@ -27,11 +29,34 @@ String _timeGreeting() {
   return 'Good evening';
 }
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  bool _isRefreshing = false;
+
+  Future<void> _refreshDashboard() async {
+    if (_isRefreshing) return;
+
+    setState(() => _isRefreshing = true);
+    try {
+      await Future.wait([
+        ref.refresh(dashboardProvider.future),
+        ref.refresh(unreadNotificationCountProvider.future),
+      ]);
+    } catch (_) {
+      // Keep previous UI; pull / button can be retried.
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(dashboardProvider);
     final auth = ref.watch(authProvider);
     final scheme = Theme.of(context).colorScheme;
@@ -78,34 +103,47 @@ class DashboardScreen extends ConsumerWidget {
         subtitle: '${_timeGreeting()}, $firstName',
         largeTitle: true,
         actions: [
-          IconButton(
-            tooltip: 'Notifications',
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const NotificationsScreen(),
-                ),
-              );
-            },
+          UnreadBadge(
+            child: IconButton(
+              tooltip: 'Notifications',
+              icon: const Icon(Icons.notifications_outlined),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const NotificationsScreen(),
+                  ),
+                );
+                ref.invalidate(unreadNotificationCountProvider);
+              },
+            ),
           ),
           IconButton(
             tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.invalidate(dashboardProvider),
+            onPressed: _isRefreshing ? null : _refreshDashboard,
+            icon: _isRefreshing
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: scheme.primary,
+                    ),
+                  )
+                : const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
       body: async.when(
+        skipLoadingOnRefresh: true,
         loading: () => const LoadingState(),
         error: (e, _) => ErrorState(
           message: cleanError(e),
-          onRetry: () => ref.invalidate(dashboardProvider),
+          onRetry: _refreshDashboard,
         ),
         data: (data) => SharedHomeLayout(
           header: header,
           greeting: _timeGreeting(),
-          onRefresh: () async => ref.invalidate(dashboardProvider),
+          onRefresh: _refreshDashboard,
           child: _BillBookContent(
             data: data,
             auth: auth,

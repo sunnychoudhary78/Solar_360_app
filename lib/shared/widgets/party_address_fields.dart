@@ -41,7 +41,7 @@ class _PartyAddressEditorState extends State<PartyAddressEditor> {
     _address = TextEditingController(text: widget.party.address);
     _city = TextEditingController(text: widget.party.city);
     _state = TextEditingController(text: widget.party.state);
-    _pincode = TextEditingController(text: widget.party.pincode);
+    _pincode = TextEditingController(text: _normalizedPincode(widget.party.pincode));
     _gst = TextEditingController(text: widget.party.gstNumber);
     _aadhar = TextEditingController(text: widget.party.aadharNumber);
     _phone = TextEditingController(text: widget.party.phone);
@@ -56,7 +56,7 @@ class _PartyAddressEditorState extends State<PartyAddressEditor> {
     _syncController(_address, widget.party.address);
     _syncController(_city, widget.party.city);
     _syncController(_state, widget.party.state);
-    _syncController(_pincode, widget.party.pincode);
+    _syncController(_pincode, _normalizedPincode(widget.party.pincode));
     _syncController(_gst, widget.party.gstNumber);
     _syncController(_aadhar, widget.party.aadharNumber);
     _syncController(_phone, widget.party.phone);
@@ -72,6 +72,13 @@ class _PartyAddressEditorState extends State<PartyAddressEditor> {
         offset: offset.clamp(0, value.length),
       ),
     );
+  }
+
+  /// Indian PIN codes are 6 digits; ignore non-digits and extra length.
+  String _normalizedPincode(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.length <= 6) return digits;
+    return digits.substring(0, 6);
   }
 
   @override
@@ -95,7 +102,7 @@ class _PartyAddressEditorState extends State<PartyAddressEditor> {
         address: _address.text,
         city: _city.text,
         state: _state.text,
-        pincode: _pincode.text,
+        pincode: _normalizedPincode(_pincode.text),
         gstNumber: _gst.text,
         aadharNumber: _aadhar.text.replaceAll(RegExp(r'\D'), ''),
         phone: _phone.text,
@@ -156,6 +163,11 @@ class _PartyAddressEditorState extends State<PartyAddressEditor> {
                 enabled: !widget.readOnly,
                 decoration: const InputDecoration(labelText: 'Pincode'),
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+                validator: AppValidators.pincode,
                 onChanged: (_) => _emit(),
               ),
             ),

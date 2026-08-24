@@ -6,6 +6,7 @@ import 'package:solar_sales/features/auth/presentation/providers/auth_provider.d
 import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
+import 'package:solar_sales/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:solar_sales/features/shell/presentation/nav_destinations.dart';
 import 'package:solar_sales/features/workflow/presentation/screens/workflow_team_screen.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
@@ -34,13 +35,20 @@ class SolarHomeScreen extends ConsumerWidget {
   }
 }
 
-class _SalesAdminHome extends ConsumerWidget {
+class _SalesAdminHome extends ConsumerStatefulWidget {
   final AuthState auth;
 
   const _SalesAdminHome({required this.auth});
 
+  @override
+  ConsumerState<_SalesAdminHome> createState() => _SalesAdminHomeState();
+}
+
+class _SalesAdminHomeState extends ConsumerState<_SalesAdminHome> {
+  bool _isRefreshing = false;
+
   String get _deskLabel {
-    switch (auth.workflowRoleKey) {
+    switch (widget.auth.workflowRoleKey) {
       case 'Sales':
       case 'Sales Manager':
         return 'Sales Desk';
@@ -52,8 +60,25 @@ class _SalesAdminHome extends ConsumerWidget {
     }
   }
 
+  Future<void> _refreshDashboard() async {
+    if (_isRefreshing) return;
+
+    setState(() => _isRefreshing = true);
+    try {
+      await Future.wait([
+        ref.refresh(allLeadsProvider.future),
+        ref.refresh(unreadNotificationCountProvider.future),
+      ]);
+    } catch (_) {
+      // Keep previous UI; pull / button can be retried.
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final auth = widget.auth;
     final scheme = Theme.of(context).colorScheme;
     final firstName = auth.profile?.name.split(' ').first ?? 'there';
 
@@ -93,18 +118,24 @@ class _SalesAdminHome extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.invalidate(allLeadsProvider),
+            onPressed: _isRefreshing ? null : _refreshDashboard,
+            icon: _isRefreshing
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: scheme.primary,
+                    ),
+                  )
+                : const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
       body: SharedHomeLayout(
         header: header,
         greeting: _timeGreeting(),
-        onRefresh: () async {
-          ref.invalidate(allLeadsProvider);
-          await ref.read(allLeadsProvider.future);
-        },
+        onRefresh: _refreshDashboard,
         child: _SolarHomeContent(auth: auth),
       ),
     );
@@ -134,10 +165,7 @@ class _SolarHomeContent extends ConsumerWidget {
       auth.hasPermission,
     );
 
-    final leadCount = leadsAsync.maybeWhen(
-      data: (leads) => leads.length,
-      orElse: () => 0,
-    );
+    final leadCount = leadsAsync.asData?.value.length ?? 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -331,14 +359,11 @@ class _SolarHomeContent extends ConsumerWidget {
           onDestination: (dest) => navigateDestination(context, dest, tabs),
         ).appFadeSlide(index: 3),
 
-        leadsAsync.when(
-          loading: () => const Padding(
+        if (leadsAsync.isLoading && !leadsAsync.hasValue)
+          const Padding(
             padding: EdgeInsets.all(24),
             child: SkeletonList(count: 2),
           ),
-          error: (e, _) => const SizedBox.shrink(),
-          data: (_) => const SizedBox.shrink(),
-        ),
       ],
     );
   }

@@ -1906,6 +1906,12 @@ _ItemStockSummary _itemStockSummary(
   ItemModel item,
   Map<String, _ItemStockSummary> stockByItem,
 ) {
+  // Inventory stock list is current after transfers; item.stockLevels can lag.
+  final live = stockByItem[item.id];
+  if (live != null && (live.total > 0 || live.warehouseCount > 0)) {
+    return live;
+  }
+
   if (item.stockLevels.isNotEmpty) {
     final parsedTotal = item.stockLevels.fold<int>(
       0,
@@ -1924,8 +1930,7 @@ _ItemStockSummary _itemStockSummary(
     }
   }
 
-  return stockByItem[item.id] ??
-      const _ItemStockSummary(total: 0, warehouseCount: 0);
+  return live ?? const _ItemStockSummary(total: 0, warehouseCount: 0);
 }
 
 int _itemStockAtWarehouse(
@@ -1935,11 +1940,18 @@ int _itemStockAtWarehouse(
 ) {
   if (warehouseId == null || warehouseId.isEmpty) return 0;
 
+  final hasLiveRow = stockRows.any(
+    (row) => row.itemId == item.id && row.warehouseId == warehouseId,
+  );
+  if (hasLiveRow) {
+    return availableQtyAtWarehouse(item.id, warehouseId, stockRows);
+  }
+
   for (final level in item.stockLevels) {
     if (level.warehouseId == warehouseId) {
       return level.currentQuantity;
     }
   }
 
-  return availableQtyAtWarehouse(item.id, warehouseId, stockRows);
+  return 0;
 }

@@ -178,29 +178,99 @@ class InvoiceModel {
 class StockCheckResult {
   final bool ok;
   final List<StockCheckLine> lines;
+  final List<StockAllocationLine> allocations;
   final String? message;
 
   const StockCheckResult({
     required this.ok,
     this.lines = const [],
+    this.allocations = const [],
     this.message,
   });
 
   factory StockCheckResult.fromJson(Map<String, dynamic> json) {
-    final raw = json['shortages'] ?? json['lines'] ?? json['items'] ?? [];
-    final lines = raw is List
-        ? raw
+    final shortageRaw = json['shortages'] ?? json['lines'] ?? json['items'];
+    final lines = shortageRaw is List
+        ? shortageRaw
               .whereType<Map>()
               .map((e) => StockCheckLine.fromJson(Map<String, dynamic>.from(e)))
               .toList()
         : <StockCheckLine>[];
+
+    final allocationRaw = json['allocations'];
+    final allocations = allocationRaw is List
+        ? allocationRaw
+              .whereType<Map>()
+              .map(
+                (e) =>
+                    StockAllocationLine.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList()
+        : <StockAllocationLine>[];
+
+    final okFlag = json['ok'] ?? json['sufficient'] ?? json['success'];
+    final ok = okFlag != null
+        ? asBool(okFlag)
+        : lines.isEmpty && (allocations.isNotEmpty || shortageRaw == null);
+
     return StockCheckResult(
-      ok: asBool(
-        json['ok'] ?? json['sufficient'] ?? json['success'],
-        lines.isEmpty,
-      ),
+      ok: ok,
       message: json['message']?.toString(),
       lines: lines,
+      allocations: allocations,
+    );
+  }
+}
+
+class WarehouseStockInfo {
+  final String? warehouseId;
+  final String? warehouseName;
+  final int available;
+
+  const WarehouseStockInfo({
+    this.warehouseId,
+    this.warehouseName,
+    this.available = 0,
+  });
+
+  factory WarehouseStockInfo.fromJson(Map<String, dynamic> json) {
+    return WarehouseStockInfo(
+      warehouseId: json['warehouse_id']?.toString(),
+      warehouseName: json['warehouse_name']?.toString(),
+      available: asInt(json['available'] ?? json['quantity']),
+    );
+  }
+}
+
+class StockAllocationLine {
+  final String? itemId;
+  final String? itemName;
+  final String? warehouseId;
+  final String? warehouseName;
+  final int quantity;
+  final int? availableAtWarehouse;
+
+  const StockAllocationLine({
+    this.itemId,
+    this.itemName,
+    this.warehouseId,
+    this.warehouseName,
+    this.quantity = 0,
+    this.availableAtWarehouse,
+  });
+
+  factory StockAllocationLine.fromJson(Map<String, dynamic> json) {
+    return StockAllocationLine(
+      itemId: json['item_id']?.toString(),
+      itemName:
+          json['item_name']?.toString() ??
+          (json['item'] is Map ? json['item']['name']?.toString() : null),
+      warehouseId: json['warehouse_id']?.toString(),
+      warehouseName: json['warehouse_name']?.toString(),
+      quantity: asInt(json['quantity'] ?? json['qty']),
+      availableAtWarehouse: json['available'] == null
+          ? null
+          : asInt(json['available']),
     );
   }
 }
@@ -210,12 +280,14 @@ class StockCheckLine {
   final int requiredQty;
   final int availableQty;
   final bool ok;
+  final List<WarehouseStockInfo> byWarehouse;
 
   const StockCheckLine({
     this.itemName,
     this.requiredQty = 0,
     this.availableQty = 0,
     this.ok = true,
+    this.byWarehouse = const [],
   });
 
   factory StockCheckLine.fromJson(Map<String, dynamic> json) {
@@ -228,6 +300,16 @@ class StockCheckLine {
     final ok = json['ok'] != null
         ? asBool(json['ok'])
         : availableQty >= requiredQty;
+    final byRaw = json['by_warehouse'];
+    final byWarehouse = byRaw is List
+        ? byRaw
+              .whereType<Map>()
+              .map(
+                (e) =>
+                    WarehouseStockInfo.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList()
+        : <WarehouseStockInfo>[];
     return StockCheckLine(
       itemName:
           json['item_name']?.toString() ??
@@ -235,6 +317,7 @@ class StockCheckLine {
       requiredQty: requiredQty,
       availableQty: availableQty,
       ok: ok,
+      byWarehouse: byWarehouse,
     );
   }
 }

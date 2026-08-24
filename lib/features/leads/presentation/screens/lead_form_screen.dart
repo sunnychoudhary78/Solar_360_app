@@ -10,6 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/core/utils/upload_url.dart';
 import 'package:solar_sales/core/widgets/app_message.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
@@ -18,6 +19,7 @@ import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 enum LeadFormMode { basicCreate, completeDetails }
 
@@ -229,50 +231,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     final lead = widget.existingLead;
 
     if (lead != null) {
-      fullName.text = lead.fullName;
-      mobile.text = lead.mobile;
-      email.text = lead.email;
-      address.text = lead.address;
-      city.text = lead.city;
-      state.text = lead.state;
-      pincode.text = lead.pincode;
-      kw.text = lead.loadSectionKw;
-
-      caNumber.text = lead.caNumber;
-      kNumber.text = lead.kNumber;
-      referenceNumber.text = lead.referenceNumber;
-      discom.text = lead.discom;
-
-      geoLocation.text = lead.geoLocation;
-      latitude.text = lead.latitude;
-      longitude.text = lead.longitude;
-
-      bankName.text = lead.bankName;
-      accountNumber.text = lead.accountNumber;
-      ifscCode.text = lead.ifscCode;
-
-      availableShadowFreeArea.text = lead.availableShadowFreeArea;
-      quotationAmount.text = lead.quotationAmount;
-      visitedEmployeeName.text = lead.visitedEmployeeName;
-      visitedEmployeeContact.text = lead.visitedEmployeeContact;
-
-      notes.text = lead.notes;
-      selectedCustomerId = lead.customerId.isEmpty ? null : lead.customerId;
-
-      projectType = lead.projectType.isNotEmpty
-          ? lead.projectType
-          : projectType;
-      source = lead.source.isNotEmpty ? lead.source : source;
-      priority = lead.priority.isNotEmpty ? lead.priority : priority;
-
-      bankAccountType =
-          lead.resolvedBankAccountType ?? bankAccountType;
-      roofLoadBearingCapacity = lead.roofLoadBearingCapacity;
-      shadowFreeRoof = lead.shadowFreeRoof;
-      vendorVisitedSite = lead.vendorVisitedSite;
-      isLeadActive = lead.isActive;
-      _prefillStoredTitledFiles(lead.additionalDocuments, predefinedDocPaths);
-      _prefillStoredTitledFiles(lead.additionalImages, predefinedImagePaths);
+      _applyLeadToForm(lead);
+      // Refresh from API so Edit Details always has current file paths.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshLeadMedia(lead.id);
+      });
     }
 
     if (_isBasicCreate) {
@@ -280,6 +243,90 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         if (mounted) _fetchCurrentLocation();
       });
     }
+  }
+
+  Future<void> _refreshLeadMedia(String leadId) async {
+    try {
+      final fresh = await ref.read(leadRepositoryProvider).getLeadById(leadId);
+      if (!mounted || _isClosing) return;
+      setState(() {
+        _applyLeadMediaOnly(fresh);
+      });
+    } catch (_) {
+      // Keep whatever was already prefilled from existingLead.
+    }
+  }
+
+  void _applyLeadMediaOnly(LeadModel lead) {
+    roofPhotoPath = _nonEmptyPath(lead.roofPhoto);
+    bankClearPhotoPath = _nonEmptyPath(lead.bankClearPhoto);
+    chequePassbookPath = _nonEmptyPath(lead.chequePassbookCopy);
+    preInstallationPhotoPath = _nonEmptyPath(lead.preInstallationPhoto);
+    quotationDocumentPath = _nonEmptyPath(lead.quotationDocument);
+
+    for (final key in predefinedDocPaths.keys) {
+      predefinedDocPaths[key] = null;
+    }
+    for (final key in predefinedImagePaths.keys) {
+      predefinedImagePaths[key] = null;
+    }
+    additionalDocs.clear();
+    additionalImages.clear();
+
+    _prefillStoredTitledFiles(
+      lead.additionalDocuments,
+      predefinedDocPaths,
+      additionalDocs,
+    );
+    _prefillStoredTitledFiles(
+      lead.additionalImages,
+      predefinedImagePaths,
+      additionalImages,
+    );
+  }
+
+  void _applyLeadToForm(LeadModel lead) {
+    fullName.text = lead.fullName;
+    mobile.text = lead.mobile;
+    email.text = lead.email;
+    address.text = lead.address;
+    city.text = lead.city;
+    state.text = lead.state;
+    pincode.text = lead.pincode;
+    kw.text = lead.loadSectionKw;
+
+    caNumber.text = lead.caNumber;
+    kNumber.text = lead.kNumber;
+    referenceNumber.text = lead.referenceNumber;
+    discom.text = lead.discom;
+
+    geoLocation.text = lead.geoLocation;
+    latitude.text = lead.latitude;
+    longitude.text = lead.longitude;
+
+    bankName.text = lead.bankName;
+    accountNumber.text = lead.accountNumber;
+    ifscCode.text = lead.ifscCode;
+
+    availableShadowFreeArea.text = lead.availableShadowFreeArea;
+    quotationAmount.text = lead.quotationAmount;
+    visitedEmployeeName.text = lead.visitedEmployeeName;
+    visitedEmployeeContact.text = lead.visitedEmployeeContact;
+
+    notes.text = lead.notes;
+    selectedCustomerId = lead.customerId.isEmpty ? null : lead.customerId;
+
+    projectType = lead.projectType.isNotEmpty ? lead.projectType : projectType;
+    source = lead.source.isNotEmpty ? lead.source : source;
+    priority = lead.priority.isNotEmpty ? lead.priority : priority;
+
+    bankAccountType = lead.resolvedBankAccountType ?? bankAccountType;
+    roofLoadBearingCapacity = lead.roofLoadBearingCapacity;
+    shadowFreeRoof = lead.shadowFreeRoof;
+    vendorVisitedSite = lead.vendorVisitedSite;
+    isLeadActive = lead.isActive;
+
+    _applyLeadMediaOnly(lead);
   }
 
   @override
@@ -337,6 +384,114 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return parts.isEmpty ? path : parts.last;
   }
 
+  String? _nonEmptyPath(String? value) {
+    final path = value?.trim() ?? '';
+    return path.isEmpty ? null : path;
+  }
+
+  bool _isExistingRemotePath(String path) {
+    final normalized = path.trim().replaceAll('\\', '/');
+    if (normalized.isEmpty) return false;
+    final lower = normalized.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return true;
+    }
+    if (lower.startsWith('/api/uploads/') ||
+        lower.startsWith('api/uploads/') ||
+        lower.startsWith('/uploads/') ||
+        lower.startsWith('uploads/') ||
+        lower.startsWith('leads/')) {
+      return true;
+    }
+    // Absolute device paths are new local picks.
+    if (normalized.startsWith('/') ||
+        RegExp(r'^[a-zA-Z]:[/\\]').hasMatch(normalized)) {
+      return false;
+    }
+    // Anything else is treated as an already-stored relative server path.
+    return true;
+  }
+
+  void _prefillStoredTitledFiles(
+    String raw,
+    Map<String, String?> predefinedTarget,
+    List<TitledLocalFile> freeformTarget,
+  ) {
+    if (raw.trim().isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      for (final item in decoded.whereType<Map>()) {
+        final title = item['title']?.toString().trim() ?? '';
+        final path = (item['file'] ?? item['path'] ?? item['url'])
+                ?.toString()
+                .trim() ??
+            '';
+        if (title.isEmpty || path.isEmpty) continue;
+        if (predefinedTarget.containsKey(title)) {
+          predefinedTarget[title] = path;
+        } else {
+          freeformTarget.add(TitledLocalFile(title: title, path: path));
+        }
+      }
+    } catch (_) {
+      return;
+    }
+  }
+
+  /// All current titled slots (predefined + freeform), including unchanged
+  /// remote paths so the API can keep them via `existingPath`.
+  List<TitledLocalFile> _allTitledEntries(
+    Map<String, String?> predefined,
+    List<TitledLocalFile> freeform,
+  ) {
+    final out = <TitledLocalFile>[
+      for (final entry in predefined.entries)
+        if ((entry.value?.trim() ?? '').isNotEmpty)
+          TitledLocalFile(title: entry.key, path: entry.value!.trim()),
+      ...freeform.where((e) => e.path.trim().isNotEmpty),
+    ];
+    return out;
+  }
+
+  Map<String, String> _singleFileUploadsForSave() {
+    final lead = widget.existingLead;
+    final map = <String, String>{};
+
+    void put(String field, String? current, String previous) {
+      final value = current?.trim() ?? '';
+      if (value.isNotEmpty) {
+        // Skip re-uploading unchanged remote files; API keeps previous value.
+        if (_isExistingRemotePath(value)) return;
+        map[field] = value;
+        return;
+      }
+      // Explicit clear only when a previously saved file was removed.
+      if (previous.trim().isNotEmpty) {
+        map[field] = '';
+      }
+    }
+
+    put('roof_photo', roofPhotoPath, lead?.roofPhoto ?? '');
+    put('bank_clear_photo', bankClearPhotoPath, lead?.bankClearPhoto ?? '');
+    put(
+      'cheque_passbook_copy',
+      chequePassbookPath,
+      lead?.chequePassbookCopy ?? '',
+    );
+    put(
+      'pre_installation_photo',
+      preInstallationPhotoPath,
+      lead?.preInstallationPhoto ?? '',
+    );
+    put(
+      'quotation_document',
+      quotationDocumentPath,
+      lead?.quotationDocument ?? '',
+    );
+    return map;
+  }
+
   /// Decode images at display size to avoid lag from full-resolution bitmaps.
   Widget _thumbImage(
     String path, {
@@ -348,6 +503,28 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     final screenW = MediaQuery.sizeOf(context).width;
     final resolvedWidth =
         (width != null && width.isFinite) ? width : screenW;
+
+    if (_isExistingRemotePath(path)) {
+      final url = resolveUploadUrl(path);
+      if (url.isEmpty) return _docPreview(path);
+      return CachedNetworkImage(
+        imageUrl: url,
+        width: width,
+        height: height,
+        fit: fit,
+        memCacheWidth: (resolvedWidth * dpr).round().clamp(1, 4096),
+        memCacheHeight: (height * dpr).round().clamp(1, 4096),
+        placeholder: (_, __) => const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+        errorWidget: (_, __, ___) => _docPreview(path),
+      );
+    }
+
     return Image.file(
       File(path),
       width: width,
@@ -368,45 +545,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       maxHeight: 1600,
       imageQuality: 85,
     );
-  }
-
-  bool _isExistingRemotePath(String path) {
-    final normalized = path.trim().toLowerCase();
-    return normalized.startsWith('http://') ||
-        normalized.startsWith('https://') ||
-        normalized.startsWith('/uploads/') ||
-        normalized.startsWith('uploads/');
-  }
-
-  void _prefillStoredTitledFiles(String raw, Map<String, String?> target) {
-    if (raw.trim().isEmpty) return;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return;
-      for (final item in decoded.whereType<Map>()) {
-        final title = item['title']?.toString().trim() ?? '';
-        final path = item['path']?.toString().trim() ?? '';
-        if (title.isEmpty || path.isEmpty) continue;
-        if (target.containsKey(title)) {
-          target[title] = path;
-        }
-      }
-    } catch (_) {
-      return;
-    }
-  }
-
-  List<TitledLocalFile> _predefinedUploads(Map<String, String?> source) {
-    return source.entries
-        .where((entry) {
-          final path = entry.value?.trim() ?? '';
-          return path.isNotEmpty && !_isExistingRemotePath(path);
-        })
-        .map(
-          (entry) =>
-              TitledLocalFile(title: entry.key, path: entry.value!.trim()),
-        )
-        .toList();
   }
 
   String? _validateFullName(String? value) {
@@ -621,14 +759,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'vendor_visited_site': vendorVisitedSite.toString(),
       'is_active': isLeadActive.toString(),
     };
-    final mergedAdditionalImages = [
-      ..._predefinedUploads(predefinedImagePaths),
-      ...additionalImages,
-    ];
-    final mergedAdditionalDocs = [
-      ..._predefinedUploads(predefinedDocPaths),
-      ...additionalDocs,
-    ];
+    final mergedAdditionalImages = _allTitledEntries(
+      predefinedImagePaths,
+      additionalImages,
+    );
+    final mergedAdditionalDocs = _allTitledEntries(
+      predefinedDocPaths,
+      additionalDocs,
+    );
+    final singleFiles = _singleFileUploadsForSave();
 
     if (mounted) setState(() => isLoading = true);
     _isClosing = true;
@@ -640,17 +779,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         await repo.updateLeadWithFiles(
           widget.existingLead!.id,
           data,
-          singleFilePaths: {
-            if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
-            if (bankClearPhotoPath != null)
-              'bank_clear_photo': bankClearPhotoPath!,
-            if (chequePassbookPath != null)
-              'cheque_passbook_copy': chequePassbookPath!,
-            if (preInstallationPhotoPath != null)
-              'pre_installation_photo': preInstallationPhotoPath!,
-            if (quotationDocumentPath != null)
-              'quotation_document': quotationDocumentPath!,
-          },
+          singleFilePaths: singleFiles,
           additionalImageEntries: mergedAdditionalImages
               .map((e) => e.toPayload())
               .toList(),
@@ -680,13 +809,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         await repo.createLead(
           data,
           singleFilePaths: {
-            if (roofPhotoPath != null) 'roof_photo': roofPhotoPath!,
-            if (chequePassbookPath != null)
-              'cheque_passbook_copy': chequePassbookPath!,
-            if (preInstallationPhotoPath != null)
-              'pre_installation_photo': preInstallationPhotoPath!,
-            if (quotationDocumentPath != null)
-              'quotation_document': quotationDocumentPath!,
+            for (final e in singleFiles.entries)
+              if (e.value.isNotEmpty) e.key: e.value,
           },
           additionalImageEntries: mergedAdditionalImages
               .map((e) => e.toPayload())
@@ -887,6 +1011,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required String title,
     required bool value,
     required ValueChanged<bool> onChanged,
+    bool isRequired = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
 
@@ -901,12 +1026,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       ),
       child: SwitchListTile(
         value: value,
-        title: Text(
-          title,
+        title: DefaultTextStyle.merge(
           style: TextStyle(
             color: scheme.onSurface,
             fontWeight: FontWeight.w600,
           ),
+          child: _requiredFieldLabel(title, isRequired: isRequired),
         ),
         onChanged: isLoading ? null : onChanged,
       ),
@@ -918,12 +1043,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required String title,
     required bool Function() getter,
     required ValueChanged<bool> setter,
+    bool isRequired = false,
   }) {
     return StatefulBuilder(
       builder: (context, setLocal) {
         return switchTile(
           title: title,
           value: getter(),
+          isRequired: isRequired,
           onChanged: (value) {
             setter(value);
             setLocal(() {});
@@ -1913,13 +2040,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ],
               ),
               input(
-                'System Size (kW)',
+                'Load Section (kW)',
                 kw,
                 isRequired: _isCompleteDetails,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                validator: (v) => _validateNumber(v, 'System Size'),
+                validator: (v) => _validateNumber(v, 'Load Section'),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
@@ -2084,6 +2211,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 input(
                   'Available Shadow Free Area',
                   availableShadowFreeArea,
+                  isRequired: true,
                   keyboardType: TextInputType.number,
                   validator: (v) => _validateMaxDigitNumber(
                     v,
@@ -2099,12 +2227,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 input(
                   'Quotation Amount',
                   quotationAmount,
+                  isRequired: true,
                   keyboardType: TextInputType.number,
                   validator: (v) => _validateNumber(v, 'Quotation Amount'),
                 ),
                 input(
                   'Visited Employee Name',
                   visitedEmployeeName,
+                  isRequired: true,
                   validator: (v) =>
                       _validateOptionalAlpha(v, 'Visited Employee Name'),
                   inputFormatters: [
@@ -2115,6 +2245,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 input(
                   'Visited Employee Contact',
                   visitedEmployeeContact,
+                  isRequired: true,
                   keyboardType: TextInputType.phone,
                   validator: _validateOptionalMobile,
                   inputFormatters: [
@@ -2124,21 +2255,25 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ),
                 localSwitchTile(
                   title: 'Roof Load Bearing Capacity',
+                  isRequired: true,
                   getter: () => roofLoadBearingCapacity,
                   setter: (value) => roofLoadBearingCapacity = value,
                 ),
                 localSwitchTile(
                   title: 'Shadow Free Roof',
+                  isRequired: true,
                   getter: () => shadowFreeRoof,
                   setter: (value) => shadowFreeRoof = value,
                 ),
                 localSwitchTile(
                   title: 'Vendor Visited Site',
+                  isRequired: true,
                   getter: () => vendorVisitedSite,
                   setter: (value) => vendorVisitedSite = value,
                 ),
                 localSwitchTile(
                   title: 'Lead Active',
+                  isRequired: true,
                   getter: () => isLeadActive,
                   setter: (value) => isLeadActive = value,
                 ),

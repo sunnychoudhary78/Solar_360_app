@@ -204,6 +204,172 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     return _removeOldRegistrationBlock(_lead.notes);
   }
 
+  List<_LeadNoteEntry> _parseLeadNotes(String raw) {
+    final text = _removeOldRegistrationBlock(raw).trim();
+    if (text.isEmpty) return const [];
+
+    final hasStructured = RegExp(
+      r'(^|\n)@note\|',
+      multiLine: true,
+    ).hasMatch(text);
+
+    if (!hasStructured) {
+      return text
+          .split(RegExp(r'\n\s*\n'))
+          .map((chunk) => chunk.trim())
+          .where((chunk) => chunk.isNotEmpty)
+          .map((chunk) => _LeadNoteEntry(body: chunk))
+          .toList();
+    }
+
+    final entries = <_LeadNoteEntry>[];
+    final parts = text.split(RegExp(r'(?=^@note\|)', multiLine: true));
+
+    for (final part in parts) {
+      final chunk = part.trim();
+      if (chunk.isEmpty) continue;
+
+      final match = RegExp(
+        r'^@note\|([^|]*)\|([^|]*)\|([^\n]*)\n?([\s\S]*)$',
+      ).firstMatch(chunk);
+
+      if (match == null) {
+        for (final plain in chunk.split(RegExp(r'\n\s*\n'))) {
+          final body = plain.trim();
+          if (body.isNotEmpty) entries.add(_LeadNoteEntry(body: body));
+        }
+        continue;
+      }
+
+      entries.add(
+        _LeadNoteEntry(
+          role: match.group(1)?.trim(),
+          userName: match.group(2)?.trim(),
+          atIso: match.group(3)?.trim(),
+          body: (match.group(4) ?? '').trim(),
+        ),
+      );
+    }
+
+    return entries;
+  }
+
+  String _formatNoteEntry({
+    required String role,
+    required String userName,
+    required String body,
+  }) {
+    final safeRole = role.replaceAll('|', '/').trim();
+    final safeUser = userName.replaceAll('|', '/').trim();
+    final at = DateTime.now().toUtc().toIso8601String();
+    return '@note|$safeRole|$safeUser|$at\n${body.trim()}';
+  }
+
+  String _formatNoteTimestamp(String? iso) {
+    if (iso == null || iso.trim().isEmpty) return '';
+    final parsed = DateTime.tryParse(iso.trim());
+    if (parsed == null) return iso.trim();
+    final local = parsed.toLocal();
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final day = local.day.toString().padLeft(2, '0');
+    final month = months[local.month - 1];
+    final year = local.year;
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$day $month $year, $hour:$minute';
+  }
+
+  Widget _notesSection(List<_LeadNoteEntry> notes) {
+    if (notes.isEmpty) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return AppCard(
+      variant: AppCardVariant.outlined,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md - 2),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Notes',
+            style: textTheme.titleSmall?.copyWith(
+              color: scheme.primary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Divider(height: 16, color: scheme.outlineVariant),
+          ...notes.asMap().entries.map((entry) {
+            final note = entry.value;
+            final isLast = entry.key == notes.length - 1;
+            final author = [
+              if ((note.role ?? '').trim().isNotEmpty) note.role!.trim(),
+              if ((note.userName ?? '').trim().isNotEmpty) note.userName!.trim(),
+            ].join(' — ');
+            final when = _formatNoteTimestamp(note.atIso);
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (author.isNotEmpty)
+                    Text(
+                      author,
+                      style: textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                        height: 1.25,
+                      ),
+                    ),
+                  if (note.body.isNotEmpty) ...[
+                    if (author.isNotEmpty) const SizedBox(height: 2),
+                    Text(
+                      note.body,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurface,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                  if (when.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      when,
+                      style: textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   String get _displayRegistrationId {
     if (_lead.registrationId.trim().isNotEmpty) return _lead.registrationId;
     return _registrationFromNotes()['registration_id'] ?? '';
@@ -235,10 +401,14 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
 
   bool _canUploadDocuments(List<String> nextStatuses) {
     final status = _lead.status.trim().toLowerCase();
+    if (status == 'documents submitted') return false;
 
     return status == 'loan application initiated' ||
-        status == 'documents submitted' ||
         nextStatuses.contains('Documents Submitted');
+  }
+
+  bool get _documentsAlreadySubmitted {
+    return _lead.status.trim().toLowerCase() == 'documents submitted';
   }
 
   List<String> _installationSpNumbers() {
@@ -589,10 +759,22 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     setState(() => loading = true);
 
     try {
+      final auth = ref.read(authProvider);
+      final role = auth.workflowRoleKey.trim().isNotEmpty
+          ? auth.workflowRoleKey.trim()
+          : auth.effectiveRoleName.trim();
+      final userName =
+          (auth.profile?.name ?? auth.authUser?.name ?? '').trim();
+      final stamped = _formatNoteEntry(
+        role: role.isEmpty ? 'User' : role,
+        userName: userName.isEmpty ? 'Unknown' : userName,
+        body: note.trim(),
+      );
+
       final oldNotes = _lead.notes.trim();
       final updatedNotes = oldNotes.isEmpty
-          ? note.trim()
-          : '$oldNotes\n\n${note.trim()}';
+          ? stamped
+          : '$oldNotes\n\n$stamped';
 
       await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
         'notes': updatedNotes,
@@ -895,6 +1077,7 @@ registration_time=${result.regTime.trim()}
         : _lead.fullName;
 
     final visibleNotes = _visibleNotes();
+    final parsedNotes = _parseLeadNotes(visibleNotes);
 
     final normalizedDepartment = _lead.currentDepartment.trim().toLowerCase();
     final normalizedStatus = _lead.status.trim().toLowerCase();
@@ -910,6 +1093,10 @@ registration_time=${result.regTime.trim()}
         LeadWorkflow.canSalesCompleteDetails(_lead.status);
 
     final isDocumentAdministrator = roleKey == 'Document Administrator';
+    final showDocumentsSubmittedState =
+        isDocumentAdministrator &&
+        _documentsAlreadySubmitted &&
+        !showUploadButton;
 
     final isLeadWithDocumentAdmin = normalizedDepartment == 'finance';
 
@@ -1220,8 +1407,7 @@ registration_time=${result.regTime.trim()}
                   _section('Uploaded Files & Images', [
                     LeadAttachmentsView(files: files),
                   ]),
-                  if (visibleNotes.trim().isNotEmpty)
-                    _section('Notes', [_row('Notes', visibleNotes)]),
+                  if (parsedNotes.isNotEmpty) _notesSection(parsedNotes),
                   if (showFinancePaymentSection) ...[
                     _section('Payment', [
                       if (paymentLocked) ...[
@@ -1290,6 +1476,16 @@ registration_time=${result.regTime.trim()}
                             color: scheme.primary.withValues(alpha: .4),
                           ),
                         ),
+                      ),
+                    ),
+                  ] else if (showDocumentsSubmittedState) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: null,
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text('Document submitted'),
                       ),
                     ),
                   ],
@@ -2371,6 +2567,20 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
       ],
     );
   }
+}
+
+class _LeadNoteEntry {
+  final String? role;
+  final String? userName;
+  final String? atIso;
+  final String body;
+
+  const _LeadNoteEntry({
+    this.role,
+    this.userName,
+    this.atIso,
+    required this.body,
+  });
 }
 
 class _AddNoteDialog extends StatefulWidget {

@@ -119,8 +119,8 @@ class InvoiceRepository {
   Future<InvoiceModel> reject(String id, String reason) =>
       _api.reject(id, reason);
 
-  Future<StockCheckResult> stockCheck(String id, String warehouseId) =>
-      _api.stockCheck(id, warehouseId);
+  Future<StockCheckResult> stockCheck(String id, {String? warehouseId}) =>
+      _api.stockCheck(id, warehouseId: warehouseId);
 
   Future<Uint8List> downloadPdf(String id) => _api.downloadPdf(id);
 

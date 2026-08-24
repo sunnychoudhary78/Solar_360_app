@@ -348,7 +348,7 @@ void main() {
         };
       });
 
-      final check = await repo.stockCheck('inv1', 'wh-1');
+      final check = await repo.stockCheck('inv1', warehouseId: 'wh-1');
       expect(check.ok, isTrue);
       expect(check.lines.first.ok, isTrue);
     });
