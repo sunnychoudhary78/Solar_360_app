@@ -1,3 +1,4 @@
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/providers/network_providers.dart';
@@ -10,11 +11,15 @@ final itemCategoryApiServiceProvider = Provider<ItemCategoryApiService>((ref) {
   return ItemCategoryApiService(ref.watch(apiServiceProvider));
 });
 
+/// Loads from company-settings API (includes inactive for admin UI).
+/// Regular FutureProvider — same pattern as [managedWarehousesProvider].
+/// Avoid autoDispose here: invalidating during dialog teardown triggers
+/// Flutter's `_dependents.isEmpty` assertion.
 final itemCategoriesProvider =
     FutureProvider<List<ItemCategoryModel>>((ref) async {
   return ref.watch(itemCategoryApiServiceProvider).list(includeInactive: true);
 });
-
+/// Active categories only — for Item Master / create-item dropdowns.
 List<ItemCategoryModel> selectableItemCategories(
   List<ItemCategoryModel> all, {
   String? currentValue,
@@ -25,6 +30,7 @@ List<ItemCategoryModel> selectableItemCategories(
   final hasCurrent = active.any((c) => c.value == currentValue);
   if (hasCurrent) return active;
 
+  // Keep a previously saved (now hidden) category selectable while editing.
   final current = all.where((c) => c.value == currentValue).firstOrNull;
   if (current == null) return active;
   return [...active, current];
@@ -38,4 +44,18 @@ String itemCategoryLabel(List<ItemCategoryModel>? categories, String? value) {
     }
   }
   return ItemCategories.labelFor(value);
+}
+
+void invalidateItemCategories(
+  WidgetRef ref, {
+  bool afterRouteTransition = false,
+}) {
+  if (afterRouteTransition) {
+    // Wait until modal route teardown finishes (see GlobalLoadingNotifier).
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(itemCategoriesProvider);
+    });
+    return;
+  }
+  ref.invalidate(itemCategoriesProvider);
 }

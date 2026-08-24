@@ -18,6 +18,7 @@ import 'package:solar_sales/features/invoices/presentation/screens/invoice_direc
 import 'package:solar_sales/features/invoices/presentation/screens/invoice_form_screen.dart';
 import 'package:solar_sales/features/invoices/presentation/screens/invoices_screen.dart';
 import 'package:solar_sales/features/items/presentation/screens/item_approvals_screen.dart';
+import 'package:solar_sales/features/items/presentation/screens/item_categories_screen.dart';
 import 'package:solar_sales/features/items/presentation/screens/item_detail_screen.dart';
 import 'package:solar_sales/features/items/presentation/screens/item_form_screen.dart';
 import 'package:solar_sales/features/items/presentation/screens/items_screen.dart';
@@ -58,6 +59,7 @@ class AppRoutes {
       return CustomerFormScreen(customerId: id);
     },
     '/items': (_) => const ItemsScreen(),
+    '/items/categories': (_) => const ItemCategoriesScreen(),
     '/items/form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
       final id = args is String ? args : null;

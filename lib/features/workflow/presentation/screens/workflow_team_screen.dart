@@ -157,13 +157,17 @@ class _Dashboard extends StatefulWidget {
 class _DashboardState extends State<_Dashboard> {
   _PipelineFilter _filter = _PipelineFilter.active;
 
-  static bool _isRejected(LeadModel lead) =>
-      lead.status.trim() == 'Rejected';
+  /// Sales User reject → `Rejected`; Sales Manager reject →
+  /// `Rejected By Sales Manager`. Company Admin Rejected bucket includes both.
+  static bool _isRejected(LeadModel lead) {
+    final status = lead.status.trim();
+    return status == 'Rejected' || status == 'Rejected By Sales Manager';
+  }
 
   static bool _isCompleted(LeadModel lead) =>
       lead.status.trim() == 'Final Complete';
 
-  /// In-progress leads only — excludes Rejected and Final Complete.
+  /// In-progress leads only — excludes rejected and Final Complete.
   static bool _isActiveLead(LeadModel lead) =>
       !_isRejected(lead) && !_isCompleted(lead);
 

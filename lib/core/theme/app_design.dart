@@ -150,6 +150,7 @@ class AppStatusColors {
       case 'dispatched':
         return scheme.primary;
       case 'rejected':
+      case 'rejected by sales manager':
       case 'cancelled':
       case 'canceled':
         return scheme.error;

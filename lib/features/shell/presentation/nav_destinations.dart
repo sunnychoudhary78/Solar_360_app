@@ -147,6 +147,16 @@ class NavDestinations {
       screen: NotificationsScreen(),
     ),
     AppDestination(
+      id: 'bb_item_categories',
+      label: 'Item Category',
+      icon: Icons.account_tree_outlined,
+      selectedIcon: Icons.account_tree_rounded,
+      section: NavSection.catalog,
+      kind: NavKind.route,
+      permission: 'item.read',
+      route: '/items/categories',
+    ),
+    AppDestination(
       id: 'bb_items',
       label: 'Items',
       icon: Icons.category_outlined,

@@ -1626,9 +1626,26 @@ class _MovementSheetState extends State<_MovementSheet> {
   bool get _isStockOut => widget.type == 'out';
   bool get _isStockIn => widget.type == 'in';
 
-  List<WarehouseModel> get _warehouseOptions => _isStockIn
-      ? warehousesAssignedToItem(_itemId, widget.warehouses, widget.stock)
-      : widget.warehouses;
+  /// For stockIn: only warehouses that already have the item assigned.
+  /// For stockOut / transfer-from / adjustment: only warehouses where the
+  /// item currently has actual stock (qty > 0).
+  /// For toWarehouse (transfer): all warehouses, no restriction.
+  List<WarehouseModel> _itemSourceWarehouses(String itemId) {
+    if (_isStockIn) {
+      return warehousesAssignedToItem(itemId, widget.warehouses, widget.stock);
+    }
+    return warehousesWithStockForItem(itemId, widget.warehouses, widget.stock);
+  }
+
+  List<WarehouseModel> get _warehouseOptions => _itemSourceWarehouses(_itemId);
+
+  /// Auto-select warehouse when item has stock in exactly one warehouse.
+  String? _autoSelectWarehouse(String itemId) {
+    if (_isStockIn) return null; // stockIn already has its own auto logic
+    final options = _itemSourceWarehouses(itemId);
+    if (options.length == 1) return options.first.id;
+    return null;
+  }
 
   @override
   void initState() {
@@ -1640,14 +1657,21 @@ class _MovementSheetState extends State<_MovementSheet> {
       widget.warehouses,
       widget.stock,
     );
-    _warehouseId = _isStockIn
-        ? (assigned.isNotEmpty ? assigned.first.id : widget.warehouses.first.id)
-        : widget.warehouses.first.id;
 
-    if (_isTransfer && widget.warehouses.length > 1) {
-      _toWarehouseId = widget.warehouses[1].id;
-    } else if (_isTransfer) {
-      _toWarehouseId = widget.warehouses.first.id;
+    if (_isStockIn) {
+      _warehouseId = assigned.isNotEmpty
+          ? assigned.first.id
+          : widget.warehouses.first.id;
+    } else {
+      // stockOut / adjustment / transfer-from:
+      // auto-select only when exactly one warehouse has stock; otherwise null
+      // so the user is forced to pick from the filtered dropdown.
+      _warehouseId = _autoSelectWarehouse(_itemId) ?? '';
+    }
+
+    // toWarehouse: never auto-select, show all warehouses
+    if (_isTransfer) {
+      _toWarehouseId = null;
     }
   }
 
@@ -1971,6 +1995,16 @@ class _MovementSheetState extends State<_MovementSheet> {
                       _warehouseId = assigned.isNotEmpty
                           ? assigned.first.id
                           : widget.warehouses.first.id;
+                    } else {
+                      // stockOut / adjustment / transfer-from:
+                      // auto-select only when exactly one warehouse has stock.
+                      final auto = _autoSelectWarehouse(value);
+                      _warehouseId = auto ??
+                          (widget.warehouses.isNotEmpty
+                              ? widget.warehouses.first.id
+                              : '');
+                      // Reset toWarehouse when item changes for transfer
+                      if (_isTransfer) _toWarehouseId = null;
                     }
                   });
                 },
@@ -1986,15 +2020,26 @@ class _MovementSheetState extends State<_MovementSheet> {
                     style: TextStyle(color: scheme.error),
                   ),
                 )
+              else if (!_isStockIn && _warehouseOptions.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'This item is not available in any warehouse.',
+                    style: TextStyle(color: scheme.error),
+                  ),
+                )
               else
                 _buildDropdown<String>(
                   context: context,
                   label: _isTransfer ? 'From Warehouse *' : 'Warehouse *',
+                  // Use null when current warehouseId is not in filtered options
+                  // (prevents DropdownButton assertion). Auto-select only if
+                  // exactly one option is available.
                   value: _warehouseOptions.any((w) => w.id == _warehouseId)
                       ? _warehouseId
-                      : (_warehouseOptions.isNotEmpty
+                      : (_warehouseOptions.length == 1
                           ? _warehouseOptions.first.id
-                          : _warehouseId),
+                          : null),
                   icon: Icons.warehouse_outlined,
                   items: _warehouseOptions
                       .map(

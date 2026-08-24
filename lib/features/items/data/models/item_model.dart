@@ -46,6 +46,7 @@ class ItemModel {
   final List<StockLevelModel> stockLevels;
   final int? totalQuantity;
   final bool? isLowStock;
+  final bool isActive;
 
   const ItemModel({
     required this.id,
@@ -64,6 +65,7 @@ class ItemModel {
     this.stockLevels = const [],
     this.totalQuantity,
     this.isLowStock,
+    this.isActive = true,
   });
 
   factory ItemModel.fromJson(Map<String, dynamic> json) {
@@ -96,6 +98,7 @@ class ItemModel {
       isLowStock: json['is_low_stock'] == null
           ? null
           : asBool(json['is_low_stock']),
+      isActive: asBool(json['is_active'] ?? json['isActive'], true),
     );
   }
 

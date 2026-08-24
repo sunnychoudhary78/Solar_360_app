@@ -9,6 +9,7 @@ class ApiEndpoints {
   // Branding / reports
   static const solarBranding = 'company-settings/solar-branding';
   static const itemCategories = 'company-settings/item-categories';
+  static String itemCategory(String id) => 'company-settings/item-categories/$id';
   static const dashboard = 'solar-reports/dashboard';
   static const salesReport = 'solar-reports/sales';
   static const stockReport = 'solar-reports/stock';

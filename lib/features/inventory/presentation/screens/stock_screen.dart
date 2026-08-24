@@ -455,21 +455,30 @@ Future<void> _showMoveSheet(
       availableQtyAtWarehouse(iId, wId, stockLevels);
 
   final formKey = GlobalKey<FormState>();
+  // Strict item-specific warehouses for stockOut / transfer-from / adjustment.
+  List<WarehouseModel> itemSourceWarehouses(String? iId) {
+    return warehousesWithStockForItem(iId, warehouses, stockLevels);
+  }
+
+  // Auto-select warehouse only when exactly one has stock.
+  String? autoSelect(String? iId) {
+    final opts = itemSourceWarehouses(iId);
+    return opts.length == 1 ? opts.first.id : null;
+  }
+
   String? itemId = moveItems.first.id;
   String? warehouseId;
   if (type == _MoveType.stockIn) {
-    final assigned = warehousesAssignedToItem(
-      itemId,
-      warehouses,
-      stockLevels,
-    );
+    final assigned = warehousesAssignedToItem(itemId, warehouses, stockLevels);
     warehouseId = assigned.isNotEmpty ? assigned.first.id : null;
   } else {
-    warehouseId = warehouses.first.id;
+    // stockOut / adjustment: auto-select only when exactly one warehouse
+    warehouseId = autoSelect(itemId);
   }
-  String? fromWarehouseId = warehouses.first.id;
-  String? toWarehouseId =
-      warehouses.length > 1 ? warehouses[1].id : warehouses.first.id;
+  // transfer fromWarehouse: same item-based auto-select logic
+  String? fromWarehouseId = autoSelect(itemId);
+  // toWarehouse: never auto-select
+  String? toWarehouseId;
   final qty = TextEditingController();
   final notes = TextEditingController();
 
@@ -490,13 +499,24 @@ Future<void> _showMoveSheet(
       return StatefulBuilder(
         builder: (context, setModalState) {
           final fromAvailable = availableQty(itemId, fromWarehouseId);
-          final toAvailable = availableQty(itemId, toWarehouseId);
           final warehouseAvailable = availableQty(itemId, warehouseId);
-          final stockInWarehouses = type == _MoveType.stockIn
-              ? warehousesAssignedToItem(itemId, warehouses, stockLevels)
+
+          // Warehouse options filtered by item:
+          // stockIn  → only warehouses the item is assigned to
+          // stockOut / adjustment / transfer-from → warehouses with qty > 0
+          // toWarehouse (transfer) → all warehouses, no restriction
+          final warehouseOptions = switch (type) {
+            _MoveType.stockIn =>
+              warehousesAssignedToItem(itemId, warehouses, stockLevels),
+            _MoveType.stockOut ||
+            _MoveType.adjustment =>
+              itemSourceWarehouses(itemId),
+            _ => warehouses, // transfer uses fromWarehouseOptions below
+          };
+          // transfer From Warehouse uses item-based options
+          final fromWarehouseOptions = type == _MoveType.transfer
+              ? itemSourceWarehouses(itemId)
               : warehouses;
-          final warehouseOptions =
-              type == _MoveType.stockIn ? stockInWarehouses : warehouses;
           final available = type == _MoveType.stockOut
               ? warehouseAvailable
               : type == _MoveType.transfer
@@ -584,6 +604,13 @@ Future<void> _showMoveSheet(
                           );
                           warehouseId =
                               assigned.isNotEmpty ? assigned.first.id : null;
+                        } else if (type == _MoveType.transfer) {
+                          // from: auto-select only when exactly one has stock
+                          fromWarehouseId = autoSelect(v);
+                          toWarehouseId = null; // reset to destination
+                        } else {
+                          // stockOut / adjustment
+                          warehouseId = autoSelect(v);
                         }
                       }),
                       validator: (v) =>
@@ -591,15 +618,31 @@ Future<void> _showMoveSheet(
                     ),
                     const SizedBox(height: 12),
                     if (type == _MoveType.transfer) ...[
+                      if (fromWarehouseOptions.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'This item is not available in any warehouse.',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
                       DropdownButtonFormField<String>(
-                        value: fromWarehouseId,
+                        // null when multiple options — user must pick
+                        value: fromWarehouseOptions
+                                .any((w) => w.id == fromWarehouseId)
+                            ? fromWarehouseId
+                            : (fromWarehouseOptions.length == 1
+                                ? fromWarehouseOptions.first.id
+                                : null),
                         decoration: InputDecoration(
                           labelText: 'From Warehouse *',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        items: warehouses
+                        items: fromWarehouseOptions
                             .map(
                               (w) => DropdownMenuItem(
                                 value: w.id,
@@ -733,12 +776,25 @@ Future<void> _showMoveSheet(
                             ),
                           ),
                         )
+                      else if (warehouseOptions.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'This item is not available in any warehouse.',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        )
                       else
                         DropdownButtonFormField<String>(
+                          // null when multiple options — user must pick
                           value: warehouseOptions
                                   .any((w) => w.id == warehouseId)
                               ? warehouseId
-                              : null,
+                              : (warehouseOptions.length == 1
+                                  ? warehouseOptions.first.id
+                                  : null),
                           decoration: InputDecoration(
                             labelText: 'Warehouse *',
                             border: OutlineInputBorder(

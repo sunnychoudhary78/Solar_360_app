@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
-import 'package:solar_sales/shared/constants/item_categories.dart';
 import 'package:solar_sales/shared/constants/item_units.dart';
 import 'package:solar_sales/shared/utils/validators.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -46,6 +45,16 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   String? _status;
 
   bool get isEdit => widget.itemId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pick up categories added/edited elsewhere (web or Item Categories screen).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      invalidateItemCategories(ref);
+    });
+  }
 
   @override
   void dispose() {
@@ -438,28 +447,33 @@ class _CategoryField extends ConsumerWidget {
         items: const [],
         onChanged: null,
       ),
-      error: (_, __) => DropdownButtonFormField<String>(
-        value: value,
-        decoration: const InputDecoration(labelText: 'Category *'),
-        items: ItemCategories.options
-            .map(
-              (c) => DropdownMenuItem(
-                value: c.value,
-                child: Text(c.label),
-              ),
-            )
-            .toList(),
-        onChanged: readOnly ? null : onChanged,
-        validator: (v) =>
-            v == null || v.isEmpty ? 'Select a category' : null,
+      error: (e, _) => InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Category *',
+          errorText: e.toString(),
+          suffixIcon: IconButton(
+            tooltip: 'Retry',
+            onPressed: () => invalidateItemCategories(ref),
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ),
+        child: Text(
+          'Could not load categories',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
       ),
       data: (allCategories) {
+        // Hidden (inactive) categories are excluded from create/edit dropdowns.
         final options = selectableItemCategories(
           allCategories,
           currentValue: value,
         );
+        final effectiveValue =
+            options.any((c) => c.value == value) ? value : null;
         return DropdownButtonFormField<String>(
-          value: value,
+          value: effectiveValue,
           decoration: const InputDecoration(labelText: 'Category *'),
           items: options
               .map(

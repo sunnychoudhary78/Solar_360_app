@@ -139,12 +139,20 @@ final itemDetailProvider =
   return ref.watch(itemRepositoryProvider).getById(id);
 });
 
-final approvedItemsProvider = FutureProvider<List<ItemModel>>((ref) async {
-  return ref.watch(itemRepositoryProvider).listApproved();
+/// Approved, active items for quotation/invoice/stock pickers.
+/// Hidden/deactivated items are excluded so they never appear in dropdowns.
+final approvedItemsProvider = FutureProvider.autoDispose<List<ItemModel>>((
+  ref,
+) async {
+  final items = await ref.watch(itemRepositoryProvider).listApproved();
+  return items.where((item) => item.isActive).toList();
 });
 
-final stockableItemsProvider = FutureProvider<List<ItemModel>>((ref) async {
-  return ref.watch(itemRepositoryProvider).listStockable();
+final stockableItemsProvider = FutureProvider.autoDispose<List<ItemModel>>((
+  ref,
+) async {
+  final items = await ref.watch(itemRepositoryProvider).listStockable();
+  return items.where((item) => item.isActive).toList();
 });
 
 final pendingItemsProvider = FutureProvider<List<ItemModel>>((ref) async {

@@ -41,6 +41,23 @@ List<WarehouseModel> warehousesForItemSelection({
   return allWarehouses.where((w) => assignedIds.contains(w.id)).toList();
 }
 
+/// Warehouses where [itemId] currently has actual stock (> 0).
+List<WarehouseModel> warehousesWithStockForItem(
+  String? itemId,
+  List<WarehouseModel> allWarehouses,
+  List<StockModel> stockLevels,
+) {
+  if (itemId == null || itemId.isEmpty) return const [];
+
+  final warehouseIds = stockLevels
+      .where((row) => row.itemId == itemId && row.currentQuantity > 0)
+      .map((row) => row.warehouseId)
+      .toSet();
+
+  if (warehouseIds.isEmpty) return const [];
+  return allWarehouses.where((w) => warehouseIds.contains(w.id)).toList();
+}
+
 int availableQtyAtWarehouse(
   String? itemId,
   String? warehouseId,
