@@ -1,6 +1,11 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker_android/image_picker_android.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 
 import 'package:solar_sales/app/app_routes.dart';
 import 'package:solar_sales/app/navigator.dart';
@@ -13,6 +18,13 @@ import 'package:solar_sales/shared/widgets/global_overlays.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb && Platform.isAndroid) {
+    final ImagePickerPlatform imagePickerImplementation =
+        ImagePickerPlatform.instance;
+    if (imagePickerImplementation is ImagePickerAndroid) {
+      imagePickerImplementation.useAndroidPhotoPicker = true;
+    }
+  }
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const Root());
 }
