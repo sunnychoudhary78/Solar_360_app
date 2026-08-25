@@ -8,16 +8,27 @@ class NotificationApiService {
 
   NotificationApiService(this._api);
 
-  Future<List<NotificationModel>> getMyNotifications() async {
-    final res = await _api.get(ApiEndpoints.myNotifications);
+  Map<String, dynamic> _moduleQuery(String? module) {
+    if (module == null || module.isEmpty) return const {};
+    return {'module': module};
+  }
+
+  Future<List<NotificationModel>> getMyNotifications({String? module}) async {
+    final res = await _api.get(
+      ApiEndpoints.myNotifications,
+      queryParams: _moduleQuery(module),
+    );
     final list = _extractList(res);
     return list
         .map((e) => NotificationModel.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 
-  Future<int> getUnreadCount() async {
-    final res = await _api.get(ApiEndpoints.unreadNotificationCount);
+  Future<int> getUnreadCount({String? module}) async {
+    final res = await _api.get(
+      ApiEndpoints.unreadNotificationCount,
+      queryParams: _moduleQuery(module),
+    );
     if (res is Map) {
       final count = res['unread_count'] ?? res['count'] ?? res['data'];
       if (count is num) return count.toInt();
@@ -30,8 +41,12 @@ class NotificationApiService {
     await _api.put(ApiEndpoints.markNotificationRead(id), {});
   }
 
-  Future<void> markAllRead() async {
-    await _api.put(ApiEndpoints.markAllNotificationsRead, {});
+  Future<void> markAllRead({String? module}) async {
+    await _api.put(
+      ApiEndpoints.markAllNotificationsRead,
+      {},
+      queryParams: _moduleQuery(module),
+    );
   }
 
   List<Map<String, dynamic>> _extractList(dynamic raw) {

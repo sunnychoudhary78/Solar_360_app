@@ -314,7 +314,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
       return;
     }
 
-    String? preferredWarehouseId = warehouses.first.id;
+    String? preferredWarehouseId;
     StockCheckResult? stockCheck;
 
     final confirmed = await showModalBottomSheet<bool>(
@@ -453,20 +453,13 @@ class InvoiceDetailScreen extends ConsumerWidget {
       }
     }
 
-    // Approve API still requires a warehouse id; use preferred or first
-    // allocation / first active warehouse.
-    final approveWarehouseId = preferredWarehouseId ??
-        stockCheck!.allocations
-            .map((a) => a.warehouseId)
-            .whereType<String>()
-            .firstOrNull ??
-        warehouses.first.id;
-
+    // Preferred warehouse is optional — omit body when unset (web parity).
     ref.read(globalLoadingProvider.notifier).showLoading('Approving...');
     try {
-      await ref
-          .read(invoiceRepositoryProvider)
-          .approve(invoiceId, approveWarehouseId);
+      await ref.read(invoiceRepositoryProvider).approve(
+            invoiceId,
+            warehouseId: preferredWarehouseId,
+          );
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showSuccess('Invoice approved');
       ref.invalidate(invoiceDetailProvider(invoiceId));

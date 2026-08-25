@@ -35,6 +35,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   final _gst = TextEditingController(text: '18');
   final _price = TextEditingController(text: '0');
   final _minStock = TextEditingController(text: '10');
+  final _initialQty = TextEditingController(text: '0');
 
   String _unit = 'pcs';
   String? _category;
@@ -66,6 +67,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
     _gst.dispose();
     _price.dispose();
     _minStock.dispose();
+    _initialQty.dispose();
     super.dispose();
   }
 
@@ -126,7 +128,12 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
       if (isEdit) {
         await repo.update(widget.itemId!, model);
       } else {
-        await repo.create(model, warehouseId: _warehouseId);
+        final initialQty = int.tryParse(_initialQty.text.trim()) ?? 0;
+        await repo.create(
+          model,
+          warehouseId: _warehouseId,
+          initialQuantity: initialQty,
+        );
       }
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showSuccess(
@@ -349,6 +356,32 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                 },
               ),
             ),
+            if (!isEdit) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TextFormField(
+                  controller: _initialQty,
+                  enabled: !readOnly,
+                  decoration: const InputDecoration(
+                    labelText: 'Opening quantity',
+                    hintText: '0',
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(8),
+                  ],
+                  validator: (v) =>
+                      AppValidators.nonNegativeNumber(v, 'Opening quantity'),
+                ),
+              ),
+            ],
             
             const PremiumSectionTitle(
               title: 'Pricing',

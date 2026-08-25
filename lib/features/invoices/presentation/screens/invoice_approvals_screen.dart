@@ -188,7 +188,7 @@ class _InvoiceApprovalsScreenState
       return;
     }
 
-    String? preferredWarehouseId = warehouses.first.id;
+    String? preferredWarehouseId;
     StockCheckResult? stockCheck;
 
     final confirmed = await showModalBottomSheet<bool>(
@@ -336,18 +336,13 @@ class _InvoiceApprovalsScreenState
       return;
     }
 
-    final approveWarehouseId = preferredWarehouseId ??
-        stockCheck!.allocations
-            .map((a) => a.warehouseId)
-            .whereType<String>()
-            .firstOrNull ??
-        warehouses.first.id;
-
+    // Preferred warehouse is optional — omit body when unset (web parity).
     ref.read(globalLoadingProvider.notifier).showLoading('Approving...');
     try {
-      await ref
-          .read(invoiceRepositoryProvider)
-          .approve(invoice.id, approveWarehouseId);
+      await ref.read(invoiceRepositoryProvider).approve(
+            invoice.id,
+            warehouseId: preferredWarehouseId,
+          );
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showSuccess('Approved');
       ref.invalidate(pendingInvoicesProvider);

@@ -30,9 +30,17 @@ class ApiService {
     }
   }
 
-  Future<dynamic> put(String endpoint, Map<String, dynamic> data) async {
+  Future<dynamic> put(
+    String endpoint,
+    Map<String, dynamic> data, {
+    Map<String, dynamic>? queryParams,
+  }) async {
     try {
-      final response = await _dio.put(_path(endpoint), data: data);
+      final response = await _dio.put(
+        _path(endpoint),
+        data: data,
+        queryParameters: queryParams,
+      );
       return _handle(response);
     } on DioException catch (e) {
       throw _extractException(e);

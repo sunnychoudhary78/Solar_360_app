@@ -113,8 +113,8 @@ class InvoiceRepository {
 
   Future<InvoiceModel> submit(String id) => _api.submit(id);
 
-  Future<InvoiceModel> approve(String id, String warehouseId) =>
-      _api.approve(id, warehouseId);
+  Future<InvoiceModel> approve(String id, {String? warehouseId}) =>
+      _api.approve(id, warehouseId: warehouseId);
 
   Future<InvoiceModel> reject(String id, String reason) =>
       _api.reject(id, reason);

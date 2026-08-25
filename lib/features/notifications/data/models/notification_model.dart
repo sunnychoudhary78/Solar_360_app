@@ -4,6 +4,7 @@ class NotificationModel {
   final String message;
   final String type;
   final String? leadId;
+  final String? redirectUrl;
   final bool isRead;
   final String createdAt;
 
@@ -13,6 +14,7 @@ class NotificationModel {
     required this.message,
     required this.type,
     this.leadId,
+    this.redirectUrl,
     required this.isRead,
     required this.createdAt,
   });
@@ -24,6 +26,7 @@ class NotificationModel {
       message: json['message']?.toString() ?? json['body']?.toString() ?? '',
       type: json['type']?.toString() ?? '',
       leadId: (json['lead_id'] ?? json['leadId'])?.toString(),
+      redirectUrl: (json['redirect_url'] ?? json['redirectUrl'])?.toString(),
       isRead: json['is_read'] == true ||
           json['isRead'] == true ||
           json['read'] == true,
@@ -31,5 +34,11 @@ class NotificationModel {
           json['createdAt']?.toString() ??
           '',
     );
+  }
+
+  bool get hasNavigationTarget {
+    final redirect = redirectUrl?.trim();
+    if (redirect != null && redirect.isNotEmpty) return true;
+    return leadId != null && leadId!.isNotEmpty;
   }
 }

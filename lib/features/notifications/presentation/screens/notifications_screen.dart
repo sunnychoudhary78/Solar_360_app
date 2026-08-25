@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/features/module/presentation/providers/module_provider.dart';
 import 'package:solar_sales/features/notifications/data/models/notification_model.dart';
 import 'package:solar_sales/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -14,9 +15,66 @@ class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key, this.showAppBar = true});
 
   Future<void> _markAllRead(WidgetRef ref) async {
-    await ref.read(notificationRepositoryProvider).markAllRead();
+    final module = ref.read(moduleProvider).activeModule;
+    await ref.read(notificationRepositoryProvider).markAllRead(module: module);
     ref.invalidate(myNotificationsProvider);
     ref.invalidate(unreadNotificationCountProvider);
+  }
+
+  /// Maps web redirect paths to Flutter named routes + optional arguments.
+  ({String route, Object? arguments})? _navigationFor(
+    NotificationModel notification,
+  ) {
+    final redirect = notification.redirectUrl?.trim();
+    if (redirect != null && redirect.isNotEmpty) {
+      final path = redirect.split('?').first;
+      final mapped = _mapWebPath(path);
+      if (mapped != null) return mapped;
+    }
+
+    final leadId = notification.leadId;
+    if (leadId != null && leadId.isNotEmpty) {
+      return (route: '/solar/leads/detail', arguments: leadId);
+    }
+    return null;
+  }
+
+  ({String route, Object? arguments})? _mapWebPath(String path) {
+    if (path == '/items/approvals' ||
+        path == '/quotations/approvals' ||
+        path == '/invoices/approvals' ||
+        path == '/items' ||
+        path == '/quotations' ||
+        path == '/invoices' ||
+        path == '/customers' ||
+        path == '/inventory' ||
+        path == '/inventory/warehouses' ||
+        path == '/solar/leads') {
+      return (route: path, arguments: null);
+    }
+
+    final itemMatch = RegExp(r'^/items/([^/]+)$').firstMatch(path);
+    if (itemMatch != null) {
+      return (route: '/items/detail', arguments: itemMatch.group(1));
+    }
+    final quoteMatch = RegExp(r'^/quotations/([^/]+)$').firstMatch(path);
+    if (quoteMatch != null) {
+      return (route: '/quotations/detail', arguments: quoteMatch.group(1));
+    }
+    final invoiceMatch = RegExp(r'^/invoices/([^/]+)$').firstMatch(path);
+    if (invoiceMatch != null) {
+      return (route: '/invoices/detail', arguments: invoiceMatch.group(1));
+    }
+    final leadMatch = RegExp(r'^/solar/leads/([^/]+)$').firstMatch(path);
+    if (leadMatch != null) {
+      return (route: '/solar/leads/detail', arguments: leadMatch.group(1));
+    }
+
+    // Exact Flutter-style routes already used by the app.
+    if (path.startsWith('/')) {
+      return (route: path, arguments: null);
+    }
+    return null;
   }
 
   Future<void> _openNotification(
@@ -30,14 +88,14 @@ class NotificationsScreen extends ConsumerWidget {
       ref.invalidate(unreadNotificationCountProvider);
     }
 
-    final leadId = notification.leadId;
-    if (leadId == null || leadId.isEmpty) return;
+    final target = _navigationFor(notification);
+    if (target == null) return;
     if (!context.mounted) return;
 
     await Navigator.pushNamed(
       context,
-      '/solar/leads/detail',
-      arguments: leadId,
+      target.route,
+      arguments: target.arguments,
     );
   }
 
@@ -147,7 +205,7 @@ class NotificationsScreen extends ConsumerWidget {
                             shape: BoxShape.circle,
                           ),
                         ),
-                      if (notification.leadId != null)
+                      if (notification.hasNavigationTarget)
                         Icon(
                           Icons.chevron_right_rounded,
                           color: scheme.onSurfaceVariant.withValues(alpha: 0.5),

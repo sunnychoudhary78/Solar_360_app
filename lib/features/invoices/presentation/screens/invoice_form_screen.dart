@@ -18,12 +18,15 @@ import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/document_totals_summary.dart';
 import 'package:solar_sales/shared/widgets/invoice_dispatch_fields.dart';
 import 'package:solar_sales/shared/widgets/party_address_fields.dart';
+import 'package:solar_sales/shared/widgets/warehouse_field.dart';
 
 import '../../data/models/invoice_model.dart';
 import '../providers/invoice_providers.dart';
 
 class _LineDraft {
   String? itemId;
+  String? warehouseId;
+  String? warehouseName;
   final qty = TextEditingController(text: '1');
   final price = TextEditingController();
   final gst = TextEditingController(text: '18');
@@ -97,6 +100,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
         inv.items.map((item) {
           final line = _LineDraft();
           line.itemId = item.itemId;
+          line.warehouseId = item.warehouseId;
+          line.warehouseName = item.warehouseName;
           line.qty.text = item.quantity.toString();
           line.price.text = item.unitPrice.toString();
           line.gst.text = item.gstPercent.toString();
@@ -149,8 +154,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       return;
     }
 
-    final dupError = AppValidators.duplicateLineItems(
-      _lines.map((l) => l.itemId),
+    final dupError = AppValidators.duplicateItemWarehousePairs(
+      _lines.map((l) => (l.itemId, l.warehouseId)),
     );
     if (dupError != null) {
       ref.read(globalLoadingProvider.notifier).showError(dupError);
@@ -165,9 +170,17 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             .showError('Select an item for each line');
         return;
       }
+      if (line.warehouseId == null || line.warehouseId!.isEmpty) {
+        ref
+            .read(globalLoadingProvider.notifier)
+            .showError('Select a warehouse for each line');
+        return;
+      }
       items.add(
         InvoiceItemModel(
           itemId: line.itemId!,
+          warehouseId: line.warehouseId,
+          warehouseName: line.warehouseName,
           quantity: int.parse(line.qty.text.trim()),
           unitPrice: double.parse(line.price.text.trim()),
           gstPercent: double.parse(line.gst.text.trim()),
@@ -479,10 +492,51 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                     if (line.description.text.isEmpty) {
                       line.description.text = item.name;
                     }
+                    final assignedIds = item.stockLevels
+                        .map((level) => level.warehouseId)
+                        .where((id) => id.isNotEmpty)
+                        .toList();
+                    if (assignedIds.length == 1) {
+                      line.warehouseId = assignedIds.first;
+                      line.warehouseName =
+                          item.stockLevels.first.warehouseName;
+                    } else if (line.warehouseId != null &&
+                        !assignedIds.contains(line.warehouseId)) {
+                      line.warehouseId = null;
+                      line.warehouseName = null;
+                    }
                   }
                 });
               },
               validator: (v) => v == null ? 'Select item' : null,
+            ),
+            const SizedBox(height: 8),
+            Builder(
+              builder: (context) {
+                ItemModel? selectedItem;
+                for (final it in approved) {
+                  if (it.id == line.itemId) {
+                    selectedItem = it;
+                    break;
+                  }
+                }
+                return WarehouseField(
+                  warehouseId: line.warehouseId,
+                  warehouseName: line.warehouseName,
+                  itemId: line.itemId,
+                  itemWarehouseIds: selectedItem?.stockLevels
+                      .map((level) => level.warehouseId)
+                      .where((id) => id.isNotEmpty),
+                  readOnly: false,
+                  requiredField: true,
+                  onChanged: (id) {
+                    setState(() {
+                      line.warehouseId = id;
+                      line.warehouseName = null;
+                    });
+                  },
+                );
+              },
             ),
             const SizedBox(height: 8),
             Row(

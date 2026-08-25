@@ -8,10 +8,14 @@ class ItemCategoryApiService {
 
   ItemCategoryApiService(this._api);
 
+  /// [includeInactive] true → full list (`?all=true`) for settings UI.
+  /// false → active only (`?active=true`), matching web Item Master.
   Future<List<ItemCategoryModel>> list({bool includeInactive = false}) async {
     final res = await _api.get(
       ApiEndpoints.itemCategories,
-      queryParams: includeInactive ? const {'all': 'true'} : null,
+      queryParams: includeInactive
+          ? const {'all': 'true'}
+          : const {'active': 'true'},
     );
     final list =
         res is List ? res : (res is Map ? (res['data'] as List? ?? []) : []);
@@ -27,13 +31,9 @@ class ItemCategoryApiService {
     return categories;
   }
 
-  Future<ItemCategoryModel> create({
-    required String label,
-    bool isActive = true,
-  }) async {
+  Future<ItemCategoryModel> create({required String label}) async {
     final res = await _api.post(ApiEndpoints.itemCategories, {
       'label': label.trim(),
-      'is_active': isActive,
     });
     return ItemCategoryModel.fromJson(Map<String, dynamic>.from(res as Map));
   }
@@ -46,8 +46,8 @@ class ItemCategoryApiService {
   }) async {
     final body = <String, dynamic>{
       if (label != null) 'label': label.trim(),
-      ?'is_active': isActive,
-      ?'sort_order': sortOrder,
+      'is_active': ?isActive,
+      'sort_order': ?sortOrder,
     };
     final res = await _api.patch(ApiEndpoints.itemCategory(id), body);
     return ItemCategoryModel.fromJson(Map<String, dynamic>.from(res as Map));

@@ -93,10 +93,12 @@ class InvoiceApiService {
     return InvoiceModel.fromJson(Map<String, dynamic>.from(res as Map));
   }
 
-  Future<InvoiceModel> approve(String id, String warehouseId) async {
+  Future<InvoiceModel> approve(String id, {String? warehouseId}) async {
     final res = await _api.post(
       ApiEndpoints.invoiceApprove(id),
-      {'warehouseId': warehouseId},
+      warehouseId != null && warehouseId.isNotEmpty
+          ? {'warehouseId': warehouseId}
+          : <String, dynamic>{},
     );
     return InvoiceModel.fromJson(Map<String, dynamic>.from(res as Map));
   }

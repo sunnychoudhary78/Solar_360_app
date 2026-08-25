@@ -2,7 +2,7 @@ enum Environment { uat, prod }
 
 class ApiConstants {
   /// Change only here.
-  static const Environment current = Environment.uat;
+  static const Environment current = Environment.prod;
 
   static String get baseUrl {
     switch (current) {

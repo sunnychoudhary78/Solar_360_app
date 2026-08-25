@@ -96,9 +96,6 @@ class SolarBrandingModel {
     if (branchId != null && branchId.isNotEmpty) {
       return {'branchId': branchId};
     }
-    if (companyAddress.isNotEmpty) {
-      return {'address': companyAddress};
-    }
-    return {};
+    return {'useHeadOffice': true};
   }
 }

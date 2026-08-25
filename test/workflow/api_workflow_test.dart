@@ -236,6 +236,7 @@ void main() {
         expect(body['items'], isA<List>());
         final item = (body['items'] as List).first as Map;
         expect(item['item_id'], 'i1');
+        expect(item['warehouse_id'], 'wh-1');
         expect(item['quantity'], 2);
         expect(item['unit_price'], 500);
         expect(item['gst_percent'], 18);
@@ -255,6 +256,7 @@ void main() {
         items: [
           const InvoiceItemModel(
             itemId: 'i1',
+            warehouseId: 'wh-1',
             quantity: 2,
             unitPrice: 500,
             gstPercent: 18,
@@ -311,7 +313,7 @@ void main() {
       expect(inv.status, 'pending_approval');
     });
 
-    test('approve requires warehouseId and sets sent + stock_deducted', () async {
+    test('approve sends warehouseId when provided and sets sent + stock_deducted', () async {
       pair.adapter.on('POST', 'approve', (req) {
         expect(req.data, {'warehouseId': 'wh-1'});
         return {
@@ -325,10 +327,28 @@ void main() {
         };
       });
 
-      final inv = await repo.approve('inv1', 'wh-1');
+      final inv = await repo.approve('inv1', warehouseId: 'wh-1');
       expect(inv.status, 'sent');
       expect(inv.stockDeducted, isTrue);
       expect(inv.warehouseId, 'wh-1');
+    });
+
+    test('approve without warehouseId posts empty body', () async {
+      pair.adapter.on('POST', 'approve', (req) {
+        expect(req.data, <String, dynamic>{});
+        return {
+          'id': 'inv1',
+          'invoice_number': 'INV-1',
+          'customer_id': 'c1',
+          'status': DocumentWorkflow.invoiceStatusAfterApprove,
+          'stock_deducted': true,
+          'items': [],
+        };
+      });
+
+      final inv = await repo.approve('inv1');
+      expect(inv.status, 'sent');
+      expect(inv.stockDeducted, isTrue);
     });
 
     test('stock-check query includes warehouseId', () async {

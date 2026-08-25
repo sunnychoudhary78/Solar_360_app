@@ -62,13 +62,6 @@ class _ItemCategoriesScreenState extends ConsumerState<ItemCategoriesScreen> {
               ),
               children: [
                 Text(
-                  'Item Categories',
-                  style: textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
                   'Manage categories shown in Inventory → Item Master. '
                   'Disabled categories are hidden when creating items but '
                   'existing items keep their category.',
@@ -82,7 +75,7 @@ class _ItemCategoriesScreenState extends ConsumerState<ItemCategoriesScreen> {
                   const Padding(
                     padding: EdgeInsets.only(top: 48),
                     child: EmptyState(
-                      title: 'No categories yet',
+                      title: 'No categories configured.',
                       subtitle: 'Add a category to use in Item Master.',
                       icon: Icons.category_outlined,
                     ),
@@ -136,7 +129,9 @@ class _ItemCategoriesScreenState extends ConsumerState<ItemCategoriesScreen> {
       if (!mounted) return;
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showSuccess(
-            visible ? 'Category visible in Item Master' : 'Category hidden',
+            visible
+                ? 'Category enabled'
+                : 'Category hidden from Item Master',
           );
       invalidateItemCategories(ref);
     } catch (e) {
@@ -150,7 +145,7 @@ class _ItemCategoriesScreenState extends ConsumerState<ItemCategoriesScreen> {
 
   Future<void> _showForm({ItemCategoryModel? category}) async {
     final isEdit = category != null;
-    final result = await showDialog<_CategoryFormResult>(
+    final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => _CategoryFormDialog(
         category: category,
@@ -166,13 +161,9 @@ class _ItemCategoriesScreenState extends ConsumerState<ItemCategoriesScreen> {
     try {
       final api = ref.read(itemCategoryApiServiceProvider);
       if (isEdit) {
-        await api.update(
-          category.id,
-          label: result.label,
-          isActive: result.isActive,
-        );
+        await api.update(category.id, label: result);
       } else {
-        await api.create(label: result.label, isActive: result.isActive);
+        await api.create(label: result);
       }
       if (!mounted) return;
       ref.read(globalLoadingProvider.notifier).hide();
@@ -186,16 +177,6 @@ class _ItemCategoriesScreenState extends ConsumerState<ItemCategoriesScreen> {
       ref.read(globalLoadingProvider.notifier).showError(cleanError(e));
     }
   }
-}
-
-class _CategoryFormResult {
-  const _CategoryFormResult({
-    required this.label,
-    required this.isActive,
-  });
-
-  final String label;
-  final bool isActive;
 }
 
 class _CategoryFormDialog extends StatefulWidget {
@@ -214,14 +195,12 @@ class _CategoryFormDialog extends StatefulWidget {
 class _CategoryFormDialogState extends State<_CategoryFormDialog> {
   late final TextEditingController _controller;
   late final GlobalKey<FormState> _formKey;
-  late bool _isActive;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.category?.label ?? '');
     _formKey = GlobalKey<FormState>();
-    _isActive = widget.category?.isActive ?? true;
   }
 
   @override
@@ -232,68 +211,27 @@ class _CategoryFormDialogState extends State<_CategoryFormDialog> {
 
   void _submit() {
     if (_formKey.currentState?.validate() != true) return;
-    Navigator.pop(
-      context,
-      _CategoryFormResult(
-        label: _controller.text.trim(),
-        isActive: _isActive,
-      ),
-    );
+    Navigator.pop(context, _controller.text.trim());
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final category = widget.category;
-
     return AlertDialog(
-      title: Text(widget.isEdit ? 'Edit Category' : 'Add Category'),
+      title: Text(widget.isEdit ? 'Edit Category' : 'Add Item Category'),
       content: Form(
         key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextFormField(
-              controller: _controller,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Category name *',
-                hintText: 'e.g. Solar Accessories',
-              ),
-              inputFormatters: [
-                LengthLimitingTextInputFormatter(80),
-              ],
-              validator: (v) => AppValidators.required(v, 'Category name'),
-            ),
-            if (widget.isEdit && category != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Code: ${category.value}',
-                style: TextStyle(
-                  color: scheme.onSurfaceVariant,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Show in Item Master'),
-              subtitle: Text(
-                _isActive
-                    ? 'Visible in create/edit item dropdowns'
-                    : 'Hidden from create/edit item dropdowns',
-                style: TextStyle(
-                  color: scheme.onSurfaceVariant,
-                  fontSize: 12,
-                ),
-              ),
-              value: _isActive,
-              onChanged: (v) => setState(() => _isActive = v),
-            ),
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Category name *',
+            hintText: 'e.g. Mounting Structure',
+          ),
+          inputFormatters: [
+            LengthLimitingTextInputFormatter(100),
           ],
+          validator: (v) => AppValidators.required(v, 'Category name'),
         ),
       ),
       actions: [
@@ -327,69 +265,68 @@ class _CategoryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final dimmed = !category.isActive;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  category.label,
-                  style: textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  category.value,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      category.isActive
-                          ? Icons.check_box_rounded
-                          : Icons.check_box_outline_blank_rounded,
-                      size: 18,
-                      color: category.isActive
-                          ? scheme.primary
-                          : scheme.onSurfaceVariant,
+    return Opacity(
+      opacity: dimmed ? 0.6 : 1,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    category.label,
+                    style: textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      category.isActive ? 'Visible' : 'Hidden',
-                      style: textTheme.labelMedium?.copyWith(
-                        color: category.isActive
-                            ? scheme.primary
-                            : scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    category.value,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontFamily: 'monospace',
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            if (canManage) ...[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Switch.adaptive(
+                    value: category.isActive,
+                    onChanged: onToggleVisible,
+                  ),
+                  Text(
+                    category.isActive ? 'Visible' : 'Hidden',
+                    style: textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                tooltip: 'Edit',
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            ] else
+              Text(
+                category.isActive ? 'Visible' : 'Hidden',
+                style: textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
-            ),
-          ),
-          if (canManage) ...[
-            Switch.adaptive(
-              value: category.isActive,
-              onChanged: onToggleVisible,
-            ),
-            IconButton(
-              tooltip: 'Edit',
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined),
-            ),
+              ),
           ],
-        ],
+        ),
       ),
     );
   }

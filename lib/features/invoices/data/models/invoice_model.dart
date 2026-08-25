@@ -6,6 +6,8 @@ import 'package:solar_sales/shared/utils/formatters.dart';
 class InvoiceItemModel {
   final String? id;
   final String itemId;
+  final String? warehouseId;
+  final String? warehouseName;
   final int quantity;
   final String? description;
   final double unitPrice;
@@ -17,6 +19,8 @@ class InvoiceItemModel {
   const InvoiceItemModel({
     this.id,
     required this.itemId,
+    this.warehouseId,
+    this.warehouseName,
     required this.quantity,
     this.description,
     required this.unitPrice,
@@ -28,9 +32,14 @@ class InvoiceItemModel {
 
   factory InvoiceItemModel.fromJson(Map<String, dynamic> json) {
     final itemRaw = json['item'];
+    final warehouseRaw = json['warehouse'];
     return InvoiceItemModel(
       id: json['id']?.toString(),
       itemId: asString(json['item_id']),
+      warehouseId: json['warehouse_id']?.toString(),
+      warehouseName: warehouseRaw is Map
+          ? warehouseRaw['name']?.toString()
+          : null,
       quantity: asInt(json['quantity'], 1),
       description: json['description']?.toString(),
       unitPrice: asDouble(json['unit_price']),
@@ -48,6 +57,7 @@ class InvoiceItemModel {
   Map<String, dynamic> toUpdateJson() {
     return {
       'item_id': itemId,
+      'warehouse_id': warehouseId,
       'quantity': quantity,
       'unit_price': unitPrice,
       'gst_percent': gstPercent,

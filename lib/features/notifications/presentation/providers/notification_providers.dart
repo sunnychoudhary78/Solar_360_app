@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/providers/network_providers.dart';
-
+import 'package:solar_sales/features/module/presentation/providers/module_provider.dart';
 import 'package:solar_sales/features/notifications/data/notification_api_service.dart';
 import 'package:solar_sales/features/notifications/data/notification_repository.dart';
 import 'package:solar_sales/features/notifications/data/models/notification_model.dart';
@@ -16,9 +16,16 @@ final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
 
 final myNotificationsProvider =
     FutureProvider.autoDispose<List<NotificationModel>>((ref) async {
-  return ref.watch(notificationRepositoryProvider).getMyNotifications();
+  final module = ref.watch(moduleProvider).activeModule;
+  return ref
+      .watch(notificationRepositoryProvider)
+      .getMyNotifications(module: module);
 });
 
-final unreadNotificationCountProvider = FutureProvider.autoDispose<int>((ref) async {
-  return ref.watch(notificationRepositoryProvider).getUnreadCount();
+final unreadNotificationCountProvider =
+    FutureProvider.autoDispose<int>((ref) async {
+  final module = ref.watch(moduleProvider).activeModule;
+  return ref
+      .watch(notificationRepositoryProvider)
+      .getUnreadCount(module: module);
 });
