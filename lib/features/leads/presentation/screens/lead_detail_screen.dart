@@ -49,6 +49,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   bool assignLoading = false;
   String? loadError;
 
+  /// Hides Upload Document after a successful Documents Submitted action,
+  /// even if a follow-up reload cannot re-fetch the lead (access handoff).
+  bool _documentsSubmittedUi = false;
+
   List<Map<String, dynamic>> history = [];
   List<_WorkflowUserOption> _documentAdmins = const [];
   List<_WorkflowUserOption> _liaisonOfficers = const [];
@@ -60,6 +64,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   void initState() {
     super.initState();
     _lead = widget.lead;
+    _documentsSubmittedUi = _isDocumentsSubmittedStatus(_lead.status);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _load();
@@ -113,6 +118,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       _financeUsers = workflowUsers.financeUsers;
       _materialEngineers = workflowUsers.materialEngineers;
       _electricalEngineers = workflowUsers.electricalEngineers;
+      _syncDocumentsSubmittedUiFromStatus(fresh.status);
       loading = false;
       loadError = null;
     });
@@ -399,16 +405,50 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
     return LeadWorkflow.getAllowedNextStatuses(_lead.status, roleName);
   }
 
+  bool _isDocumentsSubmittedStatus(String? status) {
+    final value = (status ?? '').trim().toLowerCase();
+    return value == 'documents submitted' || value == 'document submitted';
+  }
+
+  void _syncDocumentsSubmittedUiFromStatus(String status) {
+    final value = status.trim().toLowerCase();
+    if (_isDocumentsSubmittedStatus(value)) {
+      _documentsSubmittedUi = true;
+      return;
+    }
+
+    // Workflow reopened / still before submit → allow Upload Document again.
+    if (value == 'loan application initiated' ||
+        value == 'portal processing started' ||
+        value == 'documents verification started' ||
+        value == 'assigned to document administrator') {
+      _documentsSubmittedUi = false;
+    }
+  }
+
   bool _canUploadDocuments(List<String> nextStatuses) {
+    if (_documentsSubmittedUi) return false;
+
     final status = _lead.status.trim().toLowerCase();
-    if (status == 'documents submitted') return false;
+    if (_isDocumentsSubmittedStatus(status)) return false;
+
+    // After handoff to Bank Process (and later), upload must stay hidden.
+    const postSubmitStatuses = {
+      'banking process start',
+      'bank coordination in progress',
+      'bank process complete',
+      'finance verification started',
+      'amount received',
+    };
+    if (postSubmitStatuses.contains(status)) return false;
 
     return status == 'loan application initiated' ||
         nextStatuses.contains('Documents Submitted');
   }
 
   bool get _documentsAlreadySubmitted {
-    return _lead.status.trim().toLowerCase() == 'documents submitted';
+    return _documentsSubmittedUi ||
+        _isDocumentsSubmittedStatus(_lead.status);
   }
 
   List<String> _installationSpNumbers() {
@@ -668,6 +708,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       if (!mounted) return;
 
       final normalizedNextStatus = nextStatus.trim().toLowerCase();
+      final submittedDocuments = _isDocumentsSubmittedStatus(nextStatus);
 
       setState(() {
         if (normalizedNextStatus == 'installation done') {
@@ -677,6 +718,10 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
           );
         } else {
           _lead = _lead.copyWith(status: nextStatus);
+        }
+
+        if (submittedDocuments) {
+          _documentsSubmittedUi = true;
         }
 
         loading = false;
@@ -689,6 +734,17 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       try {
         await _reloadSilently();
       } catch (_) {}
+
+      // Document Administrator loses list/detail access after Documents Submitted.
+      // If reload fails or returns an older status, keep the submitted UI state.
+      if (mounted &&
+          submittedDocuments &&
+          !_isDocumentsSubmittedStatus(_lead.status)) {
+        setState(() {
+          _lead = _lead.copyWith(status: nextStatus);
+          _documentsSubmittedUi = true;
+        });
+      }
 
       if (!mounted) return;
 
@@ -1071,7 +1127,6 @@ registration_time=${result.regTime.trim()}
     final roleKey = auth.workflowRoleKey;
     final nextStatuses = _resolveNextStatuses(roleKey);
     final files = collectLeadFiles(_lead);
-    final showUploadButton = _canUploadDocuments(nextStatuses);
     final customerName = _lead.fullName.trim().isEmpty
         ? 'Customer'
         : _lead.fullName;
@@ -1093,6 +1148,8 @@ registration_time=${result.regTime.trim()}
         LeadWorkflow.canSalesCompleteDetails(_lead.status);
 
     final isDocumentAdministrator = roleKey == 'Document Administrator';
+    final showUploadButton =
+        isDocumentAdministrator && _canUploadDocuments(nextStatuses);
     final showDocumentsSubmittedState =
         isDocumentAdministrator &&
         _documentsAlreadySubmitted &&
