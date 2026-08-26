@@ -6,6 +6,8 @@ import 'package:solar_sales/features/customer_portal/presentation/screens/custom
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_home_screen.dart';
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_leads_screen.dart';
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_screen.dart';
+import 'package:solar_sales/features/customer_portal/presentation/widgets/customer_drawer.dart';
+import 'package:solar_sales/features/shell/presentation/shell_scope.dart';
 
 class CustomerShell extends ConsumerStatefulWidget {
   const CustomerShell({super.key});
@@ -15,73 +17,47 @@ class CustomerShell extends ConsumerStatefulWidget {
 }
 
 class _CustomerShellState extends ConsumerState<CustomerShell> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _index = 0;
 
-  static const _tabs = [
-    _CustomerTab(
-      label: 'Home',
-      icon: Icons.home_outlined,
-      selectedIcon: Icons.home_rounded,
-    ),
-    _CustomerTab(
-      label: 'Leads',
-      icon: Icons.assignment_outlined,
-      selectedIcon: Icons.assignment_rounded,
-    ),
-    _CustomerTab(
-      label: 'Support',
-      icon: Icons.headset_mic_outlined,
-      selectedIcon: Icons.headset_mic_rounded,
-    ),
-    _CustomerTab(
-      label: 'Account',
-      icon: Icons.person_outline_rounded,
-      selectedIcon: Icons.person_rounded,
-    ),
-  ];
+  void _selectTab(int index) {
+    if (index == _index || index < 0 || index >= customerPortalTabs.length) {
+      return;
+    }
+    setState(() => _index = index);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: [
-          CustomerHomeScreen(
-            onOpenLeads: () => setState(() => _index = 1),
-            onOpenSupport: () => setState(() => _index = 2),
-          ),
-          const CustomerLeadsScreen(),
-          const CustomerSupportScreen(),
-          const CustomerAccountScreen(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        height: 68,
-        destinations: [
-          for (final tab in _tabs)
-            NavigationDestination(
-              icon: Icon(tab.icon),
-              selectedIcon: Icon(tab.selectedIcon),
-              label: tab.label,
+    final scheme = Theme.of(context).colorScheme;
+
+    return ShellScope(
+      scaffoldKey: _scaffoldKey,
+      selectTab: _selectTab,
+      selectedTabIndex: _index,
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: scheme.surfaceContainerLowest,
+        drawer: CustomerDrawer(
+          tabs: customerPortalTabs,
+          selectedTabIndex: _index,
+          onSelectTab: _selectTab,
+        ),
+        body: IndexedStack(
+          index: _index,
+          children: [
+            CustomerHomeScreen(
+              onOpenLeads: () => _selectTab(1),
+              onOpenSupport: () => _selectTab(2),
             ),
-        ],
+            const CustomerLeadsScreen(),
+            const CustomerSupportScreen(),
+            const CustomerAccountScreen(),
+          ],
+        ),
       ),
     );
   }
-}
-
-class _CustomerTab {
-  final String label;
-  final IconData icon;
-  final IconData selectedIcon;
-
-  const _CustomerTab({
-    required this.label,
-    required this.icon,
-    required this.selectedIcon,
-  });
 }
 
 String customerGreeting() {

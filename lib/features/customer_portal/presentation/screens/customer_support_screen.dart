@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
+import 'package:solar_sales/features/support/presentation/widgets/support_ticket_card.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
-import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 class CustomerSupportScreen extends ConsumerWidget {
   const CustomerSupportScreen({super.key});
@@ -41,7 +40,7 @@ class CustomerSupportScreen extends ConsumerWidget {
           if (tickets.isEmpty) {
             return EmptyState(
               title: 'No support requests yet',
-              subtitle: 'Raise a request and our team will follow up.',
+              subtitle: 'Raise a request or follow a conversation started by support.',
               icon: Icons.headset_mic_outlined,
               action: FilledButton(
                 onPressed: () => Navigator.pushNamed(
@@ -63,46 +62,16 @@ class CustomerSupportScreen extends ConsumerWidget {
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final ticket = tickets[index];
-                return AppCard(
-                  onTap: () {
-                    Navigator.pushNamed(
+                return SupportTicketCard(
+                  ticket: ticket,
+                  onOpen: () async {
+                    await Navigator.pushNamed(
                       context,
                       '/customer/support/detail',
                       arguments: ticket.id,
                     );
+                    ref.invalidate(customerTicketsProvider);
                   },
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              ticket.subject,
-                              style: const TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          Chip(
-                            visualDensity: VisualDensity.compact,
-                            label: Text(ticket.statusLabel),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        [
-                          if (ticket.ticketNumber.isNotEmpty) ticket.ticketNumber,
-                          ticket.priority,
-                          if (ticket.updatedAt != null)
-                            DateFormat('dd MMM').format(ticket.updatedAt!),
-                        ].join(' · '),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                      ),
-                    ],
-                  ),
                 );
               },
             ),

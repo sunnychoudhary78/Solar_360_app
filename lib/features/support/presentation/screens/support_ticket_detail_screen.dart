@@ -5,24 +5,25 @@ import 'package:intl/intl.dart';
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/customer_portal/data/models/support_ticket_model.dart';
-import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
+import 'package:solar_sales/features/support/presentation/providers/support_providers.dart';
 import 'package:solar_sales/features/support/presentation/widgets/ticket_conversation.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
+import 'package:solar_sales/shared/widgets/dialogs.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
-class CustomerSupportDetailScreen extends ConsumerStatefulWidget {
+class SupportTicketDetailScreen extends ConsumerStatefulWidget {
   final String ticketId;
 
-  const CustomerSupportDetailScreen({super.key, required this.ticketId});
+  const SupportTicketDetailScreen({super.key, required this.ticketId});
 
   @override
-  ConsumerState<CustomerSupportDetailScreen> createState() =>
-      _CustomerSupportDetailScreenState();
+  ConsumerState<SupportTicketDetailScreen> createState() =>
+      _SupportTicketDetailScreenState();
 }
 
-class _CustomerSupportDetailScreenState
-    extends ConsumerState<CustomerSupportDetailScreen> {
+class _SupportTicketDetailScreenState
+    extends ConsumerState<SupportTicketDetailScreen> {
   final _reply = TextEditingController();
   SupportTicketModel? _ticket;
   bool _loading = true;
@@ -49,15 +50,15 @@ class _CustomerSupportDetailScreenState
       });
     }
     try {
-      final api = ref.read(customerPortalApiServiceProvider);
-      final ticket = await api.getTicket(widget.ticketId);
+      final api = ref.read(supportApiServiceProvider);
+      final ticket = await api.getById(widget.ticketId);
       try {
         await api.markMessagesRead(widget.ticketId);
       } catch (_) {}
-      var history = ticket.history;
+      List<SupportTicketHistoryItem> history = ticket.history;
       if (history.isEmpty) {
         try {
-          history = await api.getTicketHistory(widget.ticketId);
+          history = await api.history(widget.ticketId);
         } catch (_) {}
       }
       if (!mounted) return;
@@ -100,9 +101,7 @@ class _CustomerSupportDetailScreenState
     if (text.isEmpty || _ticket == null) return;
     setState(() => _sending = true);
     try {
-      await ref
-          .read(customerPortalApiServiceProvider)
-          .addMessage(_ticket!.id, text);
+      await ref.read(supportApiServiceProvider).addMessage(_ticket!.id, text);
       _reply.clear();
       await _load(silent: true);
     } catch (e) {
@@ -112,21 +111,87 @@ class _CustomerSupportDetailScreenState
     }
   }
 
+  Future<void> _solveAndClose() async {
+    if (_ticket == null) return;
+    final resolution = TextEditingController(
+      text: _ticket!.resolutionSummary ?? '',
+    );
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Solve & Close'),
+          content: TextField(
+            controller: resolution,
+            minLines: 3,
+            maxLines: 6,
+            decoration: const InputDecoration(
+              labelText: 'Resolution',
+              hintText: 'Add resolution and close the request.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Solve & Close'),
+            ),
+          ],
+        );
+      },
+    );
+    final note = resolution.text.trim();
+    resolution.dispose();
+    if (confirmed != true || !mounted) return;
+    if (note.isEmpty) {
+      ref.read(globalLoadingProvider.notifier).showApiError(
+            'Please add a resolution before closing.',
+          );
+      return;
+    }
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Close this request?',
+      message: 'The ticket will be marked as closed and the customer will see the resolution.',
+      confirmLabel: 'Solve & Close',
+    );
+    if (!ok || !mounted) return;
+    ref.read(globalLoadingProvider.notifier).showLoading('Closing ticket...');
+    try {
+      await ref.read(supportApiServiceProvider).update(_ticket!.id, {
+        'status': 'closed',
+        'resolution_summary': note,
+      });
+      ref.read(globalLoadingProvider.notifier).hide();
+      ref.read(globalLoadingProvider.notifier).showSuccess(
+            'Ticket solved and closed',
+          );
+      await _load();
+    } catch (e) {
+      ref.read(globalLoadingProvider.notifier).hide();
+      ref.read(globalLoadingProvider.notifier).showApiError(e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final customer = ref.watch(authProvider).customer;
+    final auth = ref.watch(authProvider);
+    final canUpdate = auth.hasPermission('support_ticket.update');
     final ticket = _ticket;
 
     if (_loading) {
       return const Scaffold(
-        appBar: AppAppBar(title: 'Request details'),
+        appBar: AppAppBar(title: 'Support request'),
         body: LoadingState(),
       );
     }
     if (_error != null || ticket == null) {
       return Scaffold(
-        appBar: const AppAppBar(title: 'Request details'),
+        appBar: const AppAppBar(title: 'Support request'),
         body: ErrorState(
           message: _error ?? 'Unable to load ticket',
           onRetry: _load,
@@ -137,9 +202,7 @@ class _CustomerSupportDetailScreenState
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
       appBar: AppAppBar(
-        title: ticket.ticketNumber.isEmpty
-            ? 'Request details'
-            : ticket.ticketNumber,
+        title: ticket.ticketNumber.isEmpty ? 'Support request' : ticket.ticketNumber,
         subtitle: ticket.subject,
       ),
       body: ListView(
@@ -165,6 +228,8 @@ class _CustomerSupportDetailScreenState
                     Chip(label: Text(ticket.priorityLabel)),
                     if (ticket.category.isNotEmpty)
                       Chip(label: Text(ticket.categoryLabel)),
+                    if (ticket.customerName.isNotEmpty)
+                      Chip(label: Text(ticket.customerName)),
                   ],
                 ),
                 if (ticket.description.isNotEmpty) ...[
@@ -212,22 +277,56 @@ class _CustomerSupportDetailScreenState
           const SizedBox(height: 12),
           TicketConversation(
             messages: ticket.messages,
-            isCustomerView: true,
-            currentUserId: customer?.id ?? '',
-            customerName: customer?.name ?? ticket.customerName,
+            isCustomerView: false,
+            currentUserId: auth.profile?.id ?? auth.authUser?.id ?? '',
+            customerName: ticket.customerName,
           ),
-          if (!ticket.isClosed) ...[
+          if (canUpdate && !ticket.isClosed) ...[
             const SizedBox(height: 12),
             TicketReplyBox(
               controller: _reply,
               onSend: _send,
               enabled: true,
               sending: _sending,
-              hintText: 'Write a message to the support team...',
+              replyToName: ticket.customerName,
+              hintText:
+                  'Write a helpful response to ${ticket.customerName.isEmpty ? 'the customer' : ticket.customerName}...',
             ),
           ],
           const SizedBox(height: 12),
           TicketTimelineCard(history: ticket.history),
+          if (canUpdate && !ticket.isClosed) ...[
+            const SizedBox(height: 16),
+            AppCard(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Ready to finish?',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          'Add resolution and close the request.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _solveAndClose,
+                    icon: const Icon(Icons.check_circle_outline_rounded),
+                    label: const Text('Solve & Close'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

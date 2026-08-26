@@ -8,6 +8,7 @@ import 'package:solar_sales/features/leads/presentation/screens/all_leads_screen
 import 'package:solar_sales/features/leads/presentation/screens/solar_home_screen.dart';
 import 'package:solar_sales/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:solar_sales/features/quotations/presentation/screens/quotations_screen.dart';
+import 'package:solar_sales/features/support/presentation/screens/support_tickets_screen.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
 
 /// Where a destination lives in the navigation chrome.
@@ -136,6 +137,18 @@ class NavDestinations {
       screen: InvoicesScreen(),
       quickAction: true,
       quickActionSubtitle: 'Billing & dispatch',
+    ),
+    AppDestination(
+      id: 'bb_support',
+      label: 'Support',
+      icon: Icons.headset_mic_outlined,
+      selectedIcon: Icons.headset_mic_rounded,
+      section: NavSection.main,
+      kind: NavKind.shellTab,
+      permission: 'support_ticket.read',
+      screen: SupportTicketsScreen(),
+      quickAction: true,
+      quickActionSubtitle: 'Customer requests',
     ),
     AppDestination(
       id: 'bb_notifications',

@@ -1,0 +1,491 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/features/customer_portal/data/models/support_ticket_model.dart';
+import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
+
+class TicketConversation extends StatelessWidget {
+  const TicketConversation({
+    super.key,
+    required this.messages,
+    required this.isCustomerView,
+    required this.currentUserId,
+    required this.customerName,
+    this.maxHeight = 420,
+  });
+
+  final List<SupportTicketMessage> messages;
+  final bool isCustomerView;
+  final String currentUserId;
+  final String customerName;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final visible = messages.where((m) => !m.isInternal).toList();
+
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.chat_bubble_outline_rounded, color: scheme.primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Conversation',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Chip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text(
+                              '${visible.length} ${visible.length == 1 ? 'message' : 'messages'}',
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        isCustomerView
+                            ? 'Chat with the support team'
+                            : 'Direct conversation with ${customerName.isEmpty ? 'customer' : customerName}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight, minHeight: 160),
+            child: visible.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: Text(
+                        isCustomerView
+                            ? 'Send your first message to the support team.'
+                            : 'No messages yet. Reply to start the conversation.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                    itemCount: visible.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      return _MessageBubble(
+                        message: visible[index],
+                        isMine: _isMine(visible[index]),
+                        isCustomerView: isCustomerView,
+                        customerName: customerName,
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _isMine(SupportTicketMessage message) {
+    if (isCustomerView) {
+      return message.isCustomer &&
+          (currentUserId.isEmpty ||
+              message.senderId.isEmpty ||
+              message.senderId == currentUserId);
+    }
+    return !message.isCustomer &&
+        (currentUserId.isEmpty ||
+            message.senderId.isEmpty ||
+            message.senderId == currentUserId);
+  }
+}
+
+class TicketReplyBox extends StatefulWidget {
+  const TicketReplyBox({
+    super.key,
+    required this.controller,
+    required this.onSend,
+    required this.enabled,
+    required this.hintText,
+    this.replyToName,
+    this.sending = false,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onSend;
+  final bool enabled;
+  final String hintText;
+  final String? replyToName;
+  final bool sending;
+
+  @override
+  State<TicketReplyBox> createState() => _TicketReplyBoxState();
+}
+
+class _TicketReplyBoxState extends State<TicketReplyBox> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant TicketReplyBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onChanged);
+      widget.controller.addListener(_onChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  void _onChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final count = widget.controller.text.length;
+    final canSend = widget.enabled &&
+        !widget.sending &&
+        widget.controller.text.trim().isNotEmpty;
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  (widget.replyToName == null ||
+                          widget.replyToName!.trim().isEmpty)
+                      ? 'REPLY'
+                      : 'REPLY TO ${widget.replyToName!.toUpperCase()}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+              Text(
+                '$count/4000',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: widget.controller,
+            enabled: widget.enabled && !widget.sending,
+            minLines: 3,
+            maxLines: 6,
+            maxLength: 4000,
+            decoration: InputDecoration(
+              hintText: widget.hintText,
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(Icons.shield_outlined, size: 16, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Messages are saved to this ticket',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: canSend ? widget.onSend : null,
+                icon: widget.sending
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: const Text('Send Message'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class TicketTimelineCard extends StatelessWidget {
+  const TicketTimelineCard({super.key, required this.history});
+
+  final List<SupportTicketHistoryItem> history;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AppCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                child: const Icon(
+                  Icons.schedule_rounded,
+                  color: Color(0xFF7C3AED),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ticket Timeline',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    Text(
+                      'Track request activity',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (history.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 28),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.7),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: Text(
+                'No timeline activity available.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+            )
+          else
+            for (final item in history)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.circle, size: 10, color: scheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          if (item.note.isNotEmpty)
+                            Text(
+                              item.note,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          if (item.createdAt != null)
+                            Text(
+                              DateFormat('dd MMM yyyy, hh:mm a')
+                                  .format(item.createdAt!),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MessageBubble extends StatelessWidget {
+  const _MessageBubble({
+    required this.message,
+    required this.isMine,
+    required this.isCustomerView,
+    required this.customerName,
+  });
+
+  final SupportTicketMessage message;
+  final bool isMine;
+  final bool isCustomerView;
+  final String customerName;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final alignEnd = isCustomerView ? message.isCustomer : isMine;
+    final name = _displayName();
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final time = message.createdAt == null
+        ? ''
+        : DateFormat('dd MMM, hh:mm a').format(message.createdAt!);
+
+    final bubble = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: alignEnd && isCustomerView
+              ? scheme.primary
+              : scheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: alignEnd && isCustomerView
+              ? null
+              : Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+        ),
+        child: Text(
+          message.message,
+          style: TextStyle(
+            color: alignEnd && isCustomerView
+                ? scheme.onPrimary
+                : scheme.onSurface,
+            height: 1.4,
+          ),
+        ),
+      ),
+    );
+
+    final avatar = CircleAvatar(
+      radius: 16,
+      backgroundColor: scheme.primary.withValues(alpha: 0.16),
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: scheme.primary,
+          fontWeight: FontWeight.w800,
+          fontSize: 13,
+        ),
+      ),
+    );
+
+    final meta = Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        [name, if (time.isNotEmpty) time].join('  ·  '),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: alignEnd && isCustomerView
+                  ? scheme.primary
+                  : scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
+
+    if (alignEnd) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Flexible(child: meta),
+              const SizedBox(width: 8),
+              avatar,
+            ],
+          ),
+          bubble,
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            avatar,
+            const SizedBox(width: 8),
+            Flexible(child: meta),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 40),
+          child: bubble,
+        ),
+      ],
+    );
+  }
+
+  String _displayName() {
+    if (isMine) return 'You';
+    if (message.isCustomer) {
+      return message.senderName.isNotEmpty
+          ? message.senderName
+          : (customerName.isEmpty ? 'Customer' : customerName);
+    }
+    return message.senderName.isNotEmpty ? message.senderName : 'Admin';
+  }
+}

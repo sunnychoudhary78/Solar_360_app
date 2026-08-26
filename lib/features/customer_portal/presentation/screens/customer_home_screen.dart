@@ -9,6 +9,7 @@ import 'package:solar_sales/features/customer_portal/presentation/providers/cust
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_shell.dart';
 import 'package:solar_sales/features/customer_portal/presentation/widgets/customer_lead_progress.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
+import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
@@ -31,13 +32,13 @@ class CustomerHomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(customerLeadsProvider);
-            await ref.read(customerLeadsProvider.future);
-          },
-          child: ListView(
+      appBar: const AppAppBar(title: 'Home'),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(customerLeadsProvider);
+          await ref.read(customerLeadsProvider.future);
+        },
+        child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
             children: [
               AppCard(
@@ -168,8 +169,7 @@ class CustomerHomeScreen extends ConsumerWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Future<void> _openLeadForm(

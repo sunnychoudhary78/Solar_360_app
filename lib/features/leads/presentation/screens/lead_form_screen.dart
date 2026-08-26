@@ -756,7 +756,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'account_number': _textOrNull(accountNumber),
       'ifsc_code': _textOrNull(ifscCode)?.toUpperCase(),
       'project_type': projectType,
-      'source': widget.customerPortal ? 'Customer Portal' : source,
+      'source': widget.customerPortal ? 'Other' : source,
       'priority': priority,
       'notes': _textOrNull(notes),
       'customer_id': widget.customerPortal

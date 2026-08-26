@@ -37,6 +37,8 @@ import 'package:solar_sales/features/quotations/presentation/screens/quotations_
 import 'package:solar_sales/features/reports/presentation/screens/reports_screen.dart';
 import 'package:solar_sales/features/settings/presentation/screens/settings_screen.dart';
 import 'package:solar_sales/features/shell/presentation/screens/app_shell.dart';
+import 'package:solar_sales/features/support/presentation/screens/support_ticket_detail_screen.dart';
+import 'package:solar_sales/features/support/presentation/screens/support_ticket_form_screen.dart';
 
 class AppRoutes {
   static Map<String, WidgetBuilder> get routes => {
@@ -67,6 +69,11 @@ class AppRoutes {
     '/customer/support/detail': (context) {
       final id = ModalRoute.of(context)!.settings.arguments as String;
       return CustomerSupportDetailScreen(ticketId: id);
+    },
+    '/support/new': (_) => const SupportTicketFormScreen(),
+    '/support/detail': (context) {
+      final id = ModalRoute.of(context)!.settings.arguments as String;
+      return SupportTicketDetailScreen(ticketId: id);
     },
     '/customers': (_) => const CustomersScreen(),
     '/customers/form': (context) {

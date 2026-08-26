@@ -37,6 +37,22 @@ class ApiEndpoints {
   static String supportTicket(String id) => 'support-tickets/$id';
   static String supportTicketHistory(String id) =>
       'support-tickets/$id/history';
+  static String supportTicketMessages(String id) =>
+      'support-tickets/$id/messages';
+  static String supportTicketMessagesRead(String id) =>
+      'support-tickets/$id/messages/read';
+
+  // Staff / Company Admin support (Billbook)
+  static const adminSupportTickets = 'support-tickets/admin/list';
+  static const adminSupportTicketCreate = 'support-tickets/admin';
+  static String adminSupportTicket(String id) =>
+      'support-tickets/admin/$id';
+  static String adminSupportTicketMessages(String id) =>
+      'support-tickets/admin/$id/messages';
+  static String adminSupportTicketMessagesRead(String id) =>
+      'support-tickets/admin/$id/messages/read';
+  static String adminSupportTicketHistory(String id) =>
+      'support-tickets/admin/$id/history';
 
   // Items
   static const items = 'items';
