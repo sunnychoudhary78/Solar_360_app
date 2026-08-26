@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/screens/splash_screen.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/auth/presentation/screens/login_screen.dart';
+import 'package:solar_sales/features/customer_portal/presentation/screens/customer_shell.dart';
 import 'package:solar_sales/features/shell/presentation/screens/app_shell.dart';
 import 'package:solar_sales/features/shell/presentation/screens/subscription_inactive_screen.dart';
 
@@ -75,6 +76,10 @@ class _AppRootState extends ConsumerState<AppRoot> {
 
     if (authState.subscriptionInactive) {
       return const SubscriptionInactiveScreen();
+    }
+
+    if (authState.isCustomerSession && authState.isAuthenticated) {
+      return const CustomerShell();
     }
 
     if (authState.isAuthenticated) {

@@ -47,7 +47,7 @@ class DioClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await tokenStorage.getJwt();
+          final token = await tokenStorage.getActiveToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -57,7 +57,9 @@ class DioClient {
           final path = e.requestOptions.path.toLowerCase();
           final isCredentialValidation =
               path.endsWith('auth/login') ||
-              path.endsWith('auth/change-password');
+              path.endsWith('auth/change-password') ||
+              path.endsWith('customers/login') ||
+              path.endsWith('customers/change-password');
 
           if (e.response?.statusCode == 401 && !isCredentialValidation) {
             await tokenStorage.clear();

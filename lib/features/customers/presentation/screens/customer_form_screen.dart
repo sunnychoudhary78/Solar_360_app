@@ -8,9 +8,11 @@ import 'package:solar_sales/features/auth/presentation/providers/auth_provider.d
 import 'package:solar_sales/shared/utils/validators.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
+import 'package:solar_sales/shared/widgets/dialogs.dart';
 
 import '../../data/models/customer_model.dart';
 import '../providers/customer_providers.dart';
+import '../widgets/customer_credentials_dialog.dart';
 
 class CustomerFormScreen extends ConsumerStatefulWidget {
   final String? customerId;
@@ -96,11 +98,15 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
     try {
       final repo = ref.read(customerRepositoryProvider);
       Object? popResult = true;
+      LoginCredentials? credentials;
       if (isEdit) {
         await repo.update(widget.customerId!, model);
       } else {
         final created = await repo.create(model);
-        popResult = created.id.isNotEmpty ? created.id : true;
+        popResult = created.customer.id.isNotEmpty
+            ? created.customer.id
+            : true;
+        credentials = created.credentials;
       }
       ref.read(customerListProvider.notifier).refresh();
       if (isEdit) {
@@ -110,7 +116,48 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
       ref.read(globalLoadingProvider.notifier).showSuccess(
             isEdit ? 'Customer updated' : 'Customer created',
           );
+      if (!mounted) return;
+      if (credentials != null) {
+        await showCustomerCredentialsDialog(
+          context,
+          credentials: credentials,
+        );
+      }
       if (mounted) Navigator.pop(context, popResult);
+    } catch (e) {
+      ref.read(globalLoadingProvider.notifier).hide();
+      ref.read(globalLoadingProvider.notifier).showApiError(e);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    if (!isEdit || widget.customerId == null) return;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Reset login pass',
+      message:
+          'Generate a new temporary password for this customer? Share it only with them.',
+      confirmLabel: 'Reset',
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _loading = true);
+    ref
+        .read(globalLoadingProvider.notifier)
+        .showLoading('Resetting password...');
+    try {
+      final credentials = await ref
+          .read(customerRepositoryProvider)
+          .resetDefaultPassword(widget.customerId!);
+      ref.read(globalLoadingProvider.notifier).hide();
+      if (!mounted) return;
+      await showCustomerCredentialsDialog(
+        context,
+        credentials: credentials,
+        title: 'Login pass reset',
+      );
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showApiError(e);
@@ -157,7 +204,18 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
 
     return Scaffold(
       backgroundColor: scheme.surface,
-      appBar: AppAppBar(title: isEdit ? 'Edit Customer' : 'New Customer'),
+      appBar: AppAppBar(
+        title: isEdit ? 'Edit Customer' : 'New Customer',
+        actions: [
+          if (isEdit &&
+              ref.watch(authProvider).hasPermission('customer.update'))
+            IconButton(
+              tooltip: 'Reset login pass',
+              onPressed: _loading ? null : _resetPassword,
+              icon: const Icon(Icons.lock_reset_outlined),
+            ),
+        ],
+      ),
       body: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -201,13 +259,15 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _email,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  hintText: 'example@domain.com',
+                decoration: InputDecoration(
+                  labelText: isEdit ? 'Email' : 'Email *',
+                  hintText: 'Used for customer login',
                 ),
                 keyboardType: TextInputType.emailAddress,
                 inputFormatters: [LengthLimitingTextInputFormatter(100)],
-                validator: AppValidators.optionalEmail,
+                validator: isEdit
+                    ? AppValidators.optionalEmail
+                    : AppValidators.email,
               ),
 
               const SizedBox(height: AppSpacing.xl),

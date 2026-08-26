@@ -1,5 +1,31 @@
 import 'package:solar_sales/shared/utils/formatters.dart';
 
+class LoginCredentials {
+  final String email;
+  final String password;
+
+  const LoginCredentials({required this.email, required this.password});
+
+  bool get isValid => email.trim().isNotEmpty && password.trim().isNotEmpty;
+
+  factory LoginCredentials.fromJson(dynamic json) {
+    if (json is! Map) {
+      return const LoginCredentials(email: '', password: '');
+    }
+    return LoginCredentials(
+      email: asString(json['email']),
+      password: asString(json['password']),
+    );
+  }
+}
+
+class CustomerWriteResult {
+  final CustomerModel customer;
+  final LoginCredentials? credentials;
+
+  const CustomerWriteResult({required this.customer, this.credentials});
+}
+
 class CustomerModel {
   final String id;
   final String name;
@@ -25,18 +51,31 @@ class CustomerModel {
     this.aadharNumber,
   });
 
+  static Map<String, dynamic> unwrap(dynamic json) {
+    if (json is! Map) return <String, dynamic>{};
+    final map = Map<String, dynamic>.from(json);
+    if (map['customer'] is Map) {
+      return Map<String, dynamic>.from(map['customer'] as Map);
+    }
+    if (map['data'] is Map) {
+      return Map<String, dynamic>.from(map['data'] as Map);
+    }
+    return map;
+  }
+
   factory CustomerModel.fromJson(Map<String, dynamic> json) {
+    final source = unwrap(json);
     return CustomerModel(
-      id: asString(json['id']),
-      name: asString(json['name']),
-      email: json['email']?.toString(),
-      phone: json['phone']?.toString(),
-      address: json['address']?.toString(),
-      city: json['city']?.toString(),
-      state: json['state']?.toString(),
-      pincode: json['pincode']?.toString(),
-      gstNumber: json['gst_number']?.toString(),
-      aadharNumber: json['aadhar_number']?.toString(),
+      id: asString(source['id']),
+      name: asString(source['name']),
+      email: source['email']?.toString(),
+      phone: source['phone']?.toString(),
+      address: source['address']?.toString(),
+      city: source['city']?.toString(),
+      state: source['state']?.toString(),
+      pincode: source['pincode']?.toString(),
+      gstNumber: source['gst_number']?.toString(),
+      aadharNumber: source['aadhar_number']?.toString(),
     );
   }
 

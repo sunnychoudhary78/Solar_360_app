@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/app/navigator.dart';
+import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/core/providers/network_providers.dart';
 import 'package:solar_sales/core/providers/role_refresh.dart';
+import 'package:solar_sales/core/storage/token_storage.dart';
 import 'package:solar_sales/features/module/presentation/providers/module_provider.dart';
 
 import '../../data/auth_api_service.dart';
@@ -138,6 +140,7 @@ class AuthNotifier extends Notifier<AuthState> {
       profile: enrichedProfile,
       permissions: permissions,
       assignedRoles: assignedRoles,
+      sessionKind: SessionKind.staff,
       isLoading: false,
       isInitializing: false,
       subscriptionInactive: false,
@@ -145,6 +148,29 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> tryAutoLogin() async {
+    final kind = await _repo.getSessionKind();
+    if (kind == SessionKind.customer) {
+      final jwt = await _repo.getStoredCustomerToken();
+      if (jwt == null || jwt.isEmpty) {
+        state = const AuthState(isLoading: false, isInitializing: false);
+        return;
+      }
+      try {
+        state = state.copyWith(isLoading: true);
+        final customer = await _repo.getCustomerMe();
+        state = AuthState(
+          customer: customer,
+          sessionKind: SessionKind.customer,
+          isLoading: false,
+          isInitializing: false,
+        );
+      } catch (_) {
+        await _repo.logoutLocal();
+        state = const AuthState(isLoading: false, isInitializing: false);
+      }
+      return;
+    }
+
     final jwt = await _repo.getStoredToken();
     if (jwt == null || jwt.isEmpty) {
       state = const AuthState(isLoading: false, isInitializing: false);
@@ -159,7 +185,7 @@ class AuthNotifier extends Notifier<AuthState> {
         profile: profile,
         fallbackRoles: storedRoles,
       );
-      state = nextState;
+      state = nextState.copyWith(sessionKind: SessionKind.staff);
       await ref
           .read(moduleProvider.notifier)
           .syncFromAuth(
@@ -190,42 +216,20 @@ class AuthNotifier extends Notifier<AuthState> {
     ref.read(globalLoadingProvider.notifier).showLoading('Signing in...');
 
     try {
-      final result = await _repo.login(email, password);
-      final profile = await _repo.getMe();
-      final nextState = await _buildSessionFromProfile(
-        profile: profile,
-        authUser: result.user,
-        fallbackRoles: _mergeRoles([
-          result.user.roles,
-          profile.roles,
-          if (result.user.effectiveRoleName.isNotEmpty)
-            [result.user.effectiveRoleName],
-          if (profile.effectiveRoleName.isNotEmpty)
-            [profile.effectiveRoleName],
-        ]),
-      );
-      state = nextState;
+      LoginResult? staffResult;
+      try {
+        staffResult = await _repo.login(email, password);
+      } catch (e) {
+        if (_isSubscriptionInactive(e) || !_canFallbackToCustomer(e)) {
+          rethrow;
+        }
+      }
 
-      await ref
-          .read(moduleProvider.notifier)
-          .syncFromAuth(
-            permissions: nextState.permissions,
-            role: nextState.profile!.effectiveRoleName,
-            companyBillbook: nextState.profile!.companyModules.billbook,
-            companySolar: nextState.profile!.companyModules.solar,
-            companyAdmin: nextState.profile!.isCompanyAdmin,
-            platformAdmin: nextState.profile!.isPlatformSuperAdmin,
-          );
-
-      ref.read(globalLoadingProvider.notifier).hide();
-      ref
-          .read(globalLoadingProvider.notifier)
-          .showMessage(
-            'Welcome back, ${nextState.profile!.name.split(' ').first}',
-          );
-
-      final home = ref.read(moduleProvider).homeRoute;
-      await safeResetToRoute(home);
+      if (staffResult != null) {
+        await _completeStaffSession(staffResult);
+      } else {
+        await _completeCustomerLogin(email, password);
+      }
     } catch (e) {
       final inactive = _isSubscriptionInactive(e);
       state = state.copyWith(
@@ -239,6 +243,80 @@ class AuthNotifier extends Notifier<AuthState> {
       }
       rethrow;
     }
+  }
+
+  Future<void> _completeStaffSession(LoginResult result) async {
+    final profile = await _repo.getMe();
+    final nextState = await _buildSessionFromProfile(
+      profile: profile,
+      authUser: result.user,
+      fallbackRoles: _mergeRoles([
+        result.user.roles,
+        profile.roles,
+        if (result.user.effectiveRoleName.isNotEmpty)
+          [result.user.effectiveRoleName],
+        if (profile.effectiveRoleName.isNotEmpty)
+          [profile.effectiveRoleName],
+      ]),
+    );
+    state = nextState.copyWith(sessionKind: SessionKind.staff);
+
+    await ref
+        .read(moduleProvider.notifier)
+        .syncFromAuth(
+          permissions: nextState.permissions,
+          role: nextState.profile!.effectiveRoleName,
+          companyBillbook: nextState.profile!.companyModules.billbook,
+          companySolar: nextState.profile!.companyModules.solar,
+          companyAdmin: nextState.profile!.isCompanyAdmin,
+          platformAdmin: nextState.profile!.isPlatformSuperAdmin,
+        );
+
+    ref.read(globalLoadingProvider.notifier).hide();
+    ref
+        .read(globalLoadingProvider.notifier)
+        .showMessage(
+          'Welcome back, ${nextState.profile!.name.split(' ').first}',
+        );
+
+    final home = ref.read(moduleProvider).homeRoute;
+    await safeResetToRoute(home);
+  }
+
+  Future<void> _completeCustomerLogin(String email, String password) async {
+    final result = await _repo.customerLogin(email, password);
+    var customer = result.customer;
+    try {
+      customer = await _repo.getCustomerMe();
+    } catch (_) {
+      // Login payload is enough to enter the portal.
+    }
+
+    state = AuthState(
+      customer: customer,
+      sessionKind: SessionKind.customer,
+      isLoading: false,
+      isInitializing: false,
+    );
+
+    ref.read(globalLoadingProvider.notifier).hide();
+    ref
+        .read(globalLoadingProvider.notifier)
+        .showMessage('Welcome back, ${customer.firstName}');
+
+    await safeResetToRoute('/');
+  }
+
+  bool _canFallbackToCustomer(Object e) {
+    if (e is ApiException) {
+      final status = e.statusCode;
+      if (status == null) return true;
+      return status == 400 ||
+          status == 401 ||
+          status == 403 ||
+          status == 404;
+    }
+    return true;
   }
 
   Future<void> switchRole(String role) async {
@@ -346,11 +424,19 @@ class AuthNotifier extends Notifier<AuthState> {
         .read(globalLoadingProvider.notifier)
         .showLoading('Updating password...');
     try {
-      await _repo.changePassword(
-        currentPassword: currentPassword,
-        newPassword: newPassword,
-        confirmPassword: confirmPassword,
-      );
+      if (state.isCustomerSession) {
+        await _repo.changeCustomerPassword(
+          currentPassword: currentPassword,
+          newPassword: newPassword,
+          confirmPassword: confirmPassword,
+        );
+      } else {
+        await _repo.changePassword(
+          currentPassword: currentPassword,
+          newPassword: newPassword,
+          confirmPassword: confirmPassword,
+        );
+      }
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showSuccess('Password updated');
     } catch (e) {

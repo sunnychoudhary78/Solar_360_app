@@ -10,8 +10,16 @@ import 'models/lead_model.dart';
 class LeadApiService {
   final ApiService _api;
   final Dio _dio;
+  final String _leadsPath;
+  final String Function(String id) _leadPath;
 
-  LeadApiService(this._api, this._dio);
+  LeadApiService(
+    this._api,
+    this._dio, {
+    String leadsPath = ApiEndpoints.leads,
+    String Function(String id)? leadPath,
+  })  : _leadsPath = leadsPath,
+        _leadPath = leadPath ?? ApiEndpoints.lead;
 
   String _fileName(String path) {
     final parts = path.split(RegExp(r'[\\/]'));
@@ -66,7 +74,7 @@ class LeadApiService {
     );
 
     try {
-      await _dio.post(ApiEndpoints.leads, data: FormData.fromMap(formDataMap));
+      await _dio.post(_leadsPath, data: FormData.fromMap(formDataMap));
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
     }
@@ -89,7 +97,7 @@ class LeadApiService {
 
     try {
       await _dio.put(
-        ApiEndpoints.lead(leadId),
+        _leadPath(leadId),
         data: FormData.fromMap(formDataMap),
       );
     } on DioException catch (e) {
@@ -162,12 +170,12 @@ class LeadApiService {
   }
 
   Future<List<LeadModel>> getAllLeads() async {
-    final res = await _api.get(ApiEndpoints.leads);
+    final res = await _api.get(_leadsPath);
     return _parseLeadList(res);
   }
 
   Future<LeadModel> getLeadById(String id) async {
-    final res = await _api.get(ApiEndpoints.lead(id));
+    final res = await _api.get(_leadPath(id));
     return LeadModel.fromJson(_extractLeadJson(res));
   }
 
@@ -296,7 +304,7 @@ class LeadApiService {
 
     try {
       await _dio.put(
-        ApiEndpoints.lead(leadId),
+        _leadPath(leadId),
         data: FormData.fromMap(formDataMap),
       );
     } on DioException catch (e) {
@@ -315,7 +323,7 @@ class LeadApiService {
       };
 
       final res = await _dio.put(
-        ApiEndpoints.lead(leadId),
+        _leadPath(leadId),
         data: FormData.fromMap(formDataMap),
       );
 

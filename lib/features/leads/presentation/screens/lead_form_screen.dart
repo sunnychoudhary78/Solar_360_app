@@ -13,6 +13,7 @@ import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/utils/upload_url.dart';
 import 'package:solar_sales/core/widgets/app_message.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
@@ -48,11 +49,13 @@ class _PredefinedLeadFile {
 class LeadFormScreen extends ConsumerStatefulWidget {
   final LeadFormMode mode;
   final LeadModel? existingLead;
+  final bool customerPortal;
 
   const LeadFormScreen({
     super.key,
     this.mode = LeadFormMode.basicCreate,
     this.existingLead,
+    this.customerPortal = false,
   });
 
   @override
@@ -232,9 +235,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
     if (lead != null) {
       _applyLeadToForm(lead);
-      // Refresh from API so Edit Details always has current file paths.
+      if (!widget.customerPortal) {
+        // Refresh from API so Edit Details always has current file paths.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _refreshLeadMedia(lead.id);
+        });
+      }
+    } else if (widget.customerPortal) {
+      source = 'Customer Portal';
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _refreshLeadMedia(lead.id);
+        if (!mounted) return;
+        _prefillFromCustomerProfile();
       });
     }
 
@@ -745,10 +756,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'account_number': _textOrNull(accountNumber),
       'ifsc_code': _textOrNull(ifscCode)?.toUpperCase(),
       'project_type': projectType,
-      'source': source,
+      'source': widget.customerPortal ? 'Customer Portal' : source,
       'priority': priority,
       'notes': _textOrNull(notes),
-      'customer_id': selectedCustomerId,
+      'customer_id': widget.customerPortal
+          ? (ref.read(authProvider).customer?.id ?? selectedCustomerId)
+          : selectedCustomerId,
       'roof_photo_status': 'Pending',
       'available_shadow_free_area': _textOrNull(availableShadowFreeArea),
       'quotation_amount': _textOrNull(quotationAmount),
@@ -773,7 +786,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     _isClosing = true;
 
     try {
-      final repo = ref.read(leadRepositoryProvider);
+      final repo = widget.customerPortal
+          ? ref.read(customerLeadRepositoryProvider)
+          : ref.read(leadRepositoryProvider);
 
       if (_isCompleteDetails && widget.existingLead != null) {
         await repo.updateLeadWithFiles(
@@ -833,7 +848,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
-          ref.invalidate(allLeadsProvider);
+          if (widget.customerPortal) {
+            ref.invalidate(customerLeadsProvider);
+          } else {
+            ref.invalidate(allLeadsProvider);
+          }
         } catch (_) {}
         showAppMessage(null, successMessage);
       });
@@ -1851,6 +1870,37 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     });
   }
 
+  void _prefillFromCustomerProfile() {
+    final customer = ref.read(authProvider).customer;
+    if (customer == null) return;
+    setState(() {
+      source = 'Customer Portal';
+      selectedCustomerId = customer.id;
+      if (customer.name.trim().isNotEmpty) {
+        fullName.text = customer.name.trim();
+      }
+      final phone = (customer.phone ?? '').replaceAll(RegExp(r'\D'), '');
+      if (phone.isNotEmpty) {
+        mobile.text = phone.length > 10 ? phone.substring(phone.length - 10) : phone;
+      }
+      if (customer.email.trim().isNotEmpty) {
+        email.text = customer.email.trim();
+      }
+      if ((customer.address ?? '').trim().isNotEmpty) {
+        address.text = customer.address!.trim();
+      }
+      if ((customer.city ?? '').trim().isNotEmpty) {
+        city.text = customer.city!.trim();
+      }
+      if ((customer.state ?? '').trim().isNotEmpty) {
+        state.text = customer.state!.trim();
+      }
+      if ((customer.pincode ?? '').trim().isNotEmpty) {
+        pincode.text = customer.pincode!.trim();
+      }
+    });
+  }
+
   String _customerMenuLabel(CustomerModel customer) {
     final parts = <String>[
       customer.name.trim().isEmpty ? 'Unnamed' : customer.name.trim(),
@@ -1924,17 +1974,23 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final customerOptions = ref.watch(
-      customerListProvider.select((s) => s.items),
-    );
-    final canCreateCustomer = ref.watch(
-      authProvider.select((a) => a.hasPermission('customer.create')),
-    );
+    final customerOptions = widget.customerPortal
+        ? const <CustomerModel>[]
+        : ref.watch(customerListProvider.select((s) => s.items));
+    final canCreateCustomer = widget.customerPortal
+        ? false
+        : ref.watch(
+            authProvider.select((a) => a.hasPermission('customer.create')),
+          );
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppAppBar(
-        title: _isCompleteDetails
+        title: widget.customerPortal
+            ? (widget.existingLead == null
+                ? 'Fill lead details'
+                : 'Edit lead details')
+            : _isCompleteDetails
             ? 'Complete Lead Details'
             : 'Create Lead (Basic)',
       ),
@@ -1944,7 +2000,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           padding: const EdgeInsets.all(18),
           child: formCard(
             children: [
-              if (_isBasicCreate) ...[
+              if (!widget.customerPortal && _isBasicCreate) ...[
                 sectionTitle('Customer'),
                 _linkedCustomerSection(
                   customerOptions: customerOptions,
@@ -1952,7 +2008,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ),
               ],
               sectionTitle('Basic Details'),
-              if (!_isBasicCreate)
+              if (!widget.customerPortal && !_isBasicCreate)
                 _linkedCustomerSection(
                   customerOptions: customerOptions,
                   allowAddCustomer: canCreateCustomer,
@@ -2186,15 +2242,24 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 dropdown(
                   label: 'Source',
                   value: source,
-                  items: const [
-                    'Website',
-                    'Referral',
-                    'Walk-in',
-                    'Call',
-                    'Other',
-                  ],
+                  items: widget.customerPortal
+                      ? const [
+                          'Customer Portal',
+                          'Website',
+                          'Referral',
+                          'Walk-in',
+                          'Call',
+                          'Other',
+                        ]
+                      : const [
+                          'Website',
+                          'Referral',
+                          'Walk-in',
+                          'Call',
+                          'Other',
+                        ],
                   onChanged: (value) {
-                    if (value == null) return;
+                    if (widget.customerPortal || value == null) return;
                     source = value;
                   },
                 ),

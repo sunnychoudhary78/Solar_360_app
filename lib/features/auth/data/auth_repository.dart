@@ -15,7 +15,18 @@ class AuthRepository {
     return result;
   }
 
+  Future<CustomerLoginResult> customerLogin(
+    String email,
+    String password,
+  ) async {
+    final result = await _api.customerLogin(email, password);
+    await _tokenStorage.saveCustomerToken(result.token);
+    return result;
+  }
+
   Future<UserProfile> getMe() => _api.fetchMe();
+
+  Future<CustomerProfile> getCustomerMe() => _api.fetchCustomerMe();
 
   Future<List<String>> getPermissions() => _api.fetchPermissions();
 
@@ -37,9 +48,25 @@ class AuthRepository {
     );
   }
 
+  Future<void> changeCustomerPassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) {
+    return _api.changeCustomerPassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+      confirmPassword: confirmPassword,
+    );
+  }
+
   Future<void> logoutLocal() => _tokenStorage.clear();
 
   Future<String?> getStoredToken() => _tokenStorage.getJwt();
+
+  Future<String?> getStoredCustomerToken() => _tokenStorage.getCustomerToken();
+
+  Future<SessionKind?> getSessionKind() => _tokenStorage.getSessionKind();
 
   Future<void> saveAssignedRoles(List<String> roles) =>
       _tokenStorage.saveAssignedRoles(roles);

@@ -67,4 +67,34 @@ class AuthApiService {
       'confirmPassword': confirmPassword,
     });
   }
+
+  Future<CustomerLoginResult> customerLogin(
+    String email,
+    String password,
+  ) async {
+    final res = await _api.post(ApiEndpoints.customerLogin, {
+      'email': email.trim().toLowerCase(),
+      'password': password,
+    });
+    return CustomerLoginResult.fromJson(
+      Map<String, dynamic>.from(res as Map? ?? {}),
+    );
+  }
+
+  Future<CustomerProfile> fetchCustomerMe() async {
+    final res = await _api.get(ApiEndpoints.customerMe);
+    return CustomerProfile.fromJson(res);
+  }
+
+  Future<void> changeCustomerPassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    await _api.post(ApiEndpoints.customerChangePassword, {
+      'currentPassword': currentPassword,
+      'newPassword': newPassword,
+      'confirmPassword': confirmPassword,
+    });
+  }
 }

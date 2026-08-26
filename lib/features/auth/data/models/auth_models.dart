@@ -232,6 +232,97 @@ class UserProfile {
   }
 }
 
+class CustomerProfile {
+  final String id;
+  final String name;
+  final String email;
+  final String? phone;
+  final String? address;
+  final String? city;
+  final String? state;
+  final String? pincode;
+  final String? companyId;
+  final String? companyName;
+  final String roleName;
+
+  const CustomerProfile({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.phone,
+    this.address,
+    this.city,
+    this.state,
+    this.pincode,
+    this.companyId,
+    this.companyName,
+    this.roleName = 'Customer',
+  });
+
+  String get firstName {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    return parts.isEmpty || parts.first.isEmpty ? 'there' : parts.first;
+  }
+
+  factory CustomerProfile.fromJson(dynamic json) {
+    Map<String, dynamic> source;
+    if (json is Map && json['customer'] is Map) {
+      source = Map<String, dynamic>.from(json['customer'] as Map);
+    } else if (json is Map) {
+      source = Map<String, dynamic>.from(json);
+    } else {
+      source = <String, dynamic>{};
+    }
+
+    final role = source['role'] ?? source['Role'];
+    String roleName = 'Customer';
+    if (role is Map) {
+      roleName = role['name']?.toString() ?? roleName;
+    } else if (role is String && role.trim().isNotEmpty) {
+      roleName = role;
+    } else if (source['role_name'] != null) {
+      roleName = source['role_name'].toString();
+    }
+
+    String? companyId = (source['company_id'] ?? source['companyId'])?.toString();
+    String? companyName =
+        (source['company_name'] ?? source['companyName'])?.toString();
+    final company = source['company'];
+    if (company is Map) {
+      companyId ??= company['id']?.toString();
+      companyName ??= company['name']?.toString();
+    }
+
+    return CustomerProfile(
+      id: source['id']?.toString() ?? '',
+      name: source['name']?.toString() ?? '',
+      email: source['email']?.toString() ?? '',
+      phone: source['phone']?.toString(),
+      address: source['address']?.toString(),
+      city: source['city']?.toString(),
+      state: source['state']?.toString(),
+      pincode: source['pincode']?.toString(),
+      companyId: companyId,
+      companyName: companyName,
+      roleName: roleName,
+    );
+  }
+}
+
+class CustomerLoginResult {
+  final String token;
+  final CustomerProfile customer;
+
+  const CustomerLoginResult({required this.token, required this.customer});
+
+  factory CustomerLoginResult.fromJson(Map<String, dynamic> json) {
+    return CustomerLoginResult(
+      token: json['token']?.toString() ?? '',
+      customer: CustomerProfile.fromJson(json),
+    );
+  }
+}
+
 class LoginResult {
   final String token;
   final AuthUser user;

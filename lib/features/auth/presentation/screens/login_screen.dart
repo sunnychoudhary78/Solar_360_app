@@ -162,7 +162,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               .slideY(begin: 0.15, end: 0),
                           const SizedBox(height: AppSpacing.sm),
                           Text(
-                            'One workspace for Billbook & Green Energy',
+                            'One workspace for staff and customers',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: scheme.onSurfaceVariant,

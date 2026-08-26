@@ -1,3 +1,4 @@
+import 'package:solar_sales/core/storage/token_storage.dart';
 import 'package:solar_sales/features/auth/data/models/auth_models.dart';
 
 class AuthState {
@@ -5,6 +6,8 @@ class AuthState {
   final bool isInitializing;
   final AuthUser? authUser;
   final UserProfile? profile;
+  final CustomerProfile? customer;
+  final SessionKind? sessionKind;
   final List<String> permissions;
   final bool subscriptionInactive;
 
@@ -17,13 +20,23 @@ class AuthState {
     this.isInitializing = true,
     this.authUser,
     this.profile,
+    this.customer,
+    this.sessionKind,
     this.permissions = const [],
     this.subscriptionInactive = false,
     this.assignedRoles = const [],
   });
 
-  bool get isAuthenticated =>
-      profile != null || (authUser != null && !isInitializing);
+  bool get isCustomerSession => sessionKind == SessionKind.customer;
+
+  bool get isStaffSession => sessionKind == SessionKind.staff;
+
+  bool get isAuthenticated {
+    if (isCustomerSession) {
+      return customer != null && !isInitializing;
+    }
+    return profile != null || (authUser != null && !isInitializing);
+  }
 
   bool hasPermission(String permission) => permissions.contains(permission);
 
@@ -37,6 +50,8 @@ class AuthState {
 
   /// Full set of roles the user can switch between.
   List<String> get roles {
+    if (isCustomerSession) return const [];
+
     if (assignedRoles.isNotEmpty) {
       final merged = <String>{...assignedRoles};
       final active = effectiveRoleName.trim();
@@ -62,36 +77,53 @@ class AuthState {
     return merged.toList();
   }
 
-  bool get canSwitchRoles => roles.length > 1;
+  bool get canSwitchRoles => !isCustomerSession && roles.length > 1;
 
-  String get effectiveRoleName =>
-      profile?.effectiveRoleName ?? authUser?.effectiveRoleName ?? '';
+  String get effectiveRoleName {
+    if (isCustomerSession) return customer?.roleName ?? 'Customer';
+    return profile?.effectiveRoleName ?? authUser?.effectiveRoleName ?? '';
+  }
 
   bool get isPlatformSuperAdmin =>
-      profile?.isPlatformSuperAdmin ?? false;
+      !isCustomerSession && (profile?.isPlatformSuperAdmin ?? false);
 
-  bool get isCompanyAdmin => profile?.isCompanyAdmin ?? false;
+  bool get isCompanyAdmin =>
+      !isCustomerSession && (profile?.isCompanyAdmin ?? false);
 
   AuthState copyWith({
     bool? isLoading,
     bool? isInitializing,
     AuthUser? authUser,
     UserProfile? profile,
+    CustomerProfile? customer,
+    SessionKind? sessionKind,
     List<String>? permissions,
     bool? subscriptionInactive,
     List<String>? assignedRoles,
     bool clearUser = false,
   }) {
+    final nextKind = clearUser ? null : (sessionKind ?? this.sessionKind);
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
       isInitializing: isInitializing ?? this.isInitializing,
-      authUser: clearUser ? null : (authUser ?? this.authUser),
-      profile: clearUser ? null : (profile ?? this.profile),
-      permissions: clearUser ? const [] : (permissions ?? this.permissions),
+      authUser: clearUser || nextKind == SessionKind.customer
+          ? null
+          : (authUser ?? this.authUser),
+      profile: clearUser || nextKind == SessionKind.customer
+          ? null
+          : (profile ?? this.profile),
+      customer: clearUser || nextKind == SessionKind.staff
+          ? null
+          : (customer ?? this.customer),
+      sessionKind: nextKind,
+      permissions: clearUser || nextKind == SessionKind.customer
+          ? const []
+          : (permissions ?? this.permissions),
       subscriptionInactive:
           subscriptionInactive ?? this.subscriptionInactive,
-      assignedRoles:
-          clearUser ? const [] : (assignedRoles ?? this.assignedRoles),
+      assignedRoles: clearUser || nextKind == SessionKind.customer
+          ? const []
+          : (assignedRoles ?? this.assignedRoles),
     );
   }
 }

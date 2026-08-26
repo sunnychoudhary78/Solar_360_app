@@ -17,8 +17,11 @@ class CustomerRepository {
 
   Future<CustomerModel> getById(String id) => _api.getById(id);
 
-  Future<CustomerModel> create(CustomerModel customer) =>
+  Future<CustomerWriteResult> create(CustomerModel customer) =>
       _api.create(customer.toJson());
+
+  Future<LoginCredentials> resetDefaultPassword(String id) =>
+      _api.resetDefaultPassword(id);
 
   Future<CustomerModel> update(String id, CustomerModel customer) =>
       _api.update(id, customer.toJson());

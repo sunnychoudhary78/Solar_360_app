@@ -27,17 +27,45 @@ class CustomerApiService {
 
   Future<CustomerModel> getById(String id) async {
     final res = await _api.get(ApiEndpoints.customer(id));
-    return CustomerModel.fromJson(Map<String, dynamic>.from(res as Map));
+    return CustomerModel.fromJson(
+      Map<String, dynamic>.from(res as Map? ?? {}),
+    );
   }
 
-  Future<CustomerModel> create(Map<String, dynamic> body) async {
+  Future<CustomerWriteResult> create(Map<String, dynamic> body) async {
     final res = await _api.post(ApiEndpoints.customers, body);
-    return CustomerModel.fromJson(Map<String, dynamic>.from(res as Map));
+    final map = res is Map
+        ? Map<String, dynamic>.from(res)
+        : <String, dynamic>{};
+    final credentialsRaw = map['login_credentials'];
+    final credentials = credentialsRaw is Map
+        ? LoginCredentials.fromJson(credentialsRaw)
+        : null;
+    return CustomerWriteResult(
+      customer: CustomerModel.fromJson(map),
+      credentials: credentials != null && credentials.isValid
+          ? credentials
+          : null,
+    );
   }
 
   Future<CustomerModel> update(String id, Map<String, dynamic> body) async {
     final res = await _api.put(ApiEndpoints.customer(id), body);
-    return CustomerModel.fromJson(Map<String, dynamic>.from(res as Map));
+    return CustomerModel.fromJson(
+      Map<String, dynamic>.from(res as Map? ?? {}),
+    );
+  }
+
+  Future<LoginCredentials> resetDefaultPassword(String id) async {
+    final res = await _api.post(ApiEndpoints.customerResetPassword(id));
+    final map = res is Map
+        ? Map<String, dynamic>.from(res)
+        : <String, dynamic>{};
+    final credentials = LoginCredentials.fromJson(map['login_credentials']);
+    if (!credentials.isValid) {
+      throw Exception('Login credentials were not returned');
+    }
+    return credentials;
   }
 
   Future<void> remove(String id) async {

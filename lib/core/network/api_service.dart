@@ -1,6 +1,16 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+class ApiException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  const ApiException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   final Dio _dio;
 
@@ -96,6 +106,7 @@ class ApiService {
   }
 
   Exception _extractException(DioException e) {
+    final status = e.response?.statusCode;
     final errorData = e.response?.data;
 
     if (errorData is Map) {
@@ -104,42 +115,46 @@ class ApiService {
       if (code == 'SUBSCRIPTION_INACTIVE' ||
           (message != null &&
               message.toString().toUpperCase().contains('SUBSCRIPTION'))) {
-        return Exception('SUBSCRIPTION_INACTIVE');
+        return ApiException('SUBSCRIPTION_INACTIVE', statusCode: status);
       }
       if (message != null) {
-        return Exception(message.toString());
+        return ApiException(message.toString(), statusCode: status);
       }
     }
 
-    if (e.response?.statusCode == 403) {
+    if (status == 403) {
       final raw = errorData?.toString() ?? '';
       if (raw.toUpperCase().contains('SUBSCRIPTION')) {
-        return Exception('SUBSCRIPTION_INACTIVE');
+        return const ApiException('SUBSCRIPTION_INACTIVE', statusCode: 403);
       }
     }
 
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout) {
-      return Exception('Connection timeout');
+      return ApiException('Connection timeout', statusCode: status);
     }
 
     if (e.type == DioExceptionType.connectionError) {
       if (kDebugMode) {
         debugPrint('Connection error to ${e.requestOptions.uri}: ${e.message}');
       }
-      return Exception(
+      return ApiException(
         'Cannot reach server. Check API URL and network.',
+        statusCode: status,
       );
     }
 
-    if (e.response?.statusCode == 401) {
-      return Exception('Session expired. Please sign in again.');
+    if (status == 401) {
+      return const ApiException(
+        'Session expired. Please sign in again.',
+        statusCode: 401,
+      );
     }
 
     if (kDebugMode) {
       debugPrint('Unhandled API error: $e');
     }
 
-    return Exception('Something went wrong');
+    return ApiException('Something went wrong', statusCode: status);
   }
 }

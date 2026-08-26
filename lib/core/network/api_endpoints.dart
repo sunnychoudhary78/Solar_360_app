@@ -16,9 +16,27 @@ class ApiEndpoints {
   static const quotationsReport = 'solar-reports/quotations';
   static const invoicesReport = 'solar-reports/invoices';
 
-  // Customers
+  // Customers (staff CRUD)
   static const customers = 'customers';
   static String customer(String id) => 'customers/$id';
+  static String customerResetPassword(String id) =>
+      'customers/$id/reset-default-password';
+
+  // Customer portal auth
+  static const customerLogin = 'customers/login';
+  static const customerMe = 'customers/me';
+  static const customerChangePassword = 'customers/change-password';
+  static const customerLogout = 'customers/logout';
+
+  // Customer portal leads
+  static const customerLeads = 'customers/leads';
+  static String customerLead(String id) => 'customers/leads/$id';
+
+  // Customer portal support
+  static const supportTickets = 'support-tickets';
+  static String supportTicket(String id) => 'support-tickets/$id';
+  static String supportTicketHistory(String id) =>
+      'support-tickets/$id/history';
 
   // Items
   static const items = 'items';

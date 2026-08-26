@@ -5,6 +5,8 @@ import 'package:solar_sales/features/auth/presentation/screens/login_screen.dart
     show LoginScreen, ChangePasswordScreen;
 import 'package:solar_sales/features/customers/presentation/screens/customer_form_screen.dart';
 import 'package:solar_sales/features/customers/presentation/screens/customers_screen.dart';
+import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_detail_screen.dart';
+import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_form_screen.dart';
 import 'package:solar_sales/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/inventory_hub_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/low_stock_screen.dart';
@@ -22,6 +24,7 @@ import 'package:solar_sales/features/items/presentation/screens/item_categories_
 import 'package:solar_sales/features/items/presentation/screens/item_detail_screen.dart';
 import 'package:solar_sales/features/items/presentation/screens/item_form_screen.dart';
 import 'package:solar_sales/features/items/presentation/screens/items_screen.dart';
+import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/screens/all_leads_screen.dart';
 import 'package:solar_sales/features/leads/presentation/screens/lead_detail_by_id_screen.dart';
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
@@ -52,6 +55,19 @@ class AppRoutes {
     '/dashboard': (_) => const DashboardScreen(),
     '/settings': (_) => const SettingsScreen(),
     '/change-password': (_) => const ChangePasswordScreen(),
+    '/customer/lead-form': (context) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      return LeadFormScreen(
+        mode: LeadFormMode.completeDetails,
+        existingLead: args is LeadModel ? args : null,
+        customerPortal: true,
+      );
+    },
+    '/customer/support/new': (_) => const CustomerSupportFormScreen(),
+    '/customer/support/detail': (context) {
+      final id = ModalRoute.of(context)!.settings.arguments as String;
+      return CustomerSupportDetailScreen(ticketId: id);
+    },
     '/customers': (_) => const CustomersScreen(),
     '/customers/form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
