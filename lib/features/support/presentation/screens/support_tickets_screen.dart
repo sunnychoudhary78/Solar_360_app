@@ -30,6 +30,8 @@ class _SupportTicketsScreenState extends ConsumerState<SupportTicketsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(supportTicketListProvider);
+    final canCreate =
+        ref.watch(authProvider).hasPermission('support_ticket.create');
     final scheme = Theme.of(context).colorScheme;
     final newCount = state.tab == SupportTicketTab.newRequests
         ? state.items.length
@@ -38,6 +40,22 @@ class _SupportTicketsScreenState extends ConsumerState<SupportTicketsScreen> {
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
       appBar: const AppAppBar(title: 'Support'),
+      floatingActionButton: canCreate
+          ? FloatingActionButton.extended(
+              heroTag: 'support_tickets_fab',
+              onPressed: () async {
+                final created = await Navigator.pushNamed(
+                  context,
+                  '/support/new',
+                );
+                if (created == true) {
+                  ref.read(supportTicketListProvider.notifier).refresh();
+                }
+              },
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('New request'),
+            )
+          : null,
       body: Column(
         children: [
           Padding(
@@ -108,7 +126,7 @@ class _SupportTicketsScreenState extends ConsumerState<SupportTicketsScreen> {
                             ref.read(supportTicketListProvider.notifier).refresh(),
                         onLoadMore: () =>
                             ref.read(supportTicketListProvider.notifier).loadMore(),
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
                         empty: EmptyState(
                           title: 'No support requests found',
                           subtitle: state.tab == SupportTicketTab.newRequests
