@@ -88,9 +88,19 @@ class AppValidators {
     return null;
   }
 
+  /// Unregistered Person — allowed when the customer has no GSTIN.
+  static const unregisteredGst = 'URP';
+
+  static bool isUnregisteredGst(String? value) {
+    return value != null &&
+        value.trim().toUpperCase() == unregisteredGst;
+  }
+
   /// GSTIN: allow 1–15 alphanumeric; strict validation at 15 chars.
+  /// Also accepts [unregisteredGst] for customers without a GSTIN.
   static String? gstNumber(String? value) {
     if (value == null || value.trim().isEmpty) return null;
+    if (isUnregisteredGst(value)) return null;
     final v = value.trim().toUpperCase();
     if (v.length < 1 || v.length > 15) {
       return 'GSTIN can be 1 to 15 characters';
@@ -105,6 +115,14 @@ class AppValidators {
       return 'GSTIN can be 1 to 15 characters';
     }
     return null;
+  }
+
+  /// GST is required. Enter a GSTIN, or URP if the customer is unregistered.
+  static String? requiredGstOrUrp(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'GST Number is required (enter URP if unregistered)';
+    }
+    return gstNumber(value);
   }
 
   /// Returns error message if duplicate item IDs found on a document.

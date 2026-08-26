@@ -62,8 +62,30 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
     _city.text = c.city ?? '';
     _state.text = c.state ?? '';
     _pincode.text = c.pincode ?? '';
-    _gst.text = c.gstNumber ?? '';
+    _gst.text = (c.gstNumber == null || c.gstNumber!.trim().isEmpty)
+        ? AppValidators.unregisteredGst
+        : c.gstNumber!;
     _aadhar.text = c.aadharNumber ?? '';
+  }
+
+  /// URP is a form-only placeholder. Backend GST is unique, so sending
+  /// the same "URP" for every unregistered customer would fail. Omit it.
+  String? _gstPayload(String raw) {
+    final value = raw.trim().toUpperCase();
+    if (value.isEmpty || AppValidators.isUnregisteredGst(value)) {
+      return null;
+    }
+    return value;
+  }
+
+  void _fillUrp() {
+    _gst.value = const TextEditingValue(
+      text: AppValidators.unregisteredGst,
+      selection: TextSelection.collapsed(
+        offset: AppValidators.unregisteredGst.length,
+      ),
+    );
+    setState(() {});
   }
 
   Future<void> _save() async {
@@ -83,8 +105,7 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
       city: _city.text.trim().isEmpty ? null : _city.text.trim(),
       state: _state.text.trim().isEmpty ? null : _state.text.trim(),
       pincode: _pincode.text.trim().isEmpty ? null : _pincode.text.trim(),
-      gstNumber:
-          _gst.text.trim().isEmpty ? null : _gst.text.trim().toUpperCase(),
+      gstNumber: _gstPayload(_gst.text),
       aadharNumber: _aadhar.text.trim().isEmpty
           ? null
           : _aadhar.text.replaceAll(RegExp(r'\D'), ''),
@@ -337,9 +358,15 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _gst,
-                decoration: const InputDecoration(
-                  labelText: 'GST Number',
-                  hintText: '15-character GSTIN',
+                decoration: InputDecoration(
+                  labelText: 'GST Number *',
+                  hintText: '15-character GSTIN or URP',
+                  helperText: 'No GST? Enter URP',
+                  helperMaxLines: 2,
+                  suffixIcon: TextButton(
+                    onPressed: _loading ? null : _fillUrp,
+                    child: const Text('URP'),
+                  ),
                 ),
                 textCapitalization: TextCapitalization.characters,
                 inputFormatters: [
@@ -347,7 +374,7 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
                   LengthLimitingTextInputFormatter(15),
                   _UpperCaseTextFormatter(),
                 ],
-                validator: AppValidators.gstNumber,
+                validator: AppValidators.requiredGstOrUrp,
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(

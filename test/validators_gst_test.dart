@@ -18,6 +18,16 @@ void main() {
       expect(AppValidators.gstNumber('INVALIDGSTIN123'), isNotNull);
     });
 
+    test('gstNumber and requiredGstOrUrp accept URP', () {
+      expect(AppValidators.gstNumber('URP'), isNull);
+      expect(AppValidators.gstNumber('urp'), isNull);
+      expect(AppValidators.requiredGstOrUrp('URP'), isNull);
+      expect(AppValidators.requiredGstOrUrp('urp'), isNull);
+      expect(AppValidators.requiredGstOrUrp(''), isNotNull);
+      expect(AppValidators.requiredGstOrUrp(null), isNotNull);
+      expect(AppValidators.requiredGstOrUrp('22AAAAA0000A1Z5'), isNull);
+    });
+
     test('optionalPhone accepts Indian and international', () {
       expect(AppValidators.optionalPhone('9876543210'), isNull);
       expect(AppValidators.optionalPhone('+919876543210'), isNull);
