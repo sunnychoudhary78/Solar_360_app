@@ -25,9 +25,7 @@ final customerLeadRepositoryProvider = Provider<LeadRepository>((ref) {
   return LeadRepository(ref.watch(customerLeadApiServiceProvider));
 });
 
-final customerLeadsProvider = FutureProvider.autoDispose<List<LeadModel>>((
-  ref,
-) {
+final customerLeadsProvider = FutureProvider<List<LeadModel>>((ref) {
   return ref.watch(customerLeadRepositoryProvider).getAllLeads();
 });
 

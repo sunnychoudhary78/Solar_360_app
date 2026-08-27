@@ -39,6 +39,8 @@ class CustomerHomeScreen extends ConsumerWidget {
           await ref.read(customerLeadsProvider.future);
         },
         child: ListView(
+            primary: false,
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
             children: [
               AppCard(
@@ -150,9 +152,16 @@ class CustomerHomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.lg),
               leadsAsync.when(
+                skipLoadingOnReload: true,
                 loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
-                  child: LoadingState(),
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                  ),
                 ),
                 error: (e, _) => ErrorState(
                   message: e.toString(),

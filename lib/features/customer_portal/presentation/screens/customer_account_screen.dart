@@ -20,6 +20,7 @@ class CustomerAccountScreen extends ConsumerWidget {
       backgroundColor: scheme.surfaceContainerLowest,
       appBar: const AppAppBar(title: 'Account'),
       body: ListView(
+        primary: false,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           AppCard(

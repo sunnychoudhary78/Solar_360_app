@@ -41,6 +41,8 @@ class CustomerLeadsScreen extends ConsumerWidget {
             await ref.read(customerLeadsProvider.future);
           },
           child: ListView(
+            primary: false,
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
             children: [
               CustomerLeadProgress(

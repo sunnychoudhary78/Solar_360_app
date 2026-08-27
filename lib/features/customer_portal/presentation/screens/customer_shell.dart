@@ -20,6 +20,15 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _index = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
   void _selectTab(int index) {
     if (index == _index || index < 0 || index >= customerPortalTabs.length) {
       return;
@@ -45,6 +54,7 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
         ),
         body: IndexedStack(
           index: _index,
+          sizing: StackFit.expand,
           children: [
             CustomerHomeScreen(
               onOpenLeads: () => _selectTab(1),

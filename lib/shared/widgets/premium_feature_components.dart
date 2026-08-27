@@ -1234,10 +1234,23 @@ class SkeletonList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: count,
-      padding: const EdgeInsets.only(top: 8),
-      itemBuilder: (_, __) => const SkeletonTile(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final unbounded = !constraints.hasBoundedHeight;
+        if (unbounded) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < count; i++) const SkeletonTile(),
+            ],
+          );
+        }
+        return ListView.builder(
+          itemCount: count,
+          padding: const EdgeInsets.only(top: 8),
+          itemBuilder: (_, __) => const SkeletonTile(),
+        );
+      },
     );
   }
 }
