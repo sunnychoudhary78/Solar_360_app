@@ -300,14 +300,19 @@ class _SupportTicketDetailScreenState
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    key: ValueKey(processStatus),
-                    initialValue: processStatus,
+                    initialValue: SupportTicketConstants.processStatuses
+                                .where((item) => item.value == processStatus)
+                                .length ==
+                            1
+                        ? processStatus
+                        : null,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Current status',
                     ),
                     items: [
                       for (final item in SupportTicketConstants.processStatuses)
-                        DropdownMenuItem(
+                        DropdownMenuItem<String>(
                           value: item.value,
                           child: Text(item.label),
                         ),

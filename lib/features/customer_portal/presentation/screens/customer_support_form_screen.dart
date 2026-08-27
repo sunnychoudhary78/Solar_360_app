@@ -73,23 +73,22 @@ class _CustomerSupportFormScreenState
       appBar: const AppAppBar(title: 'New support request'),
       body: Form(
         key: _formKey,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
+        autovalidateMode: AutovalidateMode.disabled,
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.md),
           children: [
-            DropdownButtonFormField<String>(
-              key: ValueKey(_requestType),
-              initialValue: _requestType,
-              decoration: const InputDecoration(
-                labelText: 'Support request type *',
-              ),
+            _SupportOptionDropdown(
+              label: 'Support request type *',
+              value: _requestType,
+              enabled: !_submitting,
               items: [
                 for (final item in SupportTicketConstants.requestTypes)
-                  DropdownMenuItem(value: item.value, child: Text(item.label)),
+                  DropdownMenuItem<String>(
+                    value: item.value,
+                    child: Text(item.label),
+                  ),
               ],
-              onChanged: _submitting
-                  ? null
-                  : (value) => setState(() => _requestType = value),
+              onChanged: (value) => setState(() => _requestType = value),
               validator: (value) => value == null || value.isEmpty
                   ? 'Please select the type of support request.'
                   : null,
@@ -104,31 +103,31 @@ class _CustomerSupportFormScreenState
               validator: (v) => AppValidators.required(v, 'Subject'),
             ),
             const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              key: ValueKey(_category),
-              initialValue: _category,
-              decoration: const InputDecoration(labelText: 'Category'),
+            _SupportOptionDropdown(
+              label: 'Category',
+              value: _category,
               hint: const Text('Select category'),
+              enabled: !_submitting,
               items: [
                 for (final item in SupportTicketConstants.categories)
-                  DropdownMenuItem(value: item, child: Text(item)),
+                  DropdownMenuItem<String>(value: item, child: Text(item)),
               ],
-              onChanged: _submitting
-                  ? null
-                  : (value) => setState(() => _category = value),
+              onChanged: (value) => setState(() => _category = value),
             ),
             const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              key: ValueKey(_priority),
-              initialValue: _priority,
-              decoration: const InputDecoration(labelText: 'Priority'),
+            _SupportOptionDropdown(
+              label: 'Priority',
+              value: _priority,
+              enabled: !_submitting,
               items: [
                 for (final item in SupportTicketConstants.priorities)
-                  DropdownMenuItem(value: item.value, child: Text(item.label)),
+                  DropdownMenuItem<String>(
+                    value: item.value,
+                    child: Text(item.label),
+                  ),
               ],
-              onChanged: _submitting
-                  ? null
-                  : (value) => setState(() => _priority = value ?? 'medium'),
+              onChanged: (value) =>
+                  setState(() => _priority = value ?? 'medium'),
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
@@ -157,6 +156,60 @@ class _CustomerSupportFormScreenState
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Keeps the FormField identity stable so selecting an option does not
+/// recreate the dropdown (which crashes with the "exactly one item" assertion).
+class _SupportOptionDropdown extends StatefulWidget {
+  const _SupportOptionDropdown({
+    required this.label,
+    required this.items,
+    required this.onChanged,
+    this.value,
+    this.hint,
+    this.validator,
+    this.enabled = true,
+  });
+
+  final String label;
+  final String? value;
+  final List<DropdownMenuItem<String>> items;
+  final ValueChanged<String?> onChanged;
+  final Widget? hint;
+  final String? Function(String?)? validator;
+  final bool enabled;
+
+  @override
+  State<_SupportOptionDropdown> createState() => _SupportOptionDropdownState();
+}
+
+class _SupportOptionDropdownState extends State<_SupportOptionDropdown> {
+  late final String? _initialValue = _safeValue(widget.value, widget.items);
+
+  static String? _safeValue(
+    String? value,
+    List<DropdownMenuItem<String>> items,
+  ) {
+    if (value == null) return null;
+    var matches = 0;
+    for (final item in items) {
+      if (item.value == value) matches++;
+    }
+    return matches == 1 ? value : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: _initialValue,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: widget.label),
+      hint: widget.hint,
+      items: widget.items,
+      onChanged: widget.enabled ? widget.onChanged : null,
+      validator: widget.validator,
     );
   }
 }

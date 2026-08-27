@@ -173,9 +173,15 @@ class SupportTicketFilterBar extends StatelessWidget {
               value: statusFilter,
               hint: 'All status',
               items: [
-                const DropdownMenuItem(value: '', child: Text('All status')),
+                const DropdownMenuItem<String>(
+                  value: '',
+                  child: Text('All status'),
+                ),
                 for (final item in SupportTicketConstants.statuses)
-                  DropdownMenuItem(value: item.value, child: Text(item.label)),
+                  DropdownMenuItem<String>(
+                    value: item.value,
+                    child: Text(item.label),
+                  ),
               ],
               onChanged: onStatusChanged,
             ),
@@ -183,9 +189,15 @@ class SupportTicketFilterBar extends StatelessWidget {
               value: priorityFilter,
               hint: 'All priority',
               items: [
-                const DropdownMenuItem(value: '', child: Text('All priority')),
+                const DropdownMenuItem<String>(
+                  value: '',
+                  child: Text('All priority'),
+                ),
                 for (final item in SupportTicketConstants.priorities)
-                  DropdownMenuItem(value: item.value, child: Text(item.label)),
+                  DropdownMenuItem<String>(
+                    value: item.value,
+                    child: Text(item.label),
+                  ),
               ],
               onChanged: onPriorityChanged,
             ),
@@ -193,9 +205,15 @@ class SupportTicketFilterBar extends StatelessWidget {
               value: categoryFilter,
               hint: 'All category',
               items: [
-                const DropdownMenuItem(value: '', child: Text('All category')),
+                const DropdownMenuItem<String>(
+                  value: '',
+                  child: Text('All category'),
+                ),
                 for (final item in SupportTicketConstants.categories)
-                  DropdownMenuItem(value: item, child: Text(item)),
+                  DropdownMenuItem<String>(
+                    value: item,
+                    child: Text(item),
+                  ),
               ],
               onChanged: onCategoryChanged,
             ),
@@ -227,23 +245,35 @@ class _FilterDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final effectiveValue = items.where((item) => item.value == value).length == 1
+        ? value
+        : null;
+
     return SizedBox(
       width: 160,
-      child: DropdownButtonFormField<String>(
-        key: ValueKey(value),
-        initialValue: items.any((item) => item.value == value) ? value : '',
-        isExpanded: true,
+      child: InputDecorator(
         decoration: InputDecoration(
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
+            horizontal: 10,
+            vertical: 2,
           ),
-          hintText: hint,
         ),
-        hint: Text(hint, overflow: TextOverflow.ellipsis),
-        items: items,
-        onChanged: (next) => onChanged(next ?? ''),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: effectiveValue,
+            hint: Text(
+              hint,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+            isExpanded: true,
+            isDense: true,
+            items: items,
+            onChanged: (next) => onChanged(next ?? ''),
+          ),
+        ),
       ),
     );
   }
