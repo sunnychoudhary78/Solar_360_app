@@ -1,12 +1,10 @@
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker_android/image_picker_android.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
-
 import 'package:solar_sales/app/app_routes.dart';
 import 'package:solar_sales/app/navigator.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
@@ -106,8 +104,9 @@ class MyApp extends ConsumerWidget {
       useMaterial3: true,
       colorScheme: scheme,
       textTheme: textTheme,
-      scaffoldBackgroundColor:
-          isDark ? AppPalette.darkScaffold : AppPalette.lightScaffold,
+      scaffoldBackgroundColor: isDark
+          ? AppPalette.darkScaffold
+          : AppPalette.lightScaffold,
       splashFactory: InkSparkle.splashFactory,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
@@ -139,8 +138,10 @@ class MyApp extends ConsumerWidget {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: scheme.surfaceContainerLowest,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: radius,
           borderSide: BorderSide.none,
@@ -248,9 +249,7 @@ class MyApp extends ConsumerWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.xxl),
         ),
-        titleTextStyle: textTheme.titleLarge?.copyWith(
-          color: scheme.onSurface,
-        ),
+        titleTextStyle: textTheme.titleLarge?.copyWith(color: scheme.onSurface),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: scheme.surface,

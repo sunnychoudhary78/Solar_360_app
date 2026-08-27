@@ -3,33 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
-import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
+import 'package:solar_sales/features/support/data/support_ticket_constants.dart';
 import 'package:solar_sales/shared/utils/validators.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
-
-const _requestTypes = <String, String>{
-  'complaint': 'Complaint',
-  'service_request': 'Service Request',
-  'technical_support': 'Technical Support',
-  'installation_support': 'Installation Support',
-  'maintenance': 'Maintenance',
-  'billing_payment': 'Billing & Payment',
-  'warranty': 'Warranty',
-  'other': 'Other',
-};
-
-const _categories = <String, String>{
-  'solar_panel': 'Solar Panel',
-  'inverter': 'Inverter',
-  'battery': 'Battery',
-  'installation': 'Installation',
-  'maintenance': 'Maintenance',
-  'subsidy': 'Subsidy',
-  'billing': 'Billing',
-  'documentation': 'Documentation',
-  'other': 'Other',
-};
 
 class CustomerSupportFormScreen extends ConsumerStatefulWidget {
   const CustomerSupportFormScreen({super.key});
@@ -45,8 +22,6 @@ class _CustomerSupportFormScreenState
   final _subject = TextEditingController();
   final _description = TextEditingController();
   final _subCategory = TextEditingController();
-  late final TextEditingController _phone;
-  late final TextEditingController _email;
 
   String? _requestType;
   String? _category;
@@ -54,27 +29,19 @@ class _CustomerSupportFormScreenState
   bool _submitting = false;
 
   @override
-  void initState() {
-    super.initState();
-    final customer = ref.read(authProvider).customer;
-    _phone = TextEditingController(text: customer?.phone ?? '');
-    _email = TextEditingController(text: customer?.email ?? '');
-  }
-
-  @override
   void dispose() {
     _subject.dispose();
     _description.dispose();
     _subCategory.dispose();
-    _phone.dispose();
-    _email.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
-    ref.read(globalLoadingProvider.notifier).showLoading('Submitting request...');
+    ref
+        .read(globalLoadingProvider.notifier)
+        .showLoading('Submitting request...');
     try {
       await ref.read(customerPortalApiServiceProvider).createTicket({
         'request_type': _requestType,
@@ -85,16 +52,12 @@ class _CustomerSupportFormScreenState
             ? null
             : _subCategory.text.trim(),
         'priority': _priority,
-        'source': 'customer_portal',
-        'contact_method': 'phone',
-        'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
-        'email': _email.text.trim().isEmpty ? null : _email.text.trim(),
       });
       ref.read(globalLoadingProvider.notifier).hide();
-      ref.read(globalLoadingProvider.notifier).showSuccess(
-            'Support request submitted',
-          );
-      ref.invalidate(customerTicketsProvider);
+      ref
+          .read(globalLoadingProvider.notifier)
+          .showSuccess('Support request submitted');
+      await ref.read(customerTicketsProvider.notifier).refresh();
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).hide();
@@ -115,59 +78,53 @@ class _CustomerSupportFormScreenState
           padding: const EdgeInsets.all(AppSpacing.md),
           children: [
             DropdownButtonFormField<String>(
-              value: _requestType,
-              decoration: const InputDecoration(labelText: 'Request type *'),
+              key: ValueKey(_requestType),
+              initialValue: _requestType,
+              decoration: const InputDecoration(
+                labelText: 'Support request type *',
+              ),
               items: [
-                for (final entry in _requestTypes.entries)
-                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+                for (final item in SupportTicketConstants.requestTypes)
+                  DropdownMenuItem(value: item.value, child: Text(item.label)),
               ],
               onChanged: _submitting
                   ? null
                   : (value) => setState(() => _requestType = value),
-              validator: (value) =>
-                  value == null || value.isEmpty ? 'Select a request type' : null,
+              validator: (value) => value == null || value.isEmpty
+                  ? 'Please select the type of support request.'
+                  : null,
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
               controller: _subject,
-              decoration: const InputDecoration(labelText: 'Subject *'),
+              decoration: const InputDecoration(
+                labelText: 'Subject *',
+                hintText: 'Example: Inverter is not working',
+              ),
               validator: (v) => AppValidators.required(v, 'Subject'),
             ),
             const SizedBox(height: AppSpacing.md),
-            TextFormField(
-              controller: _description,
-              minLines: 4,
-              maxLines: 8,
-              decoration: const InputDecoration(labelText: 'Description *'),
-              validator: (v) => AppValidators.required(v, 'Description'),
-            ),
-            const SizedBox(height: AppSpacing.md),
             DropdownButtonFormField<String>(
-              value: _category,
+              key: ValueKey(_category),
+              initialValue: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               hint: const Text('Select category'),
               items: [
-                for (final entry in _categories.entries)
-                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+                for (final item in SupportTicketConstants.categories)
+                  DropdownMenuItem(value: item, child: Text(item)),
               ],
               onChanged: _submitting
                   ? null
                   : (value) => setState(() => _category = value),
             ),
             const SizedBox(height: AppSpacing.md),
-            TextFormField(
-              controller: _subCategory,
-              decoration: const InputDecoration(labelText: 'Sub category'),
-            ),
-            const SizedBox(height: AppSpacing.md),
             DropdownButtonFormField<String>(
-              value: _priority,
+              key: ValueKey(_priority),
+              initialValue: _priority,
               decoration: const InputDecoration(labelText: 'Priority'),
-              items: const [
-                DropdownMenuItem(value: 'low', child: Text('Low')),
-                DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                DropdownMenuItem(value: 'high', child: Text('High')),
-                DropdownMenuItem(value: 'urgent', child: Text('Urgent')),
+              items: [
+                for (final item in SupportTicketConstants.priorities)
+                  DropdownMenuItem(value: item.value, child: Text(item.label)),
               ],
               onChanged: _submitting
                   ? null
@@ -175,21 +132,27 @@ class _CustomerSupportFormScreenState
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone'),
+              controller: _subCategory,
+              decoration: const InputDecoration(
+                labelText: 'Sub category',
+                hintText: 'Example: Display error',
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
-              validator: AppValidators.optionalEmail,
+              controller: _description,
+              minLines: 4,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                labelText: 'Description *',
+                hintText: 'Describe your issue...',
+              ),
+              validator: (v) => AppValidators.required(v, 'Description'),
             ),
             const SizedBox(height: AppSpacing.xl),
             FilledButton(
               onPressed: _submitting ? null : _submit,
-              child: const Text('Submit request'),
+              child: Text(_submitting ? 'Submitting...' : 'Submit request'),
             ),
           ],
         ),

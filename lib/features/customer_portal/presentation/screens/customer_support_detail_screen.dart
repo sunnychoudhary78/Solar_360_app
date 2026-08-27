@@ -27,6 +27,7 @@ class _CustomerSupportDetailScreenState
   SupportTicketModel? _ticket;
   bool _loading = true;
   bool _sending = false;
+  bool _verifying = false;
   String? _error;
 
   @override
@@ -62,28 +63,7 @@ class _CustomerSupportDetailScreenState
       }
       if (!mounted) return;
       setState(() {
-        _ticket = SupportTicketModel(
-          id: ticket.id,
-          ticketNumber: ticket.ticketNumber,
-          subject: ticket.subject,
-          description: ticket.description,
-          requestType: ticket.requestType,
-          category: ticket.category,
-          subCategory: ticket.subCategory,
-          priority: ticket.priority,
-          status: ticket.status,
-          source: ticket.source,
-          phone: ticket.phone,
-          email: ticket.email,
-          resolutionSummary: ticket.resolutionSummary,
-          customerId: ticket.customerId,
-          customer: ticket.customer,
-          assignee: ticket.assignee,
-          createdAt: ticket.createdAt,
-          updatedAt: ticket.updatedAt,
-          messages: ticket.messages,
-          history: history,
-        );
+        _ticket = ticket.copyWith(history: history);
         _loading = false;
       });
     } catch (e) {
@@ -109,6 +89,40 @@ class _CustomerSupportDetailScreenState
       ref.read(globalLoadingProvider.notifier).showApiError(e);
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _verify(bool verified) async {
+    if (_ticket == null) return;
+    setState(() => _verifying = true);
+    ref
+        .read(globalLoadingProvider.notifier)
+        .showLoading(
+          verified ? 'Verifying resolution...' : 'Reopening ticket...',
+        );
+    try {
+      await ref
+          .read(customerPortalApiServiceProvider)
+          .verifyResolution(
+            _ticket!.id,
+            verified: verified,
+            rating: verified ? 5 : null,
+            feedback: verified ? 'Issue resolved' : 'Issue is not resolved',
+          );
+      ref.read(globalLoadingProvider.notifier).hide();
+      ref
+          .read(globalLoadingProvider.notifier)
+          .showSuccess(
+            verified
+                ? 'Thank you. Ticket has been verified.'
+                : 'Ticket has been reopened for further support.',
+          );
+      await _load();
+    } catch (e) {
+      ref.read(globalLoadingProvider.notifier).hide();
+      ref.read(globalLoadingProvider.notifier).showApiError(e);
+    } finally {
+      if (mounted) setState(() => _verifying = false);
     }
   }
 
@@ -153,8 +167,8 @@ class _CustomerSupportDetailScreenState
                 Text(
                   ticket.subject,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -163,6 +177,8 @@ class _CustomerSupportDetailScreenState
                   children: [
                     Chip(label: Text(ticket.statusLabel)),
                     Chip(label: Text(ticket.priorityLabel)),
+                    if (ticket.requestType.isNotEmpty)
+                      Chip(label: Text(ticket.requestTypeLabel)),
                     if (ticket.category.isNotEmpty)
                       Chip(label: Text(ticket.categoryLabel)),
                   ],
@@ -176,8 +192,8 @@ class _CustomerSupportDetailScreenState
                   Text(
                     'Created ${DateFormat('dd MMM yyyy, hh:mm a').format(ticket.createdAt!)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ],
@@ -209,6 +225,74 @@ class _CustomerSupportDetailScreenState
               ),
             ),
           ],
+          if (ticket.isResolved) ...[
+            const SizedBox(height: 12),
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.verified_rounded, color: scheme.onPrimary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Is your issue resolved?',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: scheme.onPrimary,
+                                ),
+                              ),
+                              Text(
+                                'Please verify the resolution so we can close your support ticket.',
+                                style: TextStyle(
+                                  color: scheme.onPrimary.withValues(
+                                    alpha: 0.9,
+                                  ),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _verifying ? null : () => _verify(true),
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Yes, issue resolved'),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _verifying ? null : () => _verify(false),
+                          icon: const Icon(Icons.close_rounded),
+                          label: const Text('No, still need help'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           TicketConversation(
             messages: ticket.messages,
@@ -224,6 +308,19 @@ class _CustomerSupportDetailScreenState
               enabled: true,
               sending: _sending,
               hintText: 'Write a message to the support team...',
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            AppCard(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'This ticket is closed. Messaging is disabled.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
           const SizedBox(height: 12),

@@ -2,7 +2,7 @@ name: solar_sales
 description: Solar 360 mobile app — Billbook + Green Energy.
 publish_to: "none"
 
-version: 1.0.0+6
+version: 1.0.0+7
 
 environment:
   sdk: ^3.10.8

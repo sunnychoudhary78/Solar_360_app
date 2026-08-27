@@ -42,7 +42,10 @@ class TicketConversation extends StatelessWidget {
                     color: scheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(Icons.chat_bubble_outline_rounded, color: scheme.primary),
+                  child: Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: scheme.primary,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -53,9 +56,8 @@ class TicketConversation extends StatelessWidget {
                         children: [
                           Text(
                             'Conversation',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(width: 8),
                           Chip(
@@ -64,6 +66,17 @@ class TicketConversation extends StatelessWidget {
                               '${visible.length} ${visible.length == 1 ? 'message' : 'messages'}',
                             ),
                           ),
+                          if (_unreadCount(visible) > 0) ...[
+                            const SizedBox(width: 6),
+                            Chip(
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor: Colors.amber.withValues(
+                                alpha: 0.18,
+                              ),
+                              side: BorderSide.none,
+                              label: Text('${_unreadCount(visible)} unread'),
+                            ),
+                          ],
                         ],
                       ),
                       Text(
@@ -71,8 +84,8 @@ class TicketConversation extends StatelessWidget {
                             ? 'Chat with the support team'
                             : 'Direct conversation with ${customerName.isEmpty ? 'customer' : customerName}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -80,7 +93,10 @@ class TicketConversation extends StatelessWidget {
               ],
             ),
           ),
-          Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
+          ),
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight, minHeight: 160),
             child: visible.isEmpty
@@ -93,8 +109,8 @@ class TicketConversation extends StatelessWidget {
                             : 'No messages yet. Reply to start the conversation.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   )
@@ -109,6 +125,7 @@ class TicketConversation extends StatelessWidget {
                         isMine: _isMine(visible[index]),
                         isCustomerView: isCustomerView,
                         customerName: customerName,
+                        deliveryStatus: _deliveryStatus(visible[index]),
                       );
                     },
                   ),
@@ -129,6 +146,24 @@ class TicketConversation extends StatelessWidget {
         (currentUserId.isEmpty ||
             message.senderId.isEmpty ||
             message.senderId == currentUserId);
+  }
+
+  int _unreadCount(List<SupportTicketMessage> messages) {
+    return messages.where((message) {
+      final incoming = isCustomerView
+          ? !message.isCustomer
+          : message.isCustomer;
+      return incoming && message.readAt == null;
+    }).length;
+  }
+
+  String? _deliveryStatus(SupportTicketMessage message) {
+    if (!_isMine(message)) return null;
+    if (message.readAt != null) return 'Seen';
+    if (message.deliveredAt != null || message.id.isNotEmpty) {
+      return 'Delivered';
+    }
+    return null;
   }
 }
 
@@ -184,7 +219,8 @@ class _TicketReplyBoxState extends State<TicketReplyBox> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final count = widget.controller.text.length;
-    final canSend = widget.enabled &&
+    final canSend =
+        widget.enabled &&
         !widget.sending &&
         widget.controller.text.trim().isNotEmpty;
 
@@ -202,17 +238,17 @@ class _TicketReplyBoxState extends State<TicketReplyBox> {
                       ? 'REPLY'
                       : 'REPLY TO ${widget.replyToName!.toUpperCase()}',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                        color: scheme.onSurfaceVariant,
-                      ),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               Text(
                 '$count/4000',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -231,14 +267,18 @@ class _TicketReplyBoxState extends State<TicketReplyBox> {
           const SizedBox(height: 10),
           Row(
             children: [
-              Icon(Icons.shield_outlined, size: 16, color: scheme.onSurfaceVariant),
+              Icon(
+                Icons.shield_outlined,
+                size: 16,
+                color: scheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   'Messages are saved to this ticket',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               FilledButton.icon(
@@ -277,7 +317,9 @@ class TicketTimelineCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 18,
-                backgroundColor: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                backgroundColor: const Color(
+                  0xFF7C3AED,
+                ).withValues(alpha: 0.12),
                 child: const Icon(
                   Icons.schedule_rounded,
                   color: Color(0xFF7C3AED),
@@ -292,14 +334,14 @@ class TicketTimelineCard extends StatelessWidget {
                     Text(
                       'Ticket Timeline',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     Text(
                       'Track request activity',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -322,8 +364,8 @@ class TicketTimelineCard extends StatelessWidget {
                 'No timeline activity available.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             )
           else
@@ -350,11 +392,11 @@ class TicketTimelineCard extends StatelessWidget {
                             ),
                           if (item.createdAt != null)
                             Text(
-                              DateFormat('dd MMM yyyy, hh:mm a')
-                                  .format(item.createdAt!),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
+                              DateFormat(
+                                'dd MMM yyyy, hh:mm a',
+                              ).format(item.createdAt!),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant),
                             ),
                         ],
                       ),
@@ -374,12 +416,14 @@ class _MessageBubble extends StatelessWidget {
     required this.isMine,
     required this.isCustomerView,
     required this.customerName,
+    this.deliveryStatus,
   });
 
   final SupportTicketMessage message;
   final bool isMine;
   final bool isCustomerView;
   final String customerName;
+  final String? deliveryStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -398,13 +442,13 @@ class _MessageBubble extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: alignEnd && isCustomerView
-              ? scheme.primary
-              : scheme.surface,
+          color: alignEnd && isCustomerView ? scheme.primary : scheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: alignEnd && isCustomerView
               ? null
-              : Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+              : Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.55),
+                ),
         ),
         child: Text(
           message.message,
@@ -436,13 +480,43 @@ class _MessageBubble extends StatelessWidget {
       child: Text(
         [name, if (time.isNotEmpty) time].join('  ·  '),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: alignEnd && isCustomerView
-                  ? scheme.primary
-                  : scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
+          color: alignEnd && isCustomerView
+              ? scheme.primary
+              : scheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
+
+    final status = deliveryStatus == null
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  deliveryStatus == 'Seen'
+                      ? Icons.done_all_rounded
+                      : Icons.done_rounded,
+                  size: 14,
+                  color: deliveryStatus == 'Seen'
+                      ? scheme.primary
+                      : scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  deliveryStatus!,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: deliveryStatus == 'Seen'
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          );
 
     if (alignEnd) {
       return Column(
@@ -457,6 +531,7 @@ class _MessageBubble extends StatelessWidget {
             ],
           ),
           bubble,
+          status,
         ],
       );
     }
@@ -471,10 +546,8 @@ class _MessageBubble extends StatelessWidget {
             Flexible(child: meta),
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.only(left: 40),
-          child: bubble,
-        ),
+        Padding(padding: const EdgeInsets.only(left: 40), child: bubble),
+        Padding(padding: const EdgeInsets.only(left: 40), child: status),
       ],
     );
   }

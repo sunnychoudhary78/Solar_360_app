@@ -30,13 +30,25 @@ class SupportApiService {
     return _parsePage(res, page, limit);
   }
 
-  Future<SupportTicketModel> getById(String id) async {
-    final res = await _api.get(ApiEndpoints.adminSupportTicket(id));
-    return SupportTicketModel.fromJson(_unwrapMap(res));
+  Future<int> count({
+    String? search,
+    String? status,
+    String? priority,
+    String? category,
+  }) async {
+    final result = await list(
+      search: search,
+      status: status,
+      priority: priority,
+      category: category,
+      page: 1,
+      limit: 1,
+    );
+    return result.total;
   }
 
-  Future<SupportTicketModel> create(Map<String, dynamic> body) async {
-    final res = await _api.post(ApiEndpoints.adminSupportTicketCreate, body);
+  Future<SupportTicketModel> getById(String id) async {
+    final res = await _api.get(ApiEndpoints.adminSupportTicket(id));
     return SupportTicketModel.fromJson(_unwrapMap(res));
   }
 
@@ -53,10 +65,10 @@ class SupportApiService {
     String message, {
     bool isInternal = false,
   }) async {
-    final res = await _api.post(
-      ApiEndpoints.adminSupportTicketMessages(id),
-      {'message': message, 'is_internal': isInternal},
-    );
+    final res = await _api.post(ApiEndpoints.adminSupportTicketMessages(id), {
+      'message': message,
+      'is_internal': isInternal,
+    });
     return SupportTicketMessage.fromJson(_unwrapMap(res));
   }
 
@@ -72,9 +84,8 @@ class SupportApiService {
     return _unwrapList(res)
         .whereType<Map>()
         .map(
-          (e) => SupportTicketHistoryItem.fromJson(
-            Map<String, dynamic>.from(e),
-          ),
+          (e) =>
+              SupportTicketHistoryItem.fromJson(Map<String, dynamic>.from(e)),
         )
         .toList();
   }

@@ -1,3 +1,4 @@
+import 'package:solar_sales/features/support/data/support_ticket_constants.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 
 class SupportTicketParty {
@@ -35,6 +36,7 @@ class SupportTicketMessage {
   final String senderName;
   final bool isInternal;
   final DateTime? createdAt;
+  final DateTime? deliveredAt;
   final DateTime? readAt;
 
   const SupportTicketMessage({
@@ -45,6 +47,7 @@ class SupportTicketMessage {
     this.senderName = '',
     this.isInternal = false,
     this.createdAt,
+    this.deliveredAt,
     this.readAt,
   });
 
@@ -82,7 +85,15 @@ class SupportTicketMessage {
       senderName: senderName,
       isInternal: json['is_internal'] == true || json['isInternal'] == true,
       createdAt: parseDate(json['created_at'] ?? json['createdAt']),
-      readAt: parseDate(json['read_at'] ?? json['readAt'] ?? json['seen_at']),
+      deliveredAt: parseDate(
+        json['delivered_at'] ??
+            json['deliveredAt'] ??
+            json['delivery_at'] ??
+            json['deliveryAt'],
+      ),
+      readAt: parseDate(
+        json['read_at'] ?? json['readAt'] ?? json['seen_at'] ?? json['seenAt'],
+      ),
     );
   }
 }
@@ -123,11 +134,7 @@ class SupportTicketHistoryItem {
 
   String get title {
     if (action.trim().isEmpty) return 'Update';
-    return action
-        .split('_')
-        .where((part) => part.isNotEmpty)
-        .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
-        .join(' ');
+    return SupportTicketConstants.statusLabel(action);
   }
 }
 
@@ -145,6 +152,7 @@ class SupportTicketModel {
   final String? phone;
   final String? email;
   final String? resolutionSummary;
+  final bool customerVerified;
   final String customerId;
   final SupportTicketParty? customer;
   final SupportTicketParty? assignee;
@@ -152,6 +160,7 @@ class SupportTicketModel {
   final DateTime? updatedAt;
   final List<SupportTicketMessage> messages;
   final List<SupportTicketHistoryItem> history;
+  final int unreadCountHint;
 
   const SupportTicketModel({
     required this.id,
@@ -167,6 +176,7 @@ class SupportTicketModel {
     this.phone,
     this.email,
     this.resolutionSummary,
+    this.customerVerified = false,
     this.customerId = '',
     this.customer,
     this.assignee,
@@ -174,6 +184,7 @@ class SupportTicketModel {
     this.updatedAt,
     this.messages = const [],
     this.history = const [],
+    this.unreadCountHint = 0,
   });
 
   factory SupportTicketModel.fromJson(Map<String, dynamic> json) {
@@ -185,6 +196,10 @@ class SupportTicketModel {
         : null;
     final messagesRaw = json['messages'] ?? json['conversation'];
     final historyRaw = json['history'];
+    final unreadRaw =
+        json['unread_count'] ??
+        json['unread_messages'] ??
+        json['unreadMessageCount'];
     return SupportTicketModel(
       id: asString(json['id']),
       ticketNumber: asString(json['ticket_number'] ?? json['ticketNumber']),
@@ -200,15 +215,71 @@ class SupportTicketModel {
       source: asString(json['source']),
       phone: (json['phone'] ?? customer?.phone)?.toString(),
       email: (json['email'] ?? customer?.email)?.toString(),
-      resolutionSummary: json['resolution_summary']?.toString() ??
+      resolutionSummary:
+          json['resolution_summary']?.toString() ??
           json['resolutionSummary']?.toString(),
-      customerId: asString(json['customer_id'] ?? json['customerId'] ?? customer?.id),
+      customerVerified:
+          json['customer_verified'] == true || json['customerVerified'] == true,
+      customerId: asString(
+        json['customer_id'] ?? json['customerId'] ?? customer?.id,
+      ),
       customer: customer,
       assignee: assignee,
       createdAt: parseDate(json['created_at'] ?? json['createdAt']),
       updatedAt: parseDate(json['updated_at'] ?? json['updatedAt']),
       messages: _parseMessages(messagesRaw),
       history: _parseHistory(historyRaw),
+      unreadCountHint: unreadRaw is num ? unreadRaw.toInt() : 0,
+    );
+  }
+
+  SupportTicketModel copyWith({
+    String? id,
+    String? ticketNumber,
+    String? subject,
+    String? description,
+    String? requestType,
+    String? category,
+    String? subCategory,
+    String? priority,
+    String? status,
+    String? source,
+    String? phone,
+    String? email,
+    String? resolutionSummary,
+    bool? customerVerified,
+    String? customerId,
+    SupportTicketParty? customer,
+    SupportTicketParty? assignee,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    List<SupportTicketMessage>? messages,
+    List<SupportTicketHistoryItem>? history,
+    int? unreadCountHint,
+  }) {
+    return SupportTicketModel(
+      id: id ?? this.id,
+      ticketNumber: ticketNumber ?? this.ticketNumber,
+      subject: subject ?? this.subject,
+      description: description ?? this.description,
+      requestType: requestType ?? this.requestType,
+      category: category ?? this.category,
+      subCategory: subCategory ?? this.subCategory,
+      priority: priority ?? this.priority,
+      status: status ?? this.status,
+      source: source ?? this.source,
+      phone: phone ?? this.phone,
+      email: email ?? this.email,
+      resolutionSummary: resolutionSummary ?? this.resolutionSummary,
+      customerVerified: customerVerified ?? this.customerVerified,
+      customerId: customerId ?? this.customerId,
+      customer: customer ?? this.customer,
+      assignee: assignee ?? this.assignee,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      messages: messages ?? this.messages,
+      history: history ?? this.history,
+      unreadCountHint: unreadCountHint ?? this.unreadCountHint,
     );
   }
 
@@ -225,33 +296,40 @@ class SupportTicketModel {
     return raw
         .whereType<Map>()
         .map(
-          (e) => SupportTicketHistoryItem.fromJson(Map<String, dynamic>.from(e)),
+          (e) =>
+              SupportTicketHistoryItem.fromJson(Map<String, dynamic>.from(e)),
         )
         .toList();
   }
 
   String get customerName => customer?.name ?? '';
 
-  String get statusLabel => _titleCase(status.isEmpty ? 'open' : status);
+  String get statusLabel => SupportTicketConstants.statusLabel(status);
 
-  String get priorityLabel => _titleCase(priority);
+  String get priorityLabel => SupportTicketConstants.priorityLabel(priority);
 
-  String get categoryLabel =>
-      category.trim().isEmpty ? '—' : _titleCase(category);
+  String get categoryLabel => SupportTicketConstants.categoryLabel(category);
+
+  String get requestTypeLabel =>
+      SupportTicketConstants.requestTypeLabel(requestType);
 
   bool get isNew =>
       status == 'complaint_raised' || status == 'open' || status.isEmpty;
 
-  bool get isClosed =>
-      status == 'closed' || status == 'resolved' || status == 'cancelled';
+  bool get isClosed => status == 'closed' || status == 'cancelled';
+
+  bool get isResolved => status == 'resolved';
 
   bool get isNewTag => status == 'complaint_raised' || status == 'open';
 
-  static String _titleCase(String value) {
-    return value
-        .split('_')
-        .where((part) => part.isNotEmpty)
-        .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
-        .join(' ');
+  int unreadIncomingCount({required bool isCustomerView}) {
+    if (messages.isEmpty) return unreadCountHint;
+    return messages.where((message) {
+      if (message.isInternal) return false;
+      final incoming = isCustomerView
+          ? !message.isCustomer
+          : message.isCustomer;
+      return incoming && message.readAt == null;
+    }).length;
   }
 }

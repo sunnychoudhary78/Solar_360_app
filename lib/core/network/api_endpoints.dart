@@ -9,7 +9,8 @@ class ApiEndpoints {
   // Branding / reports
   static const solarBranding = 'company-settings/solar-branding';
   static const itemCategories = 'company-settings/item-categories';
-  static String itemCategory(String id) => 'company-settings/item-categories/$id';
+  static String itemCategory(String id) =>
+      'company-settings/item-categories/$id';
   static const dashboard = 'solar-reports/dashboard';
   static const salesReport = 'solar-reports/sales';
   static const stockReport = 'solar-reports/stock';
@@ -34,6 +35,7 @@ class ApiEndpoints {
 
   // Customer portal support
   static const supportTickets = 'support-tickets';
+  static const supportTicketsDashboard = 'support-tickets/dashboard';
   static String supportTicket(String id) => 'support-tickets/$id';
   static String supportTicketHistory(String id) =>
       'support-tickets/$id/history';
@@ -41,12 +43,11 @@ class ApiEndpoints {
       'support-tickets/$id/messages';
   static String supportTicketMessagesRead(String id) =>
       'support-tickets/$id/messages/read';
+  static String supportTicketVerify(String id) => 'support-tickets/$id/verify';
 
   // Staff / Company Admin support (Billbook)
   static const adminSupportTickets = 'support-tickets/admin/list';
-  static const adminSupportTicketCreate = 'support-tickets/admin';
-  static String adminSupportTicket(String id) =>
-      'support-tickets/admin/$id';
+  static String adminSupportTicket(String id) => 'support-tickets/admin/$id';
   static String adminSupportTicketMessages(String id) =>
       'support-tickets/admin/$id/messages';
   static String adminSupportTicketMessagesRead(String id) =>

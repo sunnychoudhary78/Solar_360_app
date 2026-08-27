@@ -10,15 +10,20 @@ class SupportTicketCard extends StatelessWidget {
     required this.ticket,
     required this.onOpen,
     this.showCustomer = false,
+    this.isCustomerView = false,
   });
 
   final SupportTicketModel ticket;
   final VoidCallback onOpen;
   final bool showCustomer;
+  final bool isCustomerView;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final unreadCount = ticket.unreadIncomingCount(
+      isCustomerView: isCustomerView,
+    );
     final created = ticket.createdAt == null
         ? null
         : DateFormat('dd MMM yyyy, hh:mm a').format(ticket.createdAt!);
@@ -54,6 +59,13 @@ class SupportTicketCard extends StatelessWidget {
                         side: BorderSide.none,
                       ),
                     _PriorityChip(priority: ticket.priority),
+                    if (unreadCount > 0)
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: Colors.amber.withValues(alpha: 0.18),
+                        side: BorderSide.none,
+                        label: Text('$unreadCount new'),
+                      ),
                   ],
                 ),
               ),
@@ -66,9 +78,9 @@ class SupportTicketCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             ticket.subject,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
           if (ticket.description.isNotEmpty) ...[
             const SizedBox(height: 4),
@@ -76,9 +88,9 @@ class SupportTicketCard extends StatelessWidget {
               ticket.description,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
           if (showCustomer && ticket.customerName.isNotEmpty) ...[
@@ -102,7 +114,8 @@ class SupportTicketCard extends StatelessWidget {
                   child: Text(
                     [
                       ticket.customerName,
-                      if ((ticket.customer?.phone ?? ticket.phone ?? '').isNotEmpty)
+                      if ((ticket.customer?.phone ?? ticket.phone ?? '')
+                          .isNotEmpty)
                         ticket.customer?.phone ?? ticket.phone,
                     ].join(' · '),
                     maxLines: 1,
@@ -126,14 +139,11 @@ class SupportTicketCard extends StatelessWidget {
                 Text(
                   created,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               const SizedBox(width: 8),
-              FilledButton.tonal(
-                onPressed: onOpen,
-                child: const Text('Open'),
-              ),
+              FilledButton.tonal(onPressed: onOpen, child: const Text('Open')),
             ],
           ),
         ],
