@@ -125,7 +125,14 @@ class SupportApiService {
     if (res is Map) {
       final map = Map<String, dynamic>.from(res);
       if (map['data'] is Map) {
-        return Map<String, dynamic>.from(map['data'] as Map);
+        final data = Map<String, dynamic>.from(map['data'] as Map);
+        if (data['ticket'] is Map) {
+          final ticket = Map<String, dynamic>.from(data['ticket'] as Map);
+          ticket['messages'] ??= data['messages'];
+          ticket['history'] ??= data['history'];
+          return ticket;
+        }
+        return data;
       }
       if (map['ticket'] is Map) {
         return Map<String, dynamic>.from(map['ticket'] as Map);
@@ -139,7 +146,12 @@ class SupportApiService {
     if (res is List) return res;
     if (res is Map) {
       final raw =
-          res['data'] ?? res['rows'] ?? res['tickets'] ?? res['history'];
+          res['data'] ??
+          res['rows'] ??
+          res['tickets'] ??
+          res['history'] ??
+          res['messages'] ??
+          res['conversation'];
       if (raw is List) return raw;
       if (raw is Map && raw['rows'] is List) return raw['rows'] as List;
       if (raw is Map && raw['data'] is List) return raw['data'] as List;

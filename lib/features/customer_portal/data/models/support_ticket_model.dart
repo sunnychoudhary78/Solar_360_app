@@ -56,12 +56,22 @@ class SupportTicketMessage {
   factory SupportTicketMessage.fromJson(Map<String, dynamic> json) {
     final user = json['user'] is Map
         ? Map<String, dynamic>.from(json['user'] as Map)
+        : json['sender'] is Map
+        ? Map<String, dynamic>.from(json['sender'] as Map)
         : null;
     final customer = json['customer'] is Map
         ? Map<String, dynamic>.from(json['customer'] as Map)
         : null;
-    final senderType = asString(json['sender_type'] ?? json['senderType']);
-    final isCustomer = senderType.toLowerCase() == 'customer';
+    var senderType = asString(
+      json['sender_type'] ?? json['senderType'] ?? json['role'],
+    ).toLowerCase();
+    final hasStaffSender =
+        user != null ||
+        asString(json['user_id'] ?? json['userId']).isNotEmpty;
+    if (senderType.isEmpty) {
+      senderType = hasStaffSender ? 'admin' : 'customer';
+    }
+    final isCustomer = senderType == 'customer';
     final senderId = asString(
       json['user_id'] ??
           json['userId'] ??
@@ -73,17 +83,21 @@ class SupportTicketMessage {
     final senderName = asString(
       json['sender_name'] ??
           json['senderName'] ??
+          json['user_name'] ??
+          json['userName'] ??
           (isCustomer ? customer : user)?['name'] ??
           user?['name'] ??
           customer?['name'],
     );
     return SupportTicketMessage(
-      id: asString(json['id']),
-      message: asString(json['message'] ?? json['body'] ?? json['text']),
-      senderType: senderType.isEmpty ? 'customer' : senderType,
+      id: asString(json['id'] ?? json['message_id'] ?? json['messageId']),
+      message: asString(
+        json['message'] ?? json['body'] ?? json['text'] ?? json['content'],
+      ),
+      senderType: senderType,
       senderId: senderId,
       senderName: senderName,
-      isInternal: json['is_internal'] == true || json['isInternal'] == true,
+      isInternal: _asFlag(json['is_internal'] ?? json['isInternal']),
       createdAt: parseDate(json['created_at'] ?? json['createdAt']),
       deliveredAt: parseDate(
         json['delivered_at'] ??
@@ -95,6 +109,12 @@ class SupportTicketMessage {
         json['read_at'] ?? json['readAt'] ?? json['seen_at'] ?? json['seenAt'],
       ),
     );
+  }
+
+  static bool _asFlag(dynamic value) {
+    if (value == true || value == 1) return true;
+    final text = value?.toString().trim().toLowerCase();
+    return text == 'true' || text == '1' || text == 'yes';
   }
 }
 
@@ -194,7 +214,12 @@ class SupportTicketModel {
     final assignee = json['assignee'] is Map
         ? SupportTicketParty.fromJson(json['assignee'])
         : null;
-    final messagesRaw = json['messages'] ?? json['conversation'];
+    final messagesRaw =
+        json['messages'] ??
+        json['conversation'] ??
+        json['ticket_messages'] ??
+        json['TicketMessages'] ??
+        json['ticketMessages'];
     final historyRaw = json['history'];
     final unreadRaw =
         json['unread_count'] ??
@@ -284,11 +309,26 @@ class SupportTicketModel {
   }
 
   static List<SupportTicketMessage> _parseMessages(dynamic raw) {
-    if (raw is! List) return const [];
-    return raw
+    dynamic source = raw;
+    if (source is Map) {
+      source =
+          source['rows'] ??
+          source['data'] ??
+          source['messages'] ??
+          source['items'];
+    }
+    if (source is! List) return const [];
+    final parsed = source
         .whereType<Map>()
         .map((e) => SupportTicketMessage.fromJson(Map<String, dynamic>.from(e)))
+        .where((item) => item.message.trim().isNotEmpty)
         .toList();
+    parsed.sort((a, b) {
+      final aTime = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return aTime.compareTo(bTime);
+    });
+    return parsed;
   }
 
   static List<SupportTicketHistoryItem> _parseHistory(dynamic raw) {

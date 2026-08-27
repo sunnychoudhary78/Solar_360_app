@@ -12,14 +12,14 @@ class TicketConversation extends StatelessWidget {
     required this.isCustomerView,
     required this.currentUserId,
     required this.customerName,
-    this.maxHeight = 420,
+    this.composer,
   });
 
   final List<SupportTicketMessage> messages;
   final bool isCustomerView;
   final String currentUserId;
   final String customerName;
-  final double maxHeight;
+  final Widget? composer;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +81,7 @@ class TicketConversation extends StatelessWidget {
                       ),
                       Text(
                         isCustomerView
-                            ? 'Chat with the support team'
+                            ? 'Messages with the support team'
                             : 'Direct conversation with ${customerName.isEmpty ? 'customer' : customerName}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -97,39 +97,46 @@ class TicketConversation extends StatelessWidget {
             height: 1,
             color: scheme.outlineVariant.withValues(alpha: 0.5),
           ),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight, minHeight: 160),
-            child: visible.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Text(
-                        isCustomerView
-                            ? 'Send your first message to the support team.'
-                            : 'No messages yet. Reply to start the conversation.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                    itemCount: visible.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      return _MessageBubble(
-                        message: visible[index],
-                        isMine: _isMine(visible[index]),
-                        isCustomerView: isCustomerView,
-                        customerName: customerName,
-                        deliveryStatus: _deliveryStatus(visible[index]),
-                      );
-                    },
+          if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  isCustomerView
+                      ? 'Send your first message to the support team.'
+                      : 'No messages yet. Reply to start the conversation.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
                   ),
-          ),
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+              child: Column(
+                children: [
+                  for (var i = 0; i < visible.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 12),
+                    _MessageBubble(
+                      message: visible[i],
+                      isMine: _isMine(visible[i]),
+                      isCustomerView: isCustomerView,
+                      customerName: customerName,
+                      deliveryStatus: _deliveryStatus(visible[i]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          if (composer != null) ...[
+            Divider(
+              height: 1,
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+            composer!,
+          ],
         ],
       ),
     );
@@ -176,6 +183,7 @@ class TicketReplyBox extends StatefulWidget {
     required this.hintText,
     this.replyToName,
     this.sending = false,
+    this.embedded = false,
   });
 
   final TextEditingController controller;
@@ -184,6 +192,7 @@ class TicketReplyBox extends StatefulWidget {
   final String hintText;
   final String? replyToName;
   final bool sending;
+  final bool embedded;
 
   @override
   State<TicketReplyBox> createState() => _TicketReplyBoxState();
@@ -224,78 +233,80 @@ class _TicketReplyBoxState extends State<TicketReplyBox> {
         !widget.sending &&
         widget.controller.text.trim().isNotEmpty;
 
-    return AppCard(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  (widget.replyToName == null ||
-                          widget.replyToName!.trim().isEmpty)
-                      ? 'REPLY'
-                      : 'REPLY TO ${widget.replyToName!.toUpperCase()}',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
-                    color: scheme.onSurfaceVariant,
-                  ),
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                (widget.replyToName == null ||
+                        widget.replyToName!.trim().isEmpty)
+                    ? 'Reply'
+                    : 'Reply to ${widget.replyToName}',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              Text(
-                '$count/4000',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: widget.controller,
-            enabled: widget.enabled && !widget.sending,
-            minLines: 3,
-            maxLines: 6,
-            maxLength: 4000,
-            decoration: InputDecoration(
-              hintText: widget.hintText,
-              counterText: '',
             ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(
-                Icons.shield_outlined,
-                size: 16,
+            Text(
+              '$count/4000',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Messages are saved to this ticket',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              FilledButton.icon(
-                onPressed: canSend ? widget.onSend : null,
-                icon: widget.sending
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send_rounded, size: 18),
-                label: const Text('Send Message'),
-              ),
-            ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          widget.enabled
+              ? 'Share more details or ask a follow-up question'
+              : 'This ticket is closed. Messaging is disabled.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: widget.controller,
+          enabled: widget.enabled && !widget.sending,
+          minLines: 2,
+          maxLines: 4,
+          maxLength: 4000,
+          decoration: InputDecoration(
+            hintText: widget.hintText,
+            counterText: '',
+          ),
+        ),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: canSend ? widget.onSend : null,
+            icon: widget.sending
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.send_rounded, size: 18),
+            label: Text(widget.sending ? 'Sending...' : 'Send reply'),
+          ),
+        ),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: body,
+      );
+    }
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: body,
     );
   }
 }

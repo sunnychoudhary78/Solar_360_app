@@ -63,7 +63,7 @@ class _CustomerSupportDetailScreenState
       }
       if (!mounted) return;
       setState(() {
-        _ticket = ticket.copyWith(history: history);
+        _ticket = _mergeTicket(ticket, history);
         _loading = false;
       });
     } catch (e) {
@@ -80,16 +80,48 @@ class _CustomerSupportDetailScreenState
     if (text.isEmpty || _ticket == null) return;
     setState(() => _sending = true);
     try {
-      await ref
+      final sent = await ref
           .read(customerPortalApiServiceProvider)
           .addMessage(_ticket!.id, text);
       _reply.clear();
+      if (mounted && sent.message.trim().isNotEmpty) {
+        setState(() {
+          _ticket = _ticket!.copyWith(
+            messages: _mergeMessages(_ticket!.messages, [sent]),
+          );
+        });
+      }
       await _load(silent: true);
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).showApiError(e);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  SupportTicketModel _mergeTicket(
+    SupportTicketModel incoming,
+    List<SupportTicketHistoryItem> history,
+  ) {
+    final previous = _ticket;
+    return incoming.copyWith(
+      history: history.isNotEmpty ? history : incoming.history,
+      messages: incoming.messages.isNotEmpty
+          ? incoming.messages
+          : (previous?.messages ?? incoming.messages),
+    );
+  }
+
+  List<SupportTicketMessage> _mergeMessages(
+    List<SupportTicketMessage> current,
+    List<SupportTicketMessage> extra,
+  ) {
+    final merged = [...current];
+    for (final item in extra) {
+      final exists = item.id.isNotEmpty && merged.any((m) => m.id == item.id);
+      if (!exists) merged.add(item);
+    }
+    return merged;
   }
 
   Future<void> _verify(bool verified) async {
@@ -150,183 +182,181 @@ class _CustomerSupportDetailScreenState
 
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
+      resizeToAvoidBottomInset: true,
       appBar: AppAppBar(
         title: ticket.ticketNumber.isEmpty
             ? 'Request details'
             : ticket.ticketNumber,
         subtitle: ticket.subject,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-        children: [
-          AppCard(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  ticket.subject,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    Chip(label: Text(ticket.statusLabel)),
-                    Chip(label: Text(ticket.priorityLabel)),
-                    if (ticket.requestType.isNotEmpty)
-                      Chip(label: Text(ticket.requestTypeLabel)),
-                    if (ticket.category.isNotEmpty)
-                      Chip(label: Text(ticket.categoryLabel)),
-                  ],
-                ),
-                if (ticket.description.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(ticket.description),
-                ],
-                if (ticket.createdAt != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Created ${DateFormat('dd MMM yyyy, hh:mm a').format(ticket.createdAt!)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : () => _load(),
+            icon: const Icon(Icons.refresh_rounded),
           ),
-          if ((ticket.resolutionSummary ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () => _load(silent: true),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+          children: [
             AppCard(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.check_circle_rounded, color: scheme.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Resolution',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(ticket.resolutionSummary!),
-                      ],
+                  Text(
+                    ticket.subject,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                ],
-              ),
-            ),
-          ],
-          if (ticket.isResolved) ...[
-            const SizedBox(height: 12),
-            AppCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: scheme.primary,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(16),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      Chip(label: Text(ticket.statusLabel)),
+                      Chip(label: Text(ticket.priorityLabel)),
+                      if (ticket.requestType.isNotEmpty)
+                        Chip(label: Text(ticket.requestTypeLabel)),
+                      if (ticket.category.isNotEmpty)
+                        Chip(label: Text(ticket.categoryLabel)),
+                    ],
+                  ),
+                  if (ticket.description.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(ticket.description),
+                  ],
+                  if (ticket.createdAt != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Created ${DateFormat('dd MMM yyyy, hh:mm a').format(ticket.createdAt!)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.verified_rounded, color: scheme.onPrimary),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Is your issue resolved?',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: scheme.onPrimary,
-                                ),
-                              ),
-                              Text(
-                                'Please verify the resolution so we can close your support ticket.',
-                                style: TextStyle(
-                                  color: scheme.onPrimary.withValues(
-                                    alpha: 0.9,
-                                  ),
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: _verifying ? null : () => _verify(true),
-                          icon: const Icon(Icons.check_rounded),
-                          label: const Text('Yes, issue resolved'),
-                        ),
-                        const SizedBox(height: 10),
-                        OutlinedButton.icon(
-                          onPressed: _verifying ? null : () => _verify(false),
-                          icon: const Icon(Icons.close_rounded),
-                          label: const Text('No, still need help'),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),
-          ],
-          const SizedBox(height: 12),
-          TicketConversation(
-            messages: ticket.messages,
-            isCustomerView: true,
-            currentUserId: customer?.id ?? '',
-            customerName: customer?.name ?? ticket.customerName,
-          ),
-          if (!ticket.isClosed) ...[
-            const SizedBox(height: 12),
-            TicketReplyBox(
-              controller: _reply,
-              onSend: _send,
-              enabled: true,
-              sending: _sending,
-              hintText: 'Write a message to the support team...',
-            ),
-          ] else ...[
-            const SizedBox(height: 12),
-            AppCard(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'This ticket is closed. Messaging is disabled.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
+            if ((ticket.resolutionSummary ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              AppCard(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.check_circle_rounded, color: scheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Resolution',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(ticket.resolutionSummary!),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            ],
+            if (ticket.isResolved) ...[
+              const SizedBox(height: 12),
+              AppCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.verified_rounded, color: scheme.onPrimary),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Is your issue resolved?',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: scheme.onPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'Please verify the resolution so we can close your support ticket.',
+                                  style: TextStyle(
+                                    color: scheme.onPrimary.withValues(
+                                      alpha: 0.9,
+                                    ),
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: _verifying ? null : () => _verify(true),
+                            icon: const Icon(Icons.check_rounded),
+                            label: const Text('Yes, issue resolved'),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: _verifying ? null : () => _verify(false),
+                            icon: const Icon(Icons.close_rounded),
+                            label: const Text('No, still need help'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TicketConversation(
+              messages: ticket.messages,
+              isCustomerView: true,
+              currentUserId: customer?.id ?? '',
+              customerName: customer?.name ?? ticket.customerName,
+              composer: TicketReplyBox(
+                controller: _reply,
+                onSend: _send,
+                enabled: !ticket.isClosed,
+                sending: _sending,
+                embedded: true,
+                replyToName: 'support',
+                hintText: 'Write your reply...',
+              ),
             ),
+            const SizedBox(height: 12),
+            TicketTimelineCard(history: ticket.history),
           ],
-          const SizedBox(height: 12),
-          TicketTimelineCard(history: ticket.history),
-        ],
+        ),
       ),
     );
   }
 }
+

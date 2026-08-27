@@ -68,7 +68,7 @@ class _SupportTicketDetailScreenState
       }
       if (!mounted) return;
       setState(() {
-        _ticket = ticket.copyWith(history: history);
+        _ticket = _mergeTicket(ticket, history);
         _status = ticket.status.isEmpty ? 'open' : ticket.status;
         if (!silent) {
           _resolution.text = ticket.resolutionSummary ?? '';
@@ -89,14 +89,48 @@ class _SupportTicketDetailScreenState
     if (text.isEmpty || _ticket == null) return;
     setState(() => _sending = true);
     try {
-      await ref.read(supportApiServiceProvider).addMessage(_ticket!.id, text);
+      final sent = await ref
+          .read(supportApiServiceProvider)
+          .addMessage(_ticket!.id, text);
       _reply.clear();
+      if (mounted && sent.message.trim().isNotEmpty) {
+        setState(() {
+          _ticket = _ticket!.copyWith(
+            messages: _mergeMessages(_ticket!.messages, [sent]),
+          );
+        });
+      }
       await _load(silent: true);
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).showApiError(e);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  SupportTicketModel _mergeTicket(
+    SupportTicketModel incoming,
+    List<SupportTicketHistoryItem> history,
+  ) {
+    final previous = _ticket;
+    return incoming.copyWith(
+      history: history.isNotEmpty ? history : incoming.history,
+      messages: incoming.messages.isNotEmpty
+          ? incoming.messages
+          : (previous?.messages ?? incoming.messages),
+    );
+  }
+
+  List<SupportTicketMessage> _mergeMessages(
+    List<SupportTicketMessage> current,
+    List<SupportTicketMessage> extra,
+  ) {
+    final merged = [...current];
+    for (final item in extra) {
+      final exists = item.id.isNotEmpty && merged.any((m) => m.id == item.id);
+      if (!exists) merged.add(item);
+    }
+    return merged;
   }
 
   Future<void> _updateStatus() async {
@@ -193,14 +227,24 @@ class _SupportTicketDetailScreenState
 
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
+      resizeToAvoidBottomInset: true,
       appBar: AppAppBar(
         title: ticket.ticketNumber.isEmpty
             ? 'Support request'
             : ticket.ticketNumber,
         subtitle: ticket.subject,
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: () => _load(),
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+      body: RefreshIndicator(
+        onRefresh: () => _load(silent: true),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         children: [
           AppCard(
             padding: const EdgeInsets.all(16),
@@ -398,19 +442,21 @@ class _SupportTicketDetailScreenState
             isCustomerView: false,
             currentUserId: auth.profile?.id ?? auth.authUser?.id ?? '',
             customerName: ticket.customerName,
+            composer: ticket.isClosed
+                ? null
+                : TicketReplyBox(
+                    controller: _reply,
+                    onSend: _send,
+                    enabled: true,
+                    sending: _sending,
+                    embedded: true,
+                    replyToName: ticket.customerName.isEmpty
+                        ? 'customer'
+                        : ticket.customerName,
+                    hintText:
+                        'Write a helpful response to ${ticket.customerName.isEmpty ? 'the customer' : ticket.customerName}...',
+                  ),
           ),
-          if (canUpdate && !ticket.isClosed) ...[
-            const SizedBox(height: 12),
-            TicketReplyBox(
-              controller: _reply,
-              onSend: _send,
-              enabled: true,
-              sending: _sending,
-              replyToName: ticket.customerName,
-              hintText:
-                  'Write a helpful response to ${ticket.customerName.isEmpty ? 'the customer' : ticket.customerName}...',
-            ),
-          ],
           const SizedBox(height: 12),
           TicketTimelineCard(history: ticket.history),
           if (canUpdate && !ticket.isClosed) ...[
@@ -445,6 +491,7 @@ class _SupportTicketDetailScreenState
             ),
           ],
         ],
+        ),
       ),
     );
   }
