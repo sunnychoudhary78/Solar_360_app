@@ -51,7 +51,11 @@ class CustomerLeadProgress extends StatelessWidget {
             if (onFillDetails != null)
               FilledButton.tonal(
                 onPressed: onFillDetails,
-                child: const Text('Fill details'),
+                child: Text(
+                  customerLeadNeedingCompletion(leads) != null
+                      ? 'Complete details'
+                      : 'Fill details',
+                ),
               ),
           ],
         ),
@@ -64,12 +68,12 @@ class CustomerLeadProgress extends StatelessWidget {
                 Icon(Icons.assignment_outlined, color: scheme.outline, size: 32),
                 const SizedBox(height: 10),
                 const Text(
-                  'Complete your lead details',
+                  'Start with basic details',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Fill in your information to start the solar installation process.',
+                  'Fill your basic information, then complete the full lead form yourself. Sales will process the status after you submit.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
@@ -77,7 +81,7 @@ class CustomerLeadProgress extends StatelessWidget {
                   const SizedBox(height: 14),
                   FilledButton(
                     onPressed: onFillDetails,
-                    child: const Text('Fill lead details'),
+                    child: const Text('Fill basic details'),
                   ),
                 ],
               ],
@@ -125,7 +129,11 @@ class CustomerLeadProgress extends StatelessWidget {
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () => onEditDetails(lead),
-                          child: const Text('Edit details'),
+                          child: Text(
+                            isCustomerLeadIncomplete(lead)
+                                ? 'Complete details'
+                                : 'Edit details',
+                          ),
                         ),
                       ),
                     ],

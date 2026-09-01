@@ -1019,9 +1019,14 @@ registration_time=${result.regTime.trim()}
     setState(() => loading = true);
 
     try {
-      await ref.read(leadRepositoryProvider).updateLead(_lead.id, {
+      final data = <String, dynamic>{
         'final_amount_received': value,
-      });
+      };
+      if (value && _isLoanPaymentType(_lead.paymentType)) {
+        data['subsidy_percentage'] = '100';
+      }
+
+      await ref.read(leadRepositoryProvider).updateLead(_lead.id, data);
 
       await _reloadSilently();
       if (!mounted) return;

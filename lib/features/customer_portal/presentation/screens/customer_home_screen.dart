@@ -5,10 +5,10 @@ import 'package:intl/intl.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.dart';
+import 'package:solar_sales/features/customer_portal/presentation/customer_lead_form_nav.dart';
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_shell.dart';
 import 'package:solar_sales/features/customer_portal/presentation/widgets/customer_lead_progress.dart';
-import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
@@ -169,31 +169,21 @@ class CustomerHomeScreen extends ConsumerWidget {
                 ),
                 data: (leads) => CustomerLeadProgress(
                   leads: leads,
-                  onFillDetails: hasConvertedCustomerLead(leads)
-                      ? null
-                      : () => _openLeadForm(context, ref, null),
-                  onEditDetails: (lead) => _openLeadForm(context, ref, lead),
+                  onFillDetails: canCustomerFillOrComplete(leads)
+                      ? () => openCustomerLeadForm(
+                            context,
+                            ref,
+                            lead: customerLeadNeedingCompletion(leads),
+                          )
+                      : null,
+                  onEditDetails: (lead) =>
+                      openCustomerLeadForm(context, ref, lead: lead),
                 ),
               ),
             ],
           ),
         ),
       );
-  }
-
-  Future<void> _openLeadForm(
-    BuildContext context,
-    WidgetRef ref,
-    LeadModel? lead,
-  ) async {
-    final result = await Navigator.pushNamed(
-      context,
-      '/customer/lead-form',
-      arguments: lead,
-    );
-    if (result == true) {
-      ref.invalidate(customerLeadsProvider);
-    }
   }
 }
 

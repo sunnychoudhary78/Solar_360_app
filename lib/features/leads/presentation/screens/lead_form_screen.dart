@@ -13,6 +13,7 @@ import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/utils/upload_url.dart';
 import 'package:solar_sales/core/widgets/app_message.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.dart';
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
@@ -756,7 +757,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'account_number': _textOrNull(accountNumber),
       'ifsc_code': _textOrNull(ifscCode)?.toUpperCase(),
       'project_type': projectType,
-      'source': widget.customerPortal ? 'Other' : source,
+      'source': widget.customerPortal ? 'Customer Portal' : source,
       'priority': priority,
       'notes': _textOrNull(notes),
       'customer_id': widget.customerPortal
@@ -803,6 +804,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
               .toList(),
         );
       } else if (_isBasicCreate) {
+        final customerId = widget.customerPortal
+            ? (ref.read(authProvider).customer?.id ?? selectedCustomerId)
+            : selectedCustomerId;
         final basicData = <String, dynamic>{
           'full_name': data['full_name'],
           'mobile': data['mobile'],
@@ -816,10 +820,33 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           'source': data['source'],
           'priority': data['priority'],
           'notes': data['notes'],
-          if (selectedCustomerId != null && selectedCustomerId!.isNotEmpty)
-            'customer_id': selectedCustomerId,
+          if (customerId != null && customerId.isNotEmpty)
+            'customer_id': customerId,
         };
-        await repo.createLead(basicData);
+        final created = await repo.createLead(basicData);
+        if (!mounted) return;
+
+        if (widget.customerPortal) {
+          Navigator.of(context).pop(created ?? true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            showAppMessage(
+              null,
+              created != null
+                  ? 'Basic details saved. Continue with the full form.'
+                  : 'Lead created. Open it again to complete the remaining details.',
+            );
+          });
+          return;
+        }
+
+        Navigator.of(context).pop(true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            ref.invalidate(allLeadsProvider);
+          } catch (_) {}
+          showAppMessage(null, 'Lead created and sent to Support for approval');
+        });
+        return;
       } else {
         await repo.createLead(
           data,
@@ -838,7 +865,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
       if (!mounted) return;
 
-      final successMessage = _isCompleteDetails
+      final successMessage = widget.customerPortal && _isCompleteDetails
+          ? 'Lead details submitted successfully'
+          : _isCompleteDetails
           ? 'Lead details saved successfully'
           : 'Lead created and sent to Support for approval';
 
@@ -1987,9 +2016,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       resizeToAvoidBottomInset: true,
       appBar: AppAppBar(
         title: widget.customerPortal
-            ? (widget.existingLead == null
-                ? 'Fill lead details'
-                : 'Edit lead details')
+            ? (_isBasicCreate
+                ? 'Fill basic details'
+                : (widget.existingLead != null &&
+                      isCustomerLeadIncomplete(widget.existingLead!)
+                  ? 'Complete lead details'
+                  : 'Edit lead details'))
             : _isCompleteDetails
             ? 'Complete Lead Details'
             : 'Create Lead (Basic)',
@@ -2456,7 +2488,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                           ),
                         )
                       : Text(
-                          _isCompleteDetails
+                          widget.customerPortal && _isBasicCreate
+                              ? 'Save & continue'
+                              : widget.customerPortal && _isCompleteDetails
+                              ? 'Submit details'
+                              : _isCompleteDetails
                               ? 'Save Details'
                               : _isBasicCreate
                               ? 'Submit'

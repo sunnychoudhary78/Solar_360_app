@@ -6,7 +6,7 @@ class LeadRepository {
 
   LeadRepository(this._api);
 
-  Future<void> createLead(
+  Future<LeadModel?> createLead(
     Map<String, dynamic> data, {
     Map<String, String>? singleFilePaths,
     List<Map<String, String>>? additionalImageEntries,

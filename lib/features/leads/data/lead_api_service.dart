@@ -47,7 +47,7 @@ class LeadApiService {
     return true;
   }
 
-  Future<void> createLead(
+  Future<LeadModel?> createLead(
     Map<String, dynamic> data, {
     Map<String, String>? singleFilePaths,
     List<Map<String, String>>? additionalImageEntries,
@@ -74,7 +74,15 @@ class LeadApiService {
     );
 
     try {
-      await _dio.post(_leadsPath, data: FormData.fromMap(formDataMap));
+      final res = await _dio.post(
+        _leadsPath,
+        data: FormData.fromMap(formDataMap),
+      );
+      try {
+        return LeadModel.fromJson(_extractLeadJson(res.data));
+      } catch (_) {
+        return null;
+      }
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
     }
@@ -317,14 +325,14 @@ class LeadApiService {
     Map<String, dynamic> data,
   ) async {
     try {
-      final formDataMap = <String, dynamic>{
+      final payload = <String, dynamic>{
         for (final entry in data.entries)
-          if (entry.value != null) entry.key: '${entry.value}',
+          if (entry.value != null) entry.key: entry.value,
       };
 
       final res = await _dio.put(
         _leadPath(leadId),
-        data: FormData.fromMap(formDataMap),
+        data: payload,
       );
 
       try {

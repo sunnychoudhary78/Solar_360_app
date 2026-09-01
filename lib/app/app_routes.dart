@@ -58,9 +58,12 @@ class AppRoutes {
     '/change-password': (_) => const ChangePasswordScreen(),
     '/customer/lead-form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
+      final lead = args is LeadModel ? args : null;
       return LeadFormScreen(
-        mode: LeadFormMode.completeDetails,
-        existingLead: args is LeadModel ? args : null,
+        mode: lead == null
+            ? LeadFormMode.basicCreate
+            : LeadFormMode.completeDetails,
+        existingLead: lead,
         customerPortal: true,
       );
     },

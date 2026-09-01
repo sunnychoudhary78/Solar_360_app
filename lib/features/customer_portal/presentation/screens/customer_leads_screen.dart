@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.dart';
+import 'package:solar_sales/features/customer_portal/presentation/customer_lead_form_nav.dart';
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/customer_portal/presentation/widgets/customer_lead_progress.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
@@ -20,13 +21,23 @@ class CustomerLeadsScreen extends ConsumerWidget {
       backgroundColor: scheme.surfaceContainerLowest,
       appBar: const AppAppBar(title: 'My leads'),
       floatingActionButton: leadsAsync.maybeWhen(
-        data: (leads) => hasConvertedCustomerLead(leads)
-            ? null
-            : FloatingActionButton.extended(
-                onPressed: () => _openForm(context, ref, null),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Fill details'),
-              ),
+        data: (leads) {
+          if (!canCustomerFillOrComplete(leads)) return null;
+          final incomplete = customerLeadNeedingCompletion(leads);
+          return FloatingActionButton.extended(
+            onPressed: () => openCustomerLeadForm(
+              context,
+              ref,
+              lead: incomplete,
+            ),
+            icon: Icon(
+              incomplete == null ? Icons.add_rounded : Icons.edit_document,
+            ),
+            label: Text(
+              incomplete == null ? 'Fill details' : 'Complete details',
+            ),
+          );
+        },
         orElse: () => null,
       ),
       body: leadsAsync.when(
@@ -47,30 +58,20 @@ class CustomerLeadsScreen extends ConsumerWidget {
             children: [
               CustomerLeadProgress(
                 leads: leads,
-                onFillDetails: hasConvertedCustomerLead(leads)
-                    ? null
-                    : () => _openForm(context, ref, null),
-                onEditDetails: (lead) => _openForm(context, ref, lead),
+                onFillDetails: canCustomerFillOrComplete(leads)
+                    ? () => openCustomerLeadForm(
+                          context,
+                          ref,
+                          lead: customerLeadNeedingCompletion(leads),
+                        )
+                    : null,
+                onEditDetails: (LeadModel lead) =>
+                    openCustomerLeadForm(context, ref, lead: lead),
               ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _openForm(
-    BuildContext context,
-    WidgetRef ref,
-    LeadModel? lead,
-  ) async {
-    final result = await Navigator.pushNamed(
-      context,
-      '/customer/lead-form',
-      arguments: lead,
-    );
-    if (result == true) {
-      ref.invalidate(customerLeadsProvider);
-    }
   }
 }

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/features/leads/data/lead_api_service.dart';
@@ -124,19 +125,49 @@ void main() {
       expect(users.first['name'], 'Doc Admin');
     });
 
-    test('createLead posts multipart-compatible form fields', () async {
-      pair.adapter.on('POST', 'leads', (req) {
-        // Multipart or map — ensure request was sent.
-        expect(req.method, 'POST');
-        return {'id': 'lead-new', 'status': 'New Lead'};
+    test('updateLead sends JSON final amount received payload', () async {
+      pair.adapter.on('PUT', 'leads/lead-1', (req) {
+        expect(req.data, isA<Map>());
+        expect(req.data, isNot(isA<FormData>()));
+        final body = Map<String, dynamic>.from(req.data as Map);
+        expect(body['final_amount_received'], isTrue);
+        expect(body['subsidy_percentage'], '100');
+        return {
+          'data': {
+            ..._leadJson(id: 'lead-1', status: 'Discom Status'),
+            'final_amount_received': true,
+            'subsidy_percentage': '100',
+          },
+        };
       });
 
-      await repo.createLead({
+      final lead = await repo.updateLead('lead-1', {
+        'final_amount_received': true,
+        'subsidy_percentage': '100',
+      });
+
+      expect(lead?.finalAmountReceived, isTrue);
+      expect(pair.adapter.of('PUT', 'leads/lead-1'), hasLength(1));
+    });
+
+    test('createLead posts form fields and parses the created lead', () async {
+      pair.adapter.on('POST', 'leads', (req) {
+        expect(req.method, 'POST');
+        return {
+          'success': true,
+          'data': _leadJson(id: 'lead-new', status: 'New Lead'),
+        };
+      });
+
+      final created = await repo.createLead({
         'full_name': 'New Customer',
         'mobile': '9123456780',
         'project_type': 'Residential',
+        'source': 'Customer Portal',
       });
 
+      expect(created?.id, 'lead-new');
+      expect(created?.status, 'New Lead');
       expect(pair.adapter.of('POST', 'leads'), hasLength(1));
     });
 
