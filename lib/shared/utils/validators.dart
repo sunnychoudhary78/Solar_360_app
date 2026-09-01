@@ -125,6 +125,14 @@ class AppValidators {
     return gstNumber(value);
   }
 
+  /// Value sent as `gst_number` on create/update (web panel parity).
+  /// Empty → null; URP and GSTIN are sent as uppercase.
+  static String? gstWriteValue(String? value) {
+    final v = value?.trim().toUpperCase() ?? '';
+    if (v.isEmpty) return null;
+    return v;
+  }
+
   /// Returns error message if duplicate item IDs found on a document.
   static String? duplicateLineItems(Iterable<String?> itemIds) {
     final seen = <String>{};

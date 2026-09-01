@@ -68,16 +68,6 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
     _aadhar.text = c.aadharNumber ?? '';
   }
 
-  /// URP is a form-only placeholder. Backend GST is unique, so sending
-  /// the same "URP" for every unregistered customer would fail. Omit it.
-  String? _gstPayload(String raw) {
-    final value = raw.trim().toUpperCase();
-    if (value.isEmpty || AppValidators.isUnregisteredGst(value)) {
-      return null;
-    }
-    return value;
-  }
-
   void _fillUrp() {
     _gst.value = const TextEditingValue(
       text: AppValidators.unregisteredGst,
@@ -105,7 +95,7 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
       city: _city.text.trim().isEmpty ? null : _city.text.trim(),
       state: _state.text.trim().isEmpty ? null : _state.text.trim(),
       pincode: _pincode.text.trim().isEmpty ? null : _pincode.text.trim(),
-      gstNumber: _gstPayload(_gst.text),
+      gstNumber: AppValidators.gstWriteValue(_gst.text),
       aadharNumber: _aadhar.text.trim().isEmpty
           ? null
           : _aadhar.text.replaceAll(RegExp(r'\D'), ''),

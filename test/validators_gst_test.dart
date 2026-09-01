@@ -28,6 +28,15 @@ void main() {
       expect(AppValidators.requiredGstOrUrp('22AAAAA0000A1Z5'), isNull);
     });
 
+    test('gstWriteValue sends URP and GSTIN, empty as null', () {
+      expect(AppValidators.gstWriteValue('URP'), 'URP');
+      expect(AppValidators.gstWriteValue('urp'), 'URP');
+      expect(AppValidators.gstWriteValue('  urp  '), 'URP');
+      expect(AppValidators.gstWriteValue('22AAAAA0000A1Z5'), '22AAAAA0000A1Z5');
+      expect(AppValidators.gstWriteValue(''), isNull);
+      expect(AppValidators.gstWriteValue(null), isNull);
+    });
+
     test('optionalPhone accepts Indian and international', () {
       expect(AppValidators.optionalPhone('9876543210'), isNull);
       expect(AppValidators.optionalPhone('+919876543210'), isNull);
