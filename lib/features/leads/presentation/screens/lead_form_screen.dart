@@ -1084,8 +1084,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   /// Customer portal save matches the web app:
   /// POST `/customers/leads` only when this customer has no lead yet.
-  /// Every later Edit Details call uses PUT `/customers/leads/:id` on that
-  /// same lead so a second LEAD-… row is never created.
+  /// Later Edit Details calls PUT `/customers/leads/:id` on that same lead.
+  /// New files are stored through create (the only customer API that keeps
+  /// uploads), then those stored paths are written onto the existing lead.
   Future<void> _saveCustomerPortalLead({
     required LeadRepository repo,
     required Map<String, dynamic> data,
@@ -1113,13 +1114,55 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         documents: documents,
         images: images,
       );
-      await repo.updateLeadWithFiles(
-        leadId,
-        data,
-        singleFilePaths: singleFiles,
-        additionalImageEntries: imagePayload,
-        additionalDocumentEntries: documentPayload,
-      );
+
+      final newSingleFiles = {
+        for (final entry in singleFiles.entries)
+          if (entry.value.trim().isNotEmpty &&
+              !_isExistingRemotePath(entry.value))
+            entry.key: entry.value.trim(),
+      };
+      final hasNewFiles =
+          newSingleFiles.isNotEmpty ||
+          documents.any((item) => _isLocalPickedPath(item.path)) ||
+          images.any((item) => _isLocalPickedPath(item.path));
+
+      // Keep text + already-stored paths on the original lead. New local
+      // files are persisted in a second step so this PUT cannot wipe them.
+      final retainedSingleFiles = {
+        for (final entry in singleFiles.entries)
+          if (entry.value.trim().isEmpty || _isExistingRemotePath(entry.value))
+            entry.key: entry.value.trim(),
+      };
+      if (hasNewFiles) {
+        // JSON PUT only: multipart on customer update is ignored, and an
+        // empty additional_* snapshot would wipe files before they land.
+        await repo.updateLead(leadId, data);
+        await _persistNewCustomerFilesOnExistingLead(
+          repo: repo,
+          leadId: leadId,
+          data: data,
+          existingLeads: existingLeads,
+          newSingleFiles: newSingleFiles,
+          documents: documents,
+          images: images,
+          imagePayload: imagePayload,
+          documentPayload: documentPayload,
+        );
+      } else {
+        await repo.updateLeadWithFiles(
+          leadId,
+          data,
+          singleFilePaths: retainedSingleFiles,
+          additionalImageEntries: images
+              .where((item) => _isExistingRemotePath(item.path))
+              .map((item) => item.toPayload())
+              .toList(),
+          additionalDocumentEntries: documents
+              .where((item) => _isExistingRemotePath(item.path))
+              .map((item) => item.toPayload())
+              .toList(),
+        );
+      }
       return;
     }
 
@@ -1139,6 +1182,123 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       additionalImageEntries: imagePayload,
       additionalDocumentEntries: documentPayload,
     );
+  }
+
+  /// Customer PUT ignores multipart files. POST /customers/leads stores them
+  /// and returns `leads/…` paths, which PUT can then save on this lead.
+  Future<void> _persistNewCustomerFilesOnExistingLead({
+    required LeadRepository repo,
+    required String leadId,
+    required Map<String, dynamic> data,
+    required List<LeadModel> existingLeads,
+    required Map<String, String> newSingleFiles,
+    required List<TitledLocalFile> documents,
+    required List<TitledLocalFile> images,
+    required List<Map<String, String>> imagePayload,
+    required List<Map<String, String>> documentPayload,
+  }) async {
+    if (hasConvertedCustomerLead(existingLeads)) {
+      throw Exception(
+        'This lead is converted. Details can no longer be filled or updated.',
+      );
+    }
+
+    const fileFields = <String>[
+      'roof_photo',
+      'bank_clear_photo',
+      'cheque_passbook_copy',
+      'pre_installation_photo',
+      'quotation_document',
+      'additional_documents',
+      'additional_images',
+    ];
+
+    final createData = Map<String, dynamic>.from(data);
+    createData['status'] = 'New Lead';
+    createData['is_active'] = 'false';
+    for (final field in fileFields) {
+      createData.remove(field);
+    }
+
+    final copyDocs = documents.any((item) => _isLocalPickedPath(item.path));
+    final copyImages = images.any((item) => _isLocalPickedPath(item.path));
+
+    var created = await repo.createLead(
+      createData,
+      singleFilePaths: newSingleFiles.isEmpty ? null : newSingleFiles,
+      additionalImageEntries: imagePayload,
+      additionalDocumentEntries: documentPayload,
+    );
+
+    Map<String, dynamic> storedFields(LeadModel lead) {
+      final fields = <String, dynamic>{};
+      final values = <String, String>{
+        'roof_photo': lead.roofPhoto,
+        'bank_clear_photo': lead.bankClearPhoto,
+        'cheque_passbook_copy': lead.chequePassbookCopy,
+        'pre_installation_photo': lead.preInstallationPhoto,
+        'quotation_document': lead.quotationDocument,
+      };
+      for (final field in newSingleFiles.keys) {
+        final path = LeadModel.filePathFrom(values[field]);
+        if (path.isNotEmpty) fields[field] = path;
+      }
+
+      dynamic decodeStored(String raw) {
+        final value = raw.trim();
+        if (value.isEmpty || value == '[]') return null;
+        try {
+          return jsonDecode(value);
+        } catch (_) {
+          return value;
+        }
+      }
+
+      if (copyDocs) {
+        final docs = decodeStored(lead.additionalDocuments);
+        if (docs != null) fields['additional_documents'] = docs;
+      }
+      if (copyImages) {
+        final imgs = decodeStored(lead.additionalImages);
+        if (imgs != null) fields['additional_images'] = imgs;
+      }
+      return fields;
+    }
+
+    var fileFieldsToSave =
+        created == null ? <String, dynamic>{} : storedFields(created);
+
+    if (fileFieldsToSave.isEmpty) {
+      final leads = await repo.getAllLeads();
+      final others = leads.where((lead) => lead.id != leadId).toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      for (final candidate in others) {
+        final fields = storedFields(candidate);
+        if (fields.isEmpty) continue;
+        created = candidate;
+        fileFieldsToSave = fields;
+        break;
+      }
+    }
+
+    if (fileFieldsToSave.isEmpty) {
+      throw Exception(
+        'The new document could not be saved. Please try again.',
+      );
+    }
+
+    await repo.updateLead(leadId, fileFieldsToSave);
+
+    final mintId = created?.id.trim() ?? '';
+    if (mintId.isNotEmpty && mintId != leadId) {
+      try {
+        await repo.updateLead(mintId, {
+          'is_active': false,
+          'status': 'Rejected',
+          'status_remarks': 'Unused upload record',
+        });
+      } catch (_) {}
+    }
   }
 
   Future<void> saveLead() async {
