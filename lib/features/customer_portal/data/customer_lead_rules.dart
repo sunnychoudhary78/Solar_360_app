@@ -7,7 +7,7 @@ bool canCustomerEditLead(LeadModel? lead) {
 }
 
 bool hasConvertedCustomerLead(List<LeadModel> leads) {
-  return leads.any((lead) => !canCustomerEditLead(lead));
+  return leads.any((lead) => lead.isActive && !canCustomerEditLead(lead));
 }
 
 /// True when connection/site fields from the full form are still missing.
@@ -26,6 +26,7 @@ bool canCustomerCreateLead(List<LeadModel> leads) {
 /// Draft lead the customer should update (New Lead / Follow Up / Rejected).
 LeadModel? existingEditableCustomerLead(List<LeadModel> leads) {
   for (final lead in leads) {
+    if (!lead.isActive) continue;
     if (canCustomerEditLead(lead)) return lead;
   }
   return null;
@@ -33,6 +34,7 @@ LeadModel? existingEditableCustomerLead(List<LeadModel> leads) {
 
 LeadModel? customerLeadNeedingCompletion(List<LeadModel> leads) {
   for (final lead in leads) {
+    if (!lead.isActive) continue;
     if (canCustomerEditLead(lead) && isCustomerLeadIncomplete(lead)) {
       return lead;
     }

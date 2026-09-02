@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:solar_sales/features/leads/data/lead_files.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 
 void main() {
@@ -162,6 +163,30 @@ void main() {
 
       expect(lead.accountType, isEmpty);
       expect(lead.resolvedBankAccountType, 'Current');
+    });
+
+    test('collectLeadFiles includes single slots and titled KYC docs', () {
+      final lead = LeadModel.fromJson({
+        'id': 'lead-8',
+        'roof_photo': 'leads/roof.jpg',
+        'cheque_passbook_copy': {'file': 'leads/cheque.png'},
+        'additional_documents': [
+          {'title': 'Aadhaar Front', 'file': 'leads/aadhaar-front.pdf'},
+          {'title': 'PAN Card', 'existingPath': 'leads/pan.pdf'},
+        ],
+        'additional_images': [
+          {'title': 'Geo Tag Photo', 'path': 'leads/geo.jpg'},
+        ],
+      });
+
+      final files = collectLeadFiles(lead);
+      final labels = files.map((item) => item.label).toList();
+      expect(labels, contains('Roof Photo'));
+      expect(labels, contains('Cheque / Passbook'));
+      expect(labels, contains('Aadhaar Front'));
+      expect(labels, contains('PAN Card'));
+      expect(labels, contains('Geo Tag Photo'));
+      expect(files.every((item) => item.url.contains('/api/uploads/')), isTrue);
     });
   });
 }

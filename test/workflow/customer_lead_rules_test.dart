@@ -64,6 +64,19 @@ void main() {
       expect(canCustomerFillOrComplete([converted, draft]), isTrue);
     });
 
+    test('inactive leads are ignored when choosing a draft', () {
+      final inactive = LeadModel.fromJson({
+        'id': 'ghost',
+        'status': 'New Lead',
+        'is_active': false,
+        'full_name': 'Ghost',
+        'mobile': '9876543210',
+      });
+      final draft = _lead(id: 'draft');
+      expect(existingEditableCustomerLead([inactive, draft])?.id, 'draft');
+      expect(existingEditableCustomerLead([inactive]), isNull);
+    });
+
     test('fill/complete action continues an incomplete draft', () {
       final basic = _lead(id: 'draft');
       final complete = _lead(

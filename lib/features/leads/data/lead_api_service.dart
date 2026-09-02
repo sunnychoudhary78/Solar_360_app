@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 
 import 'package:solar_sales/core/network/api_endpoints.dart';
 import 'package:solar_sales/core/network/api_service.dart';
@@ -24,6 +25,31 @@ class LeadApiService {
   String _fileName(String path) {
     final parts = path.split(RegExp(r'[\\/]'));
     return parts.isEmpty ? path : parts.last;
+  }
+
+  MediaType _contentTypeFor(String filename) {
+    final name = filename.toLowerCase();
+    if (name.endsWith('.png')) return MediaType('image', 'png');
+    if (name.endsWith('.webp')) return MediaType('image', 'webp');
+    if (name.endsWith('.gif')) return MediaType('image', 'gif');
+    if (name.endsWith('.pdf')) return MediaType('application', 'pdf');
+    if (name.endsWith('.doc')) return MediaType('application', 'msword');
+    if (name.endsWith('.docx')) {
+      return MediaType(
+        'application',
+        'vnd.openxmlformats-officedocument.wordprocessingml.document',
+      );
+    }
+    return MediaType('image', 'jpeg');
+  }
+
+  Future<MultipartFile> _multipartFromPath(String path) {
+    final filename = _fileName(path);
+    return MultipartFile.fromFile(
+      path,
+      filename: filename,
+      contentType: _contentTypeFor(filename),
+    );
   }
 
   bool _isExistingRemotePath(String path) {
@@ -63,10 +89,7 @@ class LeadApiService {
         final filePath = entry.value.trim();
         if (filePath.isEmpty || _isExistingRemotePath(filePath)) continue;
 
-        formDataMap[entry.key] = await MultipartFile.fromFile(
-          filePath,
-          filename: _fileName(filePath),
-        );
+        formDataMap[entry.key] = await _multipartFromPath(filePath);
       }
     }
 
@@ -79,7 +102,7 @@ class LeadApiService {
     try {
       final res = await _dio.post(
         _leadsPath,
-        data: FormData.fromMap(formDataMap),
+        data: FormData.fromMap(formDataMap, ListFormat.multi),
       );
       try {
         return LeadModel.fromJson(_extractLeadJson(res.data));
@@ -109,7 +132,7 @@ class LeadApiService {
     try {
       await _dio.put(
         _leadPath(leadId),
-        data: FormData.fromMap(formDataMap),
+        data: FormData.fromMap(formDataMap, ListFormat.multi),
       );
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));
@@ -153,12 +176,7 @@ class LeadApiService {
           meta.add({'title': title, 'existingPath': path});
         } else {
           meta.add({'title': title, 'existingPath': null});
-          files.add(
-            await MultipartFile.fromFile(
-              path,
-              filename: _fileName(path),
-            ),
-          );
+          files.add(await _multipartFromPath(path));
         }
       }
 
@@ -288,10 +306,7 @@ class LeadApiService {
           continue;
         }
 
-        formDataMap[entry.key] = await MultipartFile.fromFile(
-          filePath,
-          filename: _fileName(filePath),
-        );
+        formDataMap[entry.key] = await _multipartFromPath(filePath);
       }
     }
 
@@ -301,9 +316,7 @@ class LeadApiService {
         .toList();
     if (registrationFiles.isNotEmpty) {
       formDataMap['registration_images'] = await Future.wait(
-        registrationFiles.map(
-          (path) => MultipartFile.fromFile(path, filename: _fileName(path)),
-        ),
+        registrationFiles.map(_multipartFromPath),
       );
     }
 
@@ -317,7 +330,7 @@ class LeadApiService {
     try {
       await _dio.put(
         _leadPath(leadId),
-        data: FormData.fromMap(formDataMap),
+        data: FormData.fromMap(formDataMap, ListFormat.multi),
       );
     } on DioException catch (e) {
       throw Exception(_handleDioError(e));

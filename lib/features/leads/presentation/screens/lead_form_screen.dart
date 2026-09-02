@@ -1080,10 +1080,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   }
 
   /// Customer portal save matches the web app:
-  /// POST `/customers/leads` only when creating a new unconverted lead (files
-  /// are stored on create). PUT `/customers/leads/:id` when a New Lead /
-  /// Follow Up / Rejected lead already exists. Never sends `status`, so the
-  /// customer form cannot convert the lead.
+  /// POST `/customers/leads` stores files. PUT `/customers/leads/:id` stores
+  /// text (and file *paths* once they exist on the server). Never sends
+  /// `status`, so the customer form cannot convert the lead.
   Future<void> _saveCustomerPortalLead({
     required LeadRepository repo,
     required Map<String, dynamic> data,
@@ -1105,8 +1104,18 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
     final imagePayload = images.map((e) => e.toPayload()).toList();
     final documentPayload = documents.map((e) => e.toPayload()).toList();
+    final newSingleFiles = {
+      for (final entry in singleFiles.entries)
+        if (entry.value.trim().isNotEmpty &&
+            !_isExistingRemotePath(entry.value))
+          entry.key: entry.value.trim(),
+    };
+    final hasNewFiles =
+        newSingleFiles.isNotEmpty ||
+        documents.any((item) => _isLocalPickedPath(item.path)) ||
+        images.any((item) => _isLocalPickedPath(item.path));
 
-    if (leadId.isNotEmpty) {
+    if (leadId.isNotEmpty && !hasNewFiles) {
       _putRetainedCustomerFiles(
         data,
         documents: documents,
@@ -1129,16 +1138,151 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       );
     }
 
-    data['status'] = 'New Lead';
-    await repo.createLead(
-      data,
-      singleFilePaths: {
-        for (final e in singleFiles.entries)
-          if (e.value.isNotEmpty) e.key: e.value,
-      },
+    if (leadId.isNotEmpty) {
+      _putRetainedCustomerFiles(
+        data,
+        documents: documents,
+        images: images,
+      );
+      await repo.updateLeadWithFiles(
+        leadId,
+        data,
+        singleFilePaths: singleFiles,
+        additionalImageEntries: imagePayload,
+        additionalDocumentEntries: documentPayload,
+      );
+
+      final afterPut = await _customerLeadById(repo, leadId);
+      if (afterPut != null &&
+          _customerLeadHasStoredUploads(
+            afterPut,
+            newSingleFiles,
+            documents,
+            images,
+          )) {
+        return;
+      }
+    }
+
+    // POST /customers/leads is the endpoint that actually stores multipart
+    // files. If this customer already has a lead, copy the returned server
+    // paths onto that lead so Sales sees the documents there.
+    final createData = Map<String, dynamic>.from(data);
+    createData['status'] = 'New Lead';
+    if (leadId.isNotEmpty) {
+      createData['is_active'] = 'false';
+    }
+
+    final created = await repo.createLead(
+      createData,
+      singleFilePaths: newSingleFiles.isEmpty ? null : newSingleFiles,
       additionalImageEntries: imagePayload,
       additionalDocumentEntries: documentPayload,
     );
+
+    if (leadId.isEmpty || created == null) return;
+
+    final fileFields = _storedFileFieldsFromLead(created);
+    if (fileFields.isEmpty) return;
+
+    final updatePayload = <String, dynamic>{
+      ...data,
+      ...fileFields,
+    };
+    updatePayload.remove('status');
+    await repo.updateLead(leadId, updatePayload);
+  }
+
+  Future<LeadModel?> _customerLeadById(LeadRepository repo, String id) async {
+    final leads = await repo.getAllLeads();
+    for (final lead in leads) {
+      if (lead.id == id) return lead;
+    }
+    return null;
+  }
+
+  bool _customerLeadHasStoredUploads(
+    LeadModel lead,
+    Map<String, String> newSingleFiles,
+    List<TitledLocalFile> documents,
+    List<TitledLocalFile> images,
+  ) {
+    bool stored(String value) {
+      final path = LeadModel.filePathFrom(value);
+      return path.isNotEmpty && _isExistingRemotePath(path);
+    }
+
+    String fieldValue(String field) {
+      switch (field) {
+        case 'roof_photo':
+          return lead.roofPhoto;
+        case 'bank_clear_photo':
+          return lead.bankClearPhoto;
+        case 'cheque_passbook_copy':
+          return lead.chequePassbookCopy;
+        case 'pre_installation_photo':
+          return lead.preInstallationPhoto;
+        case 'quotation_document':
+          return lead.quotationDocument;
+        default:
+          return '';
+      }
+    }
+
+    for (final field in newSingleFiles.keys) {
+      if (!stored(fieldValue(field))) return false;
+    }
+
+    bool titlesStored(List<TitledLocalFile> items, String raw) {
+      if (items.every((item) => !_isLocalPickedPath(item.path))) return true;
+      final decoded = raw.trim();
+      if (decoded.isEmpty || decoded == '[]') return false;
+      for (final item in items) {
+        if (!_isLocalPickedPath(item.path)) continue;
+        if (!decoded.toLowerCase().contains(item.title.trim().toLowerCase())) {
+          return false;
+        }
+      }
+      return decoded.contains('leads/') ||
+          decoded.contains('/uploads/') ||
+          decoded.contains('http://') ||
+          decoded.contains('https://');
+    }
+
+    if (!titlesStored(documents, lead.additionalDocuments)) return false;
+    if (!titlesStored(images, lead.additionalImages)) return false;
+    return true;
+  }
+
+  Map<String, dynamic> _storedFileFieldsFromLead(LeadModel lead) {
+    final map = <String, dynamic>{};
+
+    void put(String key, String value) {
+      final path = LeadModel.filePathFrom(value);
+      if (path.isNotEmpty) map[key] = path;
+    }
+
+    put('roof_photo', lead.roofPhoto);
+    put('bank_clear_photo', lead.bankClearPhoto);
+    put('cheque_passbook_copy', lead.chequePassbookCopy);
+    put('pre_installation_photo', lead.preInstallationPhoto);
+    put('quotation_document', lead.quotationDocument);
+
+    dynamic decode(String raw) {
+      final value = raw.trim();
+      if (value.isEmpty || value == '[]') return null;
+      try {
+        return jsonDecode(value);
+      } catch (_) {
+        return value;
+      }
+    }
+
+    final docs = decode(lead.additionalDocuments);
+    if (docs != null) map['additional_documents'] = docs;
+    final imgs = decode(lead.additionalImages);
+    if (imgs != null) map['additional_images'] = imgs;
+    return map;
   }
 
   Future<void> saveLead() async {

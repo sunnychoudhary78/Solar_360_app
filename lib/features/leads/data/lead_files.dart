@@ -43,9 +43,9 @@ List<LeadFileItem> collectLeadFiles(LeadModel lead) {
   final items = <LeadFileItem>[];
 
   void addSingle(String label, String? path) {
-    if (path == null || path.trim().isEmpty) return;
+    final p = LeadModel.filePathFrom(path);
+    if (p.isEmpty) return;
 
-    final p = path.trim();
     final url = _fixedUploadUrl(p);
 
     if (url.isEmpty) return;
@@ -117,13 +117,14 @@ List<LeadFileItem> _parseExtraField(String prefix, dynamic raw) {
 
     if (entry is Map) {
       title = entry['title']?.toString().trim() ?? '';
-      file = entry['file']?.toString().trim() ??
-          entry['path']?.toString().trim() ??
-          entry['url']?.toString().trim() ??
-          entry['existingPath']?.toString().trim() ??
-          '';
+      file = LeadModel.filePathFrom(
+        entry['file'] ??
+            entry['path'] ??
+            entry['url'] ??
+            entry['existingPath'],
+      );
     } else if (entry is String) {
-      file = entry.trim();
+      file = LeadModel.filePathFrom(entry);
     }
 
     if (file.isEmpty) continue;
