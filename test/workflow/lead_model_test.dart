@@ -90,6 +90,53 @@ void main() {
       expect(lead.installationDetails?['panel_brand'], 'Waaree');
     });
 
+    test('defaults isActive to true when omitted', () {
+      final lead = LeadModel.fromJson({'id': 'lead-4'});
+      expect(lead.isActive, isTrue);
+    });
+
+    test('keeps explicit isActive false', () {
+      final lead = LeadModel.fromJson({
+        'id': 'lead-5',
+        'is_active': false,
+      });
+      expect(lead.isActive, isFalse);
+    });
+
+    test('extracts upload paths from nested file objects', () {
+      final lead = LeadModel.fromJson({
+        'id': 'lead-7',
+        'roof_photo': {'file': 'leads/roof-1.jpg'},
+        'cheque_passbook_copy':
+            '{"path":"leads/cheque.png","title":"Cheque"}',
+        'quotation_document': {
+          'url': 'https://example.com/api/uploads/leads/quote.pdf',
+        },
+      });
+
+      expect(lead.roofPhoto, 'leads/roof-1.jpg');
+      expect(lead.chequePassbookCopy, 'leads/cheque.png');
+      expect(lead.quotationDocument, contains('leads/quote.pdf'));
+    });
+
+    test('retains customer source, urgent priority, and titled documents', () {
+      final lead = LeadModel.fromJson({
+        'id': 'lead-6',
+        'source': 'Customer Portal',
+        'priority': 'Urgent',
+        'additional_documents': [
+          {'title': 'Aadhaar Front', 'file': 'leads/aadhaar-front.pdf'},
+          {'title': 'PAN Card', 'path': 'leads/pan.pdf'},
+        ],
+      });
+
+      expect(lead.source, 'Customer Portal');
+      expect(lead.priority, 'Urgent');
+      expect(lead.additionalDocuments, contains('Aadhaar Front'));
+      expect(lead.additionalDocuments, contains('leads/aadhaar-front.pdf'));
+      expect(lead.additionalDocuments, contains('PAN Card'));
+    });
+
     test('parses camelCase aliases', () {
       final lead = LeadModel.fromJson({
         'id': 'lead-2',

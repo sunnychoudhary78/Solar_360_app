@@ -1352,6 +1352,8 @@ registration_time=${result.regTime.trim()}
                     _row('State', _lead.state),
                     _row('Pincode', _lead.pincode),
                     _row('KW', _lead.loadSectionKw),
+                    _row('Project Type', _lead.projectType),
+                    _row('Source', _lead.source),
                   ]),
                   _section('Workflow', [
                     _statusRow('Status', _lead.status),
@@ -1363,10 +1365,46 @@ registration_time=${result.regTime.trim()}
                   _section('Connection & Bank', [
                     _row('CA Number', _lead.caNumber),
                     _row('K Number', _lead.kNumber),
+                    _row('Reference Number', _lead.referenceNumber),
                     _row('Discom', _lead.discom),
+                    _row(
+                      'Account Type',
+                      _lead.resolvedBankAccountType ?? _lead.accountType,
+                    ),
                     _row('Bank', _lead.bankName),
                     _row('Account', _lead.accountNumber),
                     _row('IFSC', _lead.ifscCode),
+                  ]),
+                  _section('Location', [
+                    _row('Geo Location', _lead.geoLocation),
+                    _row('Latitude', _lead.latitude),
+                    _row('Longitude', _lead.longitude),
+                  ]),
+                  _section('Site Details', [
+                    _row(
+                      'Available Shadow Free Area',
+                      _lead.availableShadowFreeArea.trim().isEmpty
+                          ? ''
+                          : '${_lead.availableShadowFreeArea} sqmtr',
+                    ),
+                    _row('Quotation Amount', _lead.quotationAmount),
+                    _row('Visited Employee Name', _lead.visitedEmployeeName),
+                    _row(
+                      'Visited Employee Contact',
+                      _lead.visitedEmployeeContact,
+                    ),
+                    _row(
+                      'Roof Load Bearing Capacity',
+                      _lead.roofLoadBearingCapacity ? 'Yes' : 'No',
+                    ),
+                    _row(
+                      'Shadow Free Roof',
+                      _lead.shadowFreeRoof ? 'Yes' : 'No',
+                    ),
+                    _row(
+                      'Vendor Visited Site',
+                      _lead.vendorVisitedSite ? 'Yes' : 'No',
+                    ),
                   ]),
                   if (_hasRegistrationDetailsFrontend)
                     _section('Registration', [

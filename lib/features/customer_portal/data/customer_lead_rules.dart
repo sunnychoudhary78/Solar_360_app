@@ -20,7 +20,15 @@ bool isCustomerLeadIncomplete(LeadModel lead) {
 
 bool canCustomerCreateLead(List<LeadModel> leads) {
   return !hasConvertedCustomerLead(leads) &&
-      !leads.any(canCustomerEditLead);
+      existingEditableCustomerLead(leads) == null;
+}
+
+/// Draft lead the customer should update (New Lead / Follow Up / Rejected).
+LeadModel? existingEditableCustomerLead(List<LeadModel> leads) {
+  for (final lead in leads) {
+    if (canCustomerEditLead(lead)) return lead;
+  }
+  return null;
 }
 
 LeadModel? customerLeadNeedingCompletion(List<LeadModel> leads) {
@@ -34,5 +42,5 @@ LeadModel? customerLeadNeedingCompletion(List<LeadModel> leads) {
 
 bool canCustomerFillOrComplete(List<LeadModel> leads) {
   return canCustomerCreateLead(leads) ||
-      customerLeadNeedingCompletion(leads) != null;
+      existingEditableCustomerLead(leads) != null;
 }

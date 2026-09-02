@@ -185,5 +185,28 @@ void main() {
       expect(history, hasLength(2));
       expect(history.last['status'], 'Converted');
     });
+
+    test('customer lead update uses PUT and does not create a lead', () async {
+      final customerRepo = LeadRepository(
+        LeadApiService(
+          ApiService(pair.dio),
+          pair.dio,
+          leadsPath: 'customers/leads',
+          leadPath: (id) => 'customers/leads/$id',
+        ),
+      );
+
+      pair.adapter.on('PUT', 'customers/leads/lead-1', (_) {
+        return {'success': true, 'data': _leadJson()};
+      });
+
+      await customerRepo.updateLeadWithFiles('lead-1', {
+        'full_name': 'Test Customer',
+        'source': 'Customer Portal',
+      });
+
+      expect(pair.adapter.of('PUT', 'customers/leads/lead-1'), hasLength(1));
+      expect(pair.adapter.of('POST', 'customers/leads'), isEmpty);
+    });
   });
 }

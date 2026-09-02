@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/utils/upload_url.dart';
@@ -17,6 +18,7 @@ import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.da
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
+import 'package:solar_sales/features/leads/data/lead_repository.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -51,12 +53,15 @@ class LeadFormScreen extends ConsumerStatefulWidget {
   final LeadFormMode mode;
   final LeadModel? existingLead;
   final bool customerPortal;
+  /// Basic-details draft passed from the customer "Save & continue" step.
+  final Map<String, String>? customerDraft;
 
   const LeadFormScreen({
     super.key,
     this.mode = LeadFormMode.basicCreate,
     this.existingLead,
     this.customerPortal = false,
+    this.customerDraft,
   });
 
   @override
@@ -98,6 +103,36 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     'Uttarakhand',
     'West Bengal',
     'Other',
+  ];
+
+  /// Matches backend `lead.source` ENUM / web SOURCES.
+  static const List<String> sourceOptions = [
+    'Website',
+    'Facebook',
+    'Instagram',
+    'LinkedIn',
+    'Google',
+    'Referral',
+    'Call',
+    'WhatsApp',
+    'Vendor',
+    'Other',
+    'Customer Portal',
+  ];
+
+  /// Matches backend `lead.priority` ENUM / web PRIORITIES.
+  static const List<String> priorityOptions = [
+    'Low',
+    'Medium',
+    'High',
+    'Urgent',
+  ];
+
+  static const List<String> projectTypeOptions = [
+    'Residential',
+    'Commercial',
+    'Industrial',
+    'Agriculture',
   ];
 
   static const List<String> discomOptions = [
@@ -184,7 +219,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   bool roofLoadBearingCapacity = false;
   bool shadowFreeRoof = false;
   bool vendorVisitedSite = false;
-  bool isLeadActive = true;
 
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -193,6 +227,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   String? chequePassbookPath;
   String? preInstallationPhotoPath;
   String? quotationDocumentPath;
+
+  /// Server paths present when the form was opened, used so Edit Details
+  /// keeps files unless the customer removes or replaces them.
+  final Map<String, String> _originalSingleFiles = {};
+  String _originalAdditionalDocumentsJson = '[]';
+  String _originalAdditionalImagesJson = '[]';
 
   final List<TitledLocalFile> additionalImages = [];
   final List<TitledLocalFile> additionalDocs = [];
@@ -236,12 +276,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
     if (lead != null) {
       _applyLeadToForm(lead);
-      if (!widget.customerPortal) {
-        // Refresh from API so Edit Details always has current file paths.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _refreshLeadMedia(lead.id);
-        });
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshLeadFromApi(lead.id);
+      });
+    } else if (widget.customerDraft != null &&
+        widget.customerDraft!.isNotEmpty) {
+      _applyDraftToForm(widget.customerDraft!);
     } else if (widget.customerPortal) {
       source = 'Customer Portal';
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -250,6 +290,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       });
     }
 
+    _applyCustomerSiteChecklistDefaults();
+
     if (_isBasicCreate) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _fetchCurrentLocation();
@@ -257,47 +299,139 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
   }
 
-  Future<void> _refreshLeadMedia(String leadId) async {
+  void _applyCustomerSiteChecklistDefaults() {
+    if (!widget.customerPortal || !_isCompleteDetails) return;
+    roofLoadBearingCapacity = true;
+    shadowFreeRoof = true;
+    vendorVisitedSite = true;
+  }
+
+  Future<void> _refreshLeadFromApi(String leadId) async {
     try {
-      final fresh = await ref.read(leadRepositoryProvider).getLeadById(leadId);
+      final LeadModel fresh;
+      if (widget.customerPortal) {
+        final leads = await ref
+            .read(customerLeadRepositoryProvider)
+            .getAllLeads();
+        final match = leads.where((item) => item.id == leadId);
+        if (match.isEmpty) return;
+        fresh = match.first;
+      } else {
+        fresh = await ref.read(leadRepositoryProvider).getLeadById(leadId);
+      }
       if (!mounted || _isClosing) return;
       setState(() {
-        _applyLeadMediaOnly(fresh);
+        _applyLeadToForm(fresh, keepCurrentMediaIfIncomingEmpty: true);
+        _applyCustomerSiteChecklistDefaults();
       });
     } catch (_) {
       // Keep whatever was already prefilled from existingLead.
     }
   }
 
-  void _applyLeadMediaOnly(LeadModel lead) {
-    roofPhotoPath = _nonEmptyPath(lead.roofPhoto);
-    bankClearPhotoPath = _nonEmptyPath(lead.bankClearPhoto);
-    chequePassbookPath = _nonEmptyPath(lead.chequePassbookCopy);
-    preInstallationPhotoPath = _nonEmptyPath(lead.preInstallationPhoto);
-    quotationDocumentPath = _nonEmptyPath(lead.quotationDocument);
-
-    for (final key in predefinedDocPaths.keys) {
-      predefinedDocPaths[key] = null;
+  void _applyLeadMediaOnly(
+    LeadModel lead, {
+    bool keepCurrentIfIncomingEmpty = false,
+  }) {
+    String? pick(String incoming, String? current) {
+      final currentPath = (current ?? '').trim();
+      // Never replace a file the user just picked locally with a server value.
+      if (currentPath.isNotEmpty && !_isExistingRemotePath(currentPath)) {
+        return currentPath;
+      }
+      final path = _nonEmptyPath(incoming);
+      if (path != null) return path;
+      return keepCurrentIfIncomingEmpty ? current : null;
     }
-    for (final key in predefinedImagePaths.keys) {
-      predefinedImagePaths[key] = null;
-    }
-    additionalDocs.clear();
-    additionalImages.clear();
 
-    _prefillStoredTitledFiles(
-      lead.additionalDocuments,
-      predefinedDocPaths,
-      additionalDocs,
+    roofPhotoPath = pick(lead.roofPhoto, roofPhotoPath);
+    bankClearPhotoPath = pick(lead.bankClearPhoto, bankClearPhotoPath);
+    chequePassbookPath = pick(lead.chequePassbookCopy, chequePassbookPath);
+    preInstallationPhotoPath = pick(
+      lead.preInstallationPhoto,
+      preInstallationPhotoPath,
     );
-    _prefillStoredTitledFiles(
-      lead.additionalImages,
+    quotationDocumentPath = pick(
+      lead.quotationDocument,
+      quotationDocumentPath,
+    );
+
+    final incomingDocs = lead.additionalDocuments.trim();
+    final incomingImages = lead.additionalImages.trim();
+    final hadDocs =
+        predefinedDocPaths.values.any((value) => (value ?? '').trim().isNotEmpty) ||
+        additionalDocs.isNotEmpty;
+    final hadImages =
+        predefinedImagePaths.values.any(
+          (value) => (value ?? '').trim().isNotEmpty,
+        ) ||
+        additionalImages.isNotEmpty;
+    final hasLocalDocs = _hasLocalTitledPick(predefinedDocPaths, additionalDocs);
+    final hasLocalImages = _hasLocalTitledPick(
       predefinedImagePaths,
       additionalImages,
     );
+
+    if (!hasLocalDocs &&
+        (incomingDocs.isNotEmpty || !keepCurrentIfIncomingEmpty || !hadDocs)) {
+      for (final key in predefinedDocPaths.keys) {
+        predefinedDocPaths[key] = null;
+      }
+      additionalDocs.clear();
+      _prefillStoredTitledFiles(
+        incomingDocs,
+        predefinedDocPaths,
+        additionalDocs,
+      );
+    }
+    if (!hasLocalImages &&
+        (incomingImages.isNotEmpty ||
+            !keepCurrentIfIncomingEmpty ||
+            !hadImages)) {
+      for (final key in predefinedImagePaths.keys) {
+        predefinedImagePaths[key] = null;
+      }
+      additionalImages.clear();
+      _prefillStoredTitledFiles(
+        incomingImages,
+        predefinedImagePaths,
+        additionalImages,
+      );
+    }
+
+    if (!keepCurrentIfIncomingEmpty ||
+        _nonEmptyPath(lead.roofPhoto) != null ||
+        _nonEmptyPath(lead.chequePassbookCopy) != null ||
+        incomingDocs.isNotEmpty ||
+        incomingImages.isNotEmpty) {
+      _snapshotOriginalMedia();
+    }
   }
 
-  void _applyLeadToForm(LeadModel lead) {
+  void _snapshotOriginalMedia() {
+    _originalSingleFiles
+      ..clear()
+      ..addAll({
+        'roof_photo': (roofPhotoPath ?? '').trim(),
+        'bank_clear_photo': (bankClearPhotoPath ?? '').trim(),
+        'cheque_passbook_copy': (chequePassbookPath ?? '').trim(),
+        'pre_installation_photo': (preInstallationPhotoPath ?? '').trim(),
+        'quotation_document': (quotationDocumentPath ?? '').trim(),
+      });
+    _originalAdditionalDocumentsJson = jsonEncode(
+      _remoteTitledJson(_allTitledEntries(predefinedDocPaths, additionalDocs)),
+    );
+    _originalAdditionalImagesJson = jsonEncode(
+      _remoteTitledJson(
+        _allTitledEntries(predefinedImagePaths, additionalImages),
+      ),
+    );
+  }
+
+  void _applyLeadToForm(
+    LeadModel lead, {
+    bool keepCurrentMediaIfIncomingEmpty = false,
+  }) {
     fullName.text = lead.fullName;
     mobile.text = lead.mobile;
     email.text = lead.email;
@@ -328,17 +462,61 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     notes.text = lead.notes;
     selectedCustomerId = lead.customerId.isEmpty ? null : lead.customerId;
 
-    projectType = lead.projectType.isNotEmpty ? lead.projectType : projectType;
-    source = lead.source.isNotEmpty ? lead.source : source;
-    priority = lead.priority.isNotEmpty ? lead.priority : priority;
+    projectType = _matchedOption(
+      lead.projectType,
+      projectTypeOptions,
+      projectType,
+    );
+    source = _matchedOption(
+      lead.source,
+      sourceOptions,
+      widget.customerPortal ? 'Customer Portal' : source,
+    );
+    priority = _matchedOption(lead.priority, priorityOptions, priority);
 
     bankAccountType = lead.resolvedBankAccountType ?? bankAccountType;
     roofLoadBearingCapacity = lead.roofLoadBearingCapacity;
     shadowFreeRoof = lead.shadowFreeRoof;
     vendorVisitedSite = lead.vendorVisitedSite;
-    isLeadActive = lead.isActive;
 
-    _applyLeadMediaOnly(lead);
+    _applyLeadMediaOnly(
+      lead,
+      keepCurrentIfIncomingEmpty: keepCurrentMediaIfIncomingEmpty,
+    );
+    _applyCustomerSiteChecklistDefaults();
+  }
+
+  void _applyDraftToForm(Map<String, String> draft) {
+    String read(String key) => draft[key]?.trim() ?? '';
+
+    fullName.text = read('full_name');
+    mobile.text = read('mobile');
+    email.text = read('email');
+    address.text = read('address');
+    city.text = read('city');
+    state.text = read('state');
+    pincode.text = read('pincode');
+    kw.text = read('load_section_kw');
+    source = 'Customer Portal';
+  }
+
+  String _matchedOption(
+    String current,
+    List<String> options,
+    String fallback,
+  ) {
+    final value = current.trim();
+    if (value.isEmpty) return fallback;
+    for (final option in options) {
+      if (option.toLowerCase() == value.toLowerCase()) return option;
+    }
+    return value;
+  }
+
+  List<String> _menuItemsWithCurrent(List<String> options, String current) {
+    final value = current.trim();
+    if (value.isEmpty || options.contains(value)) return options;
+    return [value, ...options];
   }
 
   @override
@@ -381,12 +559,27 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   }
 
   bool isImagePath(String? path) {
-    if (path == null) return false;
+    if (path == null || path.isEmpty) return false;
     final p = path.toLowerCase();
-    return p.endsWith('.jpg') ||
-        p.endsWith('.jpeg') ||
-        p.endsWith('.png') ||
-        p.endsWith('.webp');
+    if (RegExp(
+      r'\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$',
+    ).hasMatch(p)) {
+      return true;
+    }
+    return p.startsWith('content://') && p.contains('image');
+  }
+
+  bool _isLocalPickedPath(String? path) {
+    final value = (path ?? '').trim();
+    return value.isNotEmpty && !_isExistingRemotePath(value);
+  }
+
+  bool _hasLocalTitledPick(
+    Map<String, String?> predefined,
+    List<TitledLocalFile> freeform,
+  ) {
+    return predefined.values.any(_isLocalPickedPath) ||
+        freeform.any((item) => _isLocalPickedPath(item.path));
   }
 
   bool isPdfPath(String path) => path.toLowerCase().endsWith('.pdf');
@@ -397,7 +590,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   }
 
   String? _nonEmptyPath(String? value) {
-    final path = value?.trim() ?? '';
+    final path = LeadModel.filePathFrom(value);
     return path.isEmpty ? null : path;
   }
 
@@ -417,7 +610,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
     // Absolute device paths are new local picks.
     if (normalized.startsWith('/') ||
-        RegExp(r'^[a-zA-Z]:[/\\]').hasMatch(normalized)) {
+        RegExp(r'^[a-zA-Z]:[/\\]').hasMatch(normalized) ||
+        lower.startsWith('content://') ||
+        lower.startsWith('file://')) {
       return false;
     }
     // Anything else is treated as an already-stored relative server path.
@@ -435,10 +630,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       if (decoded is! List) return;
       for (final item in decoded.whereType<Map>()) {
         final title = item['title']?.toString().trim() ?? '';
-        final path = (item['file'] ?? item['path'] ?? item['url'])
-                ?.toString()
-                .trim() ??
-            '';
+        final path = LeadModel.filePathFrom(
+          item['file'] ??
+              item['path'] ??
+              item['url'] ??
+              item['existingPath'],
+        );
         if (title.isEmpty || path.isEmpty) continue;
         if (predefinedTarget.containsKey(title)) {
           predefinedTarget[title] = path;
@@ -464,6 +661,62 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       ...freeform.where((e) => e.path.trim().isNotEmpty),
     ];
     return out;
+  }
+
+  List<Map<String, String>> _remoteTitledJson(List<TitledLocalFile> files) {
+    return [
+      for (final file in files)
+        if (file.title.trim().isNotEmpty &&
+            file.path.trim().isNotEmpty &&
+            _isExistingRemotePath(file.path))
+          {'title': file.title.trim(), 'file': file.path.trim()},
+    ];
+  }
+
+  void _putRetainedCustomerFiles(
+    Map<String, dynamic> data, {
+    required List<TitledLocalFile> documents,
+    required List<TitledLocalFile> images,
+  }) {
+    void keepSingle(String field, String? current) {
+      final value = (current ?? '').trim();
+      final original = (_originalSingleFiles[field] ?? '').trim();
+      if (value.isEmpty) {
+        if (original.isNotEmpty) data[field] = '';
+        return;
+      }
+      if (_isExistingRemotePath(value)) {
+        data[field] = value;
+      }
+    }
+
+    keepSingle('roof_photo', roofPhotoPath);
+    keepSingle('bank_clear_photo', bankClearPhotoPath);
+    keepSingle('cheque_passbook_copy', chequePassbookPath);
+    keepSingle('pre_installation_photo', preInstallationPhotoPath);
+    keepSingle('quotation_document', quotationDocumentPath);
+
+    void keepTitled(
+      String field,
+      List<TitledLocalFile> current,
+      String originalJson,
+    ) {
+      final remote = _remoteTitledJson(current);
+      if (remote.isNotEmpty) {
+        data[field] = jsonEncode(remote);
+        return;
+      }
+      if (originalJson.trim().isNotEmpty && originalJson.trim() != '[]') {
+        data[field] = '[]';
+      }
+    }
+
+    keepTitled(
+      'additional_documents',
+      documents,
+      _originalAdditionalDocumentsJson,
+    );
+    keepTitled('additional_images', images, _originalAdditionalImagesJson);
   }
 
   Map<String, String> _singleFileUploadsForSave() {
@@ -539,6 +792,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
     return Image.file(
       File(path),
+      key: ValueKey(path),
       width: width,
       height: height,
       fit: fit,
@@ -550,13 +804,112 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
   }
 
-  Future<XFile?> _pickCompressedImage(ImageSource source) {
-    return _imagePicker.pickImage(
-      source: source,
-      maxWidth: 1600,
-      maxHeight: 1600,
-      imageQuality: 85,
+  String _guessPickedExtension({
+    String? name,
+    String? path,
+    List<int>? bytes,
+    required bool imageOnly,
+  }) {
+    final candidates = [name, path]
+        .whereType<String>()
+        .map((value) => value.toLowerCase().split(RegExp(r'[?#]')).first)
+        .toList();
+    for (final ext in [
+      '.jpeg',
+      '.jpg',
+      '.png',
+      '.webp',
+      '.gif',
+      '.bmp',
+      '.pdf',
+      '.docx',
+      '.doc',
+      '.heic',
+      '.heif',
+    ]) {
+      if (candidates.any((value) => value.endsWith(ext))) {
+        return ext == '.jpeg' ? '.jpg' : ext;
+      }
+    }
+    if (bytes != null && bytes.length >= 4) {
+      if (bytes[0] == 0xFF && bytes[1] == 0xD8) return '.jpg';
+      if (bytes[0] == 0x89 && bytes[1] == 0x50) return '.png';
+      if (bytes[0] == 0x47 && bytes[1] == 0x49) return '.gif';
+      if (bytes[0] == 0x25 && bytes[1] == 0x50) return '.pdf';
+    }
+    return imageOnly ? '.jpg' : '.bin';
+  }
+
+  Future<String?> _persistPickedBytes({
+    String? path,
+    List<int>? bytes,
+    String? originalName,
+    required bool imageOnly,
+  }) async {
+    final rawPath = path?.trim() ?? '';
+    List<int>? data = bytes;
+    if ((data == null || data.isEmpty) && rawPath.isNotEmpty) {
+      try {
+        final file = File(rawPath);
+        if (await file.exists()) {
+          data = await file.readAsBytes();
+        }
+      } catch (_) {}
+    }
+    if (data == null || data.isEmpty) {
+      return rawPath.isEmpty ? null : rawPath;
+    }
+
+    try {
+      final dir = await getTemporaryDirectory();
+      final mediaDir = Directory('${dir.path}/lead_picks');
+      if (!await mediaDir.exists()) {
+        await mediaDir.create(recursive: true);
+      }
+      final ext = _guessPickedExtension(
+        name: originalName,
+        path: rawPath,
+        bytes: data,
+        imageOnly: imageOnly,
+      );
+      final saved = File(
+        '${mediaDir.path}/${DateTime.now().microsecondsSinceEpoch}$ext',
+      );
+      await saved.writeAsBytes(data, flush: true);
+      return saved.path;
+    } catch (_) {
+      return rawPath.isEmpty ? null : rawPath;
+    }
+  }
+
+  Future<String?> _persistXFile(XFile file, {bool imageOnly = true}) async {
+    List<int>? bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } catch (_) {}
+    return _persistPickedBytes(
+      path: file.path,
+      bytes: bytes,
+      originalName: file.name,
+      imageOnly: imageOnly,
     );
+  }
+
+  Future<XFile?> _pickCompressedImage(ImageSource source) async {
+    try {
+      return await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+    } catch (_) {
+      try {
+        return await _imagePicker.pickImage(source: source);
+      } catch (_) {
+        return null;
+      }
+    }
   }
 
   String? _validateFullName(String? value) {
@@ -726,12 +1079,88 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
   }
 
+  /// Customer portal save matches the web app:
+  /// POST `/customers/leads` only when creating a new unconverted lead (files
+  /// are stored on create). PUT `/customers/leads/:id` when a New Lead /
+  /// Follow Up / Rejected lead already exists. Never sends `status`, so the
+  /// customer form cannot convert the lead.
+  Future<void> _saveCustomerPortalLead({
+    required LeadRepository repo,
+    required Map<String, dynamic> data,
+    required Map<String, String> singleFiles,
+    required List<TitledLocalFile> documents,
+    required List<TitledLocalFile> images,
+  }) async {
+    data.remove('status');
+    data.remove('lead_stage');
+    data.remove('workflow_step');
+    data.remove('current_department');
+
+    var leadId = widget.existingLead?.id.trim() ?? '';
+    List<LeadModel>? existingLeads;
+    if (leadId.isEmpty) {
+      existingLeads = await repo.getAllLeads();
+      leadId = existingEditableCustomerLead(existingLeads)?.id.trim() ?? '';
+    }
+
+    final imagePayload = images.map((e) => e.toPayload()).toList();
+    final documentPayload = documents.map((e) => e.toPayload()).toList();
+
+    if (leadId.isNotEmpty) {
+      _putRetainedCustomerFiles(
+        data,
+        documents: documents,
+        images: images,
+      );
+      await repo.updateLeadWithFiles(
+        leadId,
+        data,
+        singleFilePaths: singleFiles,
+        additionalImageEntries: imagePayload,
+        additionalDocumentEntries: documentPayload,
+      );
+      return;
+    }
+
+    existingLeads ??= await repo.getAllLeads();
+    if (hasConvertedCustomerLead(existingLeads)) {
+      throw Exception(
+        'This lead is converted. Details can no longer be filled or updated.',
+      );
+    }
+
+    data['status'] = 'New Lead';
+    await repo.createLead(
+      data,
+      singleFilePaths: {
+        for (final e in singleFiles.entries)
+          if (e.value.isNotEmpty) e.key: e.value,
+      },
+      additionalImageEntries: imagePayload,
+      additionalDocumentEntries: documentPayload,
+    );
+  }
+
   Future<void> saveLead() async {
     FocusScope.of(context).unfocus();
 
     final formState = _formKey.currentState;
     if (formState == null || !formState.validate()) {
       showAppMessage(context, 'Please fix validation errors', isError: true);
+      return;
+    }
+
+    if (widget.customerPortal && _isBasicCreate) {
+      Navigator.of(context).pop(<String, String>{
+        'full_name': fullName.text.trim(),
+        'mobile': mobile.text.trim(),
+        'email': email.text.trim(),
+        'address': address.text.trim(),
+        'city': city.text.trim(),
+        'state': state.text.trim(),
+        'pincode': pincode.text.trim(),
+        'load_section_kw': kw.text.trim(),
+      });
       return;
     }
 
@@ -757,8 +1186,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'account_number': _textOrNull(accountNumber),
       'ifsc_code': _textOrNull(ifscCode)?.toUpperCase(),
       'project_type': projectType,
-      'source': widget.customerPortal ? 'Customer Portal' : source,
-      'priority': priority,
+      'source': source.trim().isEmpty
+          ? (widget.customerPortal ? 'Customer Portal' : 'Website')
+          : source,
+      'priority': priority.trim().isEmpty ? 'Medium' : priority,
       'notes': _textOrNull(notes),
       'customer_id': widget.customerPortal
           ? (ref.read(authProvider).customer?.id ?? selectedCustomerId)
@@ -771,7 +1202,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'roof_load_bearing_capacity': roofLoadBearingCapacity.toString(),
       'shadow_free_roof': shadowFreeRoof.toString(),
       'vendor_visited_site': vendorVisitedSite.toString(),
-      'is_active': isLeadActive.toString(),
+      'is_active': 'true',
     };
     final mergedAdditionalImages = _allTitledEntries(
       predefinedImagePaths,
@@ -791,7 +1222,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           ? ref.read(customerLeadRepositoryProvider)
           : ref.read(leadRepositoryProvider);
 
-      if (_isCompleteDetails && widget.existingLead != null) {
+      if (widget.customerPortal && _isCompleteDetails) {
+        await _saveCustomerPortalLead(
+          repo: repo,
+          data: data,
+          singleFiles: singleFiles,
+          documents: mergedAdditionalDocs,
+          images: mergedAdditionalImages,
+        );
+      } else if (_isCompleteDetails && widget.existingLead != null) {
         await repo.updateLeadWithFiles(
           widget.existingLead!.id,
           data,
@@ -889,8 +1328,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       _isClosing = false;
       if (!mounted) return;
       setState(() => isLoading = false);
-      showAppMessage(context, 'Failed to save lead: $e', isError: true);
+      showAppMessage(context, 'Failed to save lead: ${_saveErrorMessage(e)}', isError: true);
     }
+  }
+
+  String _saveErrorMessage(Object error) {
+    var message = error.toString().trim();
+    if (message.startsWith('Exception: ')) {
+      message = message.substring('Exception: '.length);
+    }
+    return message;
   }
 
   Widget _requiredFieldLabel(String text, {bool isRequired = false}) {
@@ -1012,7 +1459,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required ValueChanged<String?> onChanged,
     bool isRequired = false,
   }) {
-    final safeValue = items.contains(value) ? value : items.first;
+    final menuItems = _menuItemsWithCurrent(items, value);
+    final safeValue = menuItems.contains(value) ? value : menuItems.first;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md - 2),
@@ -1026,7 +1474,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         decoration: InputDecoration(
           label: _requiredFieldLabel(label, isRequired: isRequired),
         ),
-        items: items
+        items: menuItems
             .map(
               (item) =>
                   DropdownMenuItem<String>(value: item, child: Text(item)),
@@ -1159,40 +1607,68 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   Future<void> _captureImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
-
-    final file = await _pickCompressedImage(ImageSource.camera);
-    if (file == null) return;
-    if (!mounted) return;
-
-    setState(() => onPicked(file.path));
+    try {
+      final file = await _pickCompressedImage(ImageSource.camera);
+      if (file == null) return;
+      final path = await _persistXFile(file);
+      if (path == null || path.isEmpty || !mounted) {
+        if (mounted) {
+          showAppMessage(context, 'Unable to capture image', isError: true);
+        }
+        return;
+      }
+      onPicked(path);
+    } catch (e) {
+      if (!mounted) return;
+      showAppMessage(context, 'Unable to capture image', isError: true);
+    }
   }
 
   Future<void> _pickImage(ValueChanged<String?> onPicked) async {
     FocusScope.of(context).unfocus();
-
-    final file = await _pickCompressedImage(ImageSource.gallery);
-    if (file == null) return;
-    if (!mounted) return;
-
-    setState(() => onPicked(file.path));
+    try {
+      final file = await _pickCompressedImage(ImageSource.gallery);
+      if (file == null) return;
+      final path = await _persistXFile(file);
+      if (path == null || path.isEmpty || !mounted) {
+        if (mounted) {
+          showAppMessage(context, 'Unable to pick image', isError: true);
+        }
+        return;
+      }
+      onPicked(path);
+    } catch (e) {
+      if (!mounted) return;
+      showAppMessage(context, 'Unable to pick image', isError: true);
+    }
   }
 
   Future<String?> _pickSingleFile({required bool imageOnly}) async {
     FocusScope.of(context).unfocus();
+    try {
+      if (imageOnly) {
+        final file = await _pickCompressedImage(ImageSource.gallery);
+        if (file == null) return null;
+        return _persistXFile(file);
+      }
 
-    if (imageOnly) {
-      final file = await _pickCompressedImage(ImageSource.gallery);
-      return file?.path;
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        withData: true,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
+      );
+      if (result == null || result.files.isEmpty) return null;
+      final picked = result.files.single;
+      return _persistPickedBytes(
+        path: picked.path,
+        bytes: picked.bytes,
+        originalName: picked.name,
+        imageOnly: false,
+      );
+    } catch (_) {
+      return null;
     }
-
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
-      withData: false,
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
-    );
-
-    return result?.files.single.path;
   }
 
   Future<void> _showAddTitledFileDialog({
@@ -1536,7 +2012,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   : () async {
                       final path = await _pickSingleFile(imageOnly: false);
                       if (path == null || !mounted) return;
-                      setState(() => onChanged(path));
+                      onChanged(path);
                     },
               icon: const Icon(Icons.upload_file_outlined, size: 18),
               label: const Text('Choose File'),
@@ -1601,6 +2077,19 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       fontSize: 12,
                     ),
                   ),
+                  if (hasFile) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        height: 110,
+                        width: double.infinity,
+                        child: isImagePath(path)
+                            ? _thumbImage(path, height: 110)
+                            : _docPreview(path),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.sm),
                   Row(
                     children: [
@@ -2265,7 +2754,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 dropdown(
                   label: 'Project Type',
                   value: projectType,
-                  items: const ['Residential', 'Commercial', 'Industrial'],
+                  items: projectTypeOptions,
                   onChanged: (value) {
                     if (value == null) return;
                     projectType = value;
@@ -2274,31 +2763,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 dropdown(
                   label: 'Source',
                   value: source,
-                  items: widget.customerPortal
-                      ? const [
-                          'Customer Portal',
-                          'Website',
-                          'Referral',
-                          'Walk-in',
-                          'Call',
-                          'Other',
-                        ]
-                      : const [
-                          'Website',
-                          'Referral',
-                          'Walk-in',
-                          'Call',
-                          'Other',
-                        ],
+                  items: sourceOptions,
                   onChanged: (value) {
-                    if (widget.customerPortal || value == null) return;
+                    if (value == null) return;
                     source = value;
                   },
                 ),
                 dropdown(
                   label: 'Priority',
                   value: priority,
-                  items: const ['Low', 'Medium', 'High'],
+                  items: priorityOptions,
                   onChanged: (value) {
                     if (value == null) return;
                     priority = value;
@@ -2367,12 +2841,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   isRequired: true,
                   getter: () => vendorVisitedSite,
                   setter: (value) => vendorVisitedSite = value,
-                ),
-                localSwitchTile(
-                  title: 'Lead Active',
-                  isRequired: true,
-                  getter: () => isLeadActive,
-                  setter: (value) => isLeadActive = value,
                 ),
                 sectionTitle('Notes'),
                 input('Notes', notes, maxLines: 4),

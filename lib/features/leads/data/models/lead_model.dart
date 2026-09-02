@@ -321,28 +321,32 @@ class LeadModel {
       vendorVisitedSite: _bool(
         json['vendor_visited_site'] ?? json['vendorVisitedSite'],
       ),
-      isActive: _bool(json['is_active'] ?? json['isActive']),
+      isActive: json['is_active'] == null && json['isActive'] == null
+          ? true
+          : _bool(json['is_active'] ?? json['isActive']),
       additionalDocuments: _str(
         json['additional_documents'] ?? json['additionalDocuments'],
       ),
       additionalImages: _str(
         json['additional_images'] ?? json['additionalImages'],
       ),
-      chequePassbookCopy: _str(
+      chequePassbookCopy: filePathFrom(
         json['cheque_passbook_copy'] ?? json['chequePassbookCopy'],
       ),
-      bankClearPhoto: _str(json['bank_clear_photo'] ?? json['bankClearPhoto']),
-      roofPhoto: _str(json['roof_photo'] ?? json['roofPhoto']),
-      preInstallationPhoto: _str(
+      bankClearPhoto: filePathFrom(
+        json['bank_clear_photo'] ?? json['bankClearPhoto'],
+      ),
+      roofPhoto: filePathFrom(json['roof_photo'] ?? json['roofPhoto']),
+      preInstallationPhoto: filePathFrom(
         json['pre_installation_photo'] ?? json['preInstallationPhoto'],
       ),
-      quotationDocument: _str(
+      quotationDocument: filePathFrom(
         json['quotation_document'] ?? json['quotationDocument'],
       ),
-      installationReport: _str(
+      installationReport: filePathFrom(
         json['installation_report'] ?? json['installationReport'],
       ),
-      installationImages: _str(
+      installationImages: filePathFrom(
         json['installation_images'] ?? json['installationImages'],
       ),
       statusRemarks: _str(json['status_remarks'] ?? json['statusRemarks']),
@@ -725,6 +729,50 @@ class LeadModel {
       return _str(value['name']);
     }
     return '';
+  }
+
+  /// Resolves a stored upload path from string, nested map, or JSON text.
+  static String filePathFrom(dynamic value) {
+    if (value == null) return '';
+
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty ||
+          trimmed.toLowerCase() == 'null' ||
+          trimmed.toLowerCase() == 'undefined') {
+        return '';
+      }
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          return filePathFrom(jsonDecode(trimmed));
+        } catch (_) {
+          return trimmed;
+        }
+      }
+      return trimmed;
+    }
+
+    if (value is Map) {
+      for (final key in const [
+        'file',
+        'path',
+        'url',
+        'existingPath',
+        'filename',
+        'src',
+        'location',
+      ]) {
+        final extracted = filePathFrom(value[key]);
+        if (extracted.isNotEmpty) return extracted;
+      }
+      return '';
+    }
+
+    if (value is List && value.isNotEmpty) {
+      return filePathFrom(value.first);
+    }
+
+    return value.toString().trim();
   }
 
   static String _str(dynamic value) {

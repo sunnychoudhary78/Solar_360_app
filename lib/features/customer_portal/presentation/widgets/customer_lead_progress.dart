@@ -54,7 +54,9 @@ class CustomerLeadProgress extends StatelessWidget {
                 child: Text(
                   customerLeadNeedingCompletion(leads) != null
                       ? 'Complete details'
-                      : 'Fill details',
+                      : existingEditableCustomerLead(leads) != null
+                          ? 'Edit details'
+                          : 'Fill details',
                 ),
               ),
           ],

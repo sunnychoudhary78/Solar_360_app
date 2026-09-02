@@ -120,6 +120,7 @@ List<LeadFileItem> _parseExtraField(String prefix, dynamic raw) {
       file = entry['file']?.toString().trim() ??
           entry['path']?.toString().trim() ??
           entry['url']?.toString().trim() ??
+          entry['existingPath']?.toString().trim() ??
           '';
     } else if (entry is String) {
       file = entry.trim();

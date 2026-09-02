@@ -24,17 +24,24 @@ class CustomerLeadsScreen extends ConsumerWidget {
         data: (leads) {
           if (!canCustomerFillOrComplete(leads)) return null;
           final incomplete = customerLeadNeedingCompletion(leads);
+          final existing = existingEditableCustomerLead(leads);
           return FloatingActionButton.extended(
             onPressed: () => openCustomerLeadForm(
               context,
               ref,
-              lead: incomplete,
+              lead: incomplete ?? existing,
             ),
             icon: Icon(
-              incomplete == null ? Icons.add_rounded : Icons.edit_document,
+              incomplete == null && existing == null
+                  ? Icons.add_rounded
+                  : Icons.edit_document,
             ),
             label: Text(
-              incomplete == null ? 'Fill details' : 'Complete details',
+              incomplete != null
+                  ? 'Complete details'
+                  : existing != null
+                      ? 'Edit details'
+                      : 'Fill details',
             ),
           );
         },
@@ -46,31 +53,34 @@ class CustomerLeadsScreen extends ConsumerWidget {
           message: e.toString(),
           onRetry: () => ref.invalidate(customerLeadsProvider),
         ),
-        data: (leads) => RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(customerLeadsProvider);
-            await ref.read(customerLeadsProvider.future);
-          },
-          child: ListView(
-            primary: false,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-            children: [
-              CustomerLeadProgress(
-                leads: leads,
-                onFillDetails: canCustomerFillOrComplete(leads)
-                    ? () => openCustomerLeadForm(
-                          context,
-                          ref,
-                          lead: customerLeadNeedingCompletion(leads),
-                        )
-                    : null,
-                onEditDetails: (LeadModel lead) =>
-                    openCustomerLeadForm(context, ref, lead: lead),
-              ),
-            ],
-          ),
-        ),
+        data: (leads) {
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(customerLeadsProvider);
+              await ref.read(customerLeadsProvider.future);
+            },
+            child: ListView(
+              primary: false,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+              children: [
+                CustomerLeadProgress(
+                  leads: leads,
+                  onFillDetails: canCustomerFillOrComplete(leads)
+                      ? () => openCustomerLeadForm(
+                            context,
+                            ref,
+                            lead: customerLeadNeedingCompletion(leads) ??
+                                existingEditableCustomerLead(leads),
+                          )
+                      : null,
+                  onEditDetails: (LeadModel lead) =>
+                      openCustomerLeadForm(context, ref, lead: lead),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

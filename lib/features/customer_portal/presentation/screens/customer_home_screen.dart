@@ -173,7 +173,8 @@ class CustomerHomeScreen extends ConsumerWidget {
                       ? () => openCustomerLeadForm(
                             context,
                             ref,
-                            lead: customerLeadNeedingCompletion(leads),
+                            lead: customerLeadNeedingCompletion(leads) ??
+                                existingEditableCustomerLead(leads),
                           )
                       : null,
                   onEditDetails: (lead) =>

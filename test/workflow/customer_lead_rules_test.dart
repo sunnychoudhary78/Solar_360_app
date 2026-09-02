@@ -56,6 +56,14 @@ void main() {
       );
     });
 
+    test('existing editable lead is preferred over create', () {
+      final draft = _lead(id: 'draft');
+      final converted = _lead(id: 'done', status: 'Converted');
+      expect(existingEditableCustomerLead([converted, draft])?.id, 'draft');
+      expect(existingEditableCustomerLead([converted]), isNull);
+      expect(canCustomerFillOrComplete([converted, draft]), isTrue);
+    });
+
     test('fill/complete action continues an incomplete draft', () {
       final basic = _lead(id: 'draft');
       final complete = _lead(
@@ -68,7 +76,8 @@ void main() {
       expect(customerLeadNeedingCompletion([basic])?.id, 'draft');
       expect(canCustomerFillOrComplete([basic]), isTrue);
       expect(customerLeadNeedingCompletion([complete]), isNull);
-      expect(canCustomerFillOrComplete([complete]), isFalse);
+      expect(canCustomerFillOrComplete([complete]), isTrue);
+      expect(canCustomerFillOrComplete([_lead(status: 'Converted')]), isFalse);
     });
   });
 }

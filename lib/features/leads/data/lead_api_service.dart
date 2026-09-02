@@ -40,6 +40,9 @@ class LeadApiService {
         lower.startsWith('leads/')) {
       return true;
     }
+    if (lower.startsWith('content://') || lower.startsWith('file://')) {
+      return false;
+    }
     if (normalized.startsWith('/') ||
         RegExp(r'^[a-zA-Z]:[/\\]').hasMatch(normalized)) {
       return false;
@@ -58,7 +61,7 @@ class LeadApiService {
     if (singleFilePaths != null) {
       for (final entry in singleFilePaths.entries) {
         final filePath = entry.value.trim();
-        if (filePath.isEmpty) continue;
+        if (filePath.isEmpty || _isExistingRemotePath(filePath)) continue;
 
         formDataMap[entry.key] = await MultipartFile.fromFile(
           filePath,
@@ -281,6 +284,7 @@ class LeadApiService {
           continue;
         }
         if (_isExistingRemotePath(filePath)) {
+          formDataMap[entry.key] ??= filePath;
           continue;
         }
 
@@ -402,8 +406,16 @@ class LeadApiService {
 
     return data
         .whereType<Map>()
-        .map((item) => LeadModel.fromJson(Map<String, dynamic>.from(item)))
+        .map((item) => LeadModel.fromJson(_asLeadMap(item)))
         .toList();
+  }
+
+  Map<String, dynamic> _asLeadMap(Map item) {
+    var map = Map<String, dynamic>.from(item);
+    if (map['dataValues'] is Map) {
+      map = Map<String, dynamic>.from(map['dataValues'] as Map);
+    }
+    return map;
   }
 
   String _handleDioError(DioException e) {
