@@ -77,6 +77,28 @@ void main() {
       expect(existingEditableCustomerLead([inactive]), isNull);
     });
 
+    test('duplicate drafts collapse to the oldest complete lead', () {
+      final older = LeadModel.fromJson({
+        'id': 'old',
+        'status': 'New Lead',
+        'created_at': '2026-09-01T10:00:00.000Z',
+        'address': '12 Street',
+        'ca_number': 'CA1',
+        'discom': 'BSES Rajdhani',
+        'load_section_kw': '5',
+      });
+      final newer = LeadModel.fromJson({
+        'id': 'new',
+        'status': 'New Lead',
+        'created_at': '2026-09-02T10:00:00.000Z',
+        'address': '12 Street',
+        'ca_number': 'CA1',
+        'discom': 'BSES Rajdhani',
+        'load_section_kw': '5',
+      });
+      expect(existingEditableCustomerLead([newer, older])?.id, 'old');
+    });
+
     test('fill/complete action continues an incomplete draft', () {
       final basic = _lead(id: 'draft');
       final complete = _lead(

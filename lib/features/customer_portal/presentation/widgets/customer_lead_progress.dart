@@ -20,8 +20,11 @@ class CustomerLeadProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final draftLeads = leads.where(canCustomerEditLead).toList();
-    final pipelineLeads = leads.where((lead) => !canCustomerEditLead(lead)).toList();
+    final draft = existingEditableCustomerLead(leads);
+    final draftLeads = draft == null ? const <LeadModel>[] : [draft];
+    final pipelineLeads = leads
+        .where((lead) => lead.isActive && !canCustomerEditLead(lead))
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
