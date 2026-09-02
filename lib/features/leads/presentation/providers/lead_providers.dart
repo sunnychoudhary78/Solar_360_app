@@ -26,7 +26,8 @@ final allLeadsProvider = FutureProvider.autoDispose<List<LeadModel>>((
   ref,
 ) async {
   final repository = ref.watch(leadRepositoryProvider);
-  return repository.getAllLeads();
+  final leads = await repository.getAllLeads();
+  return leads.where((lead) => lead.isActive).toList();
 });
 
 /// Client-chunked All Leads list. [completedOnly] mirrors Completed Leads screen.
@@ -158,7 +159,9 @@ class LeadListNotifier extends Notifier<LeadListState> {
   Future<void> refresh() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final all = await _repo.getAllLeads();
+      final all = (await _repo.getAllLeads())
+          .where((lead) => lead.isActive)
+          .toList();
       _emitChunk(cached: all, visibleCount: pageSize);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: cleanError(e));

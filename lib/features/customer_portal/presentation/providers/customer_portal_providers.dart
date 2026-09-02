@@ -25,8 +25,9 @@ final customerLeadRepositoryProvider = Provider<LeadRepository>((ref) {
   return LeadRepository(ref.watch(customerLeadApiServiceProvider));
 });
 
-final customerLeadsProvider = FutureProvider<List<LeadModel>>((ref) {
-  return ref.watch(customerLeadRepositoryProvider).getAllLeads();
+final customerLeadsProvider = FutureProvider<List<LeadModel>>((ref) async {
+  final leads = await ref.watch(customerLeadRepositoryProvider).getAllLeads();
+  return leads.where((lead) => lead.isActive).toList();
 });
 
 final customerPortalApiServiceProvider = Provider<CustomerPortalApiService>((

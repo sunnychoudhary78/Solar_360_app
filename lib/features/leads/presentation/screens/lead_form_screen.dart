@@ -701,6 +701,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       List<TitledLocalFile> current,
       String originalJson,
     ) {
+      // Replacements are uploaded as multipart on the same PUT. Do not
+      // persist a remote-only snapshot that would drop the replaced file.
+      if (current.any((item) => _isLocalPickedPath(item.path))) return;
       final remote = _remoteTitledJson(current);
       if (remote.isNotEmpty) {
         data[field] = jsonEncode(remote);
@@ -1081,8 +1084,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   /// Customer portal save matches the web app:
   /// POST `/customers/leads` only when this customer has no lead yet.
-  /// PUT `/customers/leads/:id` for every later edit, including file
-  /// add/replace, so a second lead is never created.
+  /// Every later Edit Details call uses PUT `/customers/leads/:id` on that
+  /// same lead so a second LEAD-… row is never created.
   Future<void> _saveCustomerPortalLead({
     required LeadRepository repo,
     required Map<String, dynamic> data,

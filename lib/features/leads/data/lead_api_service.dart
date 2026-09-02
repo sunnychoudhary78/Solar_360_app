@@ -148,6 +148,7 @@ class LeadApiService {
     Future<void> attach({
       required String metaField,
       required String filesField,
+      required String leadField,
       required List<Map<String, String>>? entries,
     }) async {
       final items = (entries ?? [])
@@ -162,6 +163,7 @@ class LeadApiService {
         // On edit, send [] so intentional clears persist; otherwise omit.
         if (alwaysSendMeta) {
           formDataMap[metaField] = '[]';
+          formDataMap[leadField] = '[]';
         }
         return;
       }
@@ -173,7 +175,7 @@ class LeadApiService {
         final title = item['title']!.trim();
         final path = item['path']!.trim();
         if (_isExistingRemotePath(path)) {
-          meta.add({'title': title, 'existingPath': path});
+          meta.add({'title': title, 'existingPath': path, 'file': path});
         } else {
           meta.add({'title': title, 'existingPath': null});
           files.add(await _multipartFromPath(path));
@@ -183,17 +185,28 @@ class LeadApiService {
       formDataMap[metaField] = jsonEncode(meta);
       if (files.isNotEmpty) {
         formDataMap[filesField] = files;
+      } else {
+        // Customer PUT copies Lead columns from the body. Persist titled
+        // remotes on additional_documents / additional_images, not only
+        // the unused *_entries_json field.
+        formDataMap[leadField] = jsonEncode([
+          for (final item in meta)
+            if (item['file'] != null)
+              {'title': item['title'], 'file': item['file']},
+        ]);
       }
     }
 
     await attach(
       metaField: 'additional_images_entries_json',
       filesField: 'additional_images_files',
+      leadField: 'additional_images',
       entries: additionalImageEntries,
     );
     await attach(
       metaField: 'additional_documents_entries_json',
       filesField: 'additional_documents_files',
+      leadField: 'additional_documents',
       entries: additionalDocumentEntries,
     );
   }

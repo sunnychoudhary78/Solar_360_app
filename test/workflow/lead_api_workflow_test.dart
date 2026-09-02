@@ -186,6 +186,43 @@ void main() {
       expect(history.last['status'], 'Converted');
     });
 
+    test('customer file-path copy uses JSON PUT on the original lead', () async {
+      final customerRepo = LeadRepository(
+        LeadApiService(
+          ApiService(pair.dio),
+          pair.dio,
+          leadsPath: 'customers/leads',
+          leadPath: (id) => 'customers/leads/$id',
+        ),
+      );
+
+      pair.adapter.on('PUT', 'customers/leads/lead-1', (req) {
+        expect(req.data, isA<Map>());
+        expect(req.data, isNot(isA<FormData>()));
+        final body = Map<String, dynamic>.from(req.data as Map);
+        expect(body['roof_photo'], 'leads/roof-new.jpg');
+        expect(body['additional_documents'], isA<List>());
+        return {
+          'success': true,
+          'data': {
+            ..._leadJson(),
+            'roof_photo': 'leads/roof-new.jpg',
+          },
+        };
+      });
+
+      final lead = await customerRepo.updateLead('lead-1', {
+        'roof_photo': 'leads/roof-new.jpg',
+        'additional_documents': [
+          {'title': 'Aadhaar Front', 'file': 'leads/aadhaar-new.pdf'},
+        ],
+      });
+
+      expect(lead?.roofPhoto, 'leads/roof-new.jpg');
+      expect(pair.adapter.of('PUT', 'customers/leads/lead-1'), hasLength(1));
+      expect(pair.adapter.of('POST', 'customers/leads'), isEmpty);
+    });
+
     test('customer lead update uses PUT and does not create a lead', () async {
       final customerRepo = LeadRepository(
         LeadApiService(
