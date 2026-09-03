@@ -39,7 +39,10 @@ int _customerDraftRank(LeadModel a, LeadModel b) {
 /// Includes inactive leftovers from an older save so Edit Details updates
 /// that same row instead of POSTing another lead onto the staff web list.
 LeadModel? existingEditableCustomerLead(List<LeadModel> leads) {
-  final editable = leads.where(canCustomerEditLead).toList();
+  final editable = leads.where((lead) {
+    if (!canCustomerEditLead(lead)) return false;
+    return !lead.notes.toLowerCase().contains('[file-scratch]');
+  }).toList();
   if (editable.isEmpty) return null;
   editable.sort(_customerDraftRank);
   return editable.first;

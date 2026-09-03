@@ -223,6 +223,47 @@ void main() {
       expect(pair.adapter.of('POST', 'customers/leads'), isEmpty);
     });
 
+    test('customer edit JSON PUT writes titled files onto the same lead', () async {
+      final customerRepo = LeadRepository(
+        LeadApiService(
+          ApiService(pair.dio),
+          pair.dio,
+          leadsPath: 'customers/leads',
+          leadPath: (id) => 'customers/leads/$id',
+        ),
+      );
+
+      pair.adapter.on('PUT', 'customers/leads/lead-1', (req) {
+        expect(req.data, isA<Map>());
+        expect(req.data, isNot(isA<FormData>()));
+        final body = Map<String, dynamic>.from(req.data as Map);
+        expect(body['cheque_passbook_copy'], 'leads/passbook.jpg');
+        expect(body['additional_documents'], isA<List>());
+        expect(
+          (body['additional_documents'] as List).first['file'],
+          'leads/aadhaar.jpg',
+        );
+        return {
+          'success': true,
+          'data': {
+            ..._leadJson(),
+            'cheque_passbook_copy': 'leads/passbook.jpg',
+          },
+        };
+      });
+
+      await customerRepo.updateLead('lead-1', {
+        'full_name': 'Test Customer',
+        'cheque_passbook_copy': 'leads/passbook.jpg',
+        'additional_documents': [
+          {'title': 'Aadhaar Front', 'file': 'leads/aadhaar.jpg'},
+        ],
+      });
+
+      expect(pair.adapter.of('PUT', 'customers/leads/lead-1'), hasLength(1));
+      expect(pair.adapter.of('POST', 'customers/leads'), isEmpty);
+    });
+
     test('customer lead file replace uses PUT and does not create a lead', () async {
       final customerRepo = LeadRepository(
         LeadApiService(

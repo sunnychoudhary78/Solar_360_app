@@ -43,6 +43,20 @@ class TitledLocalFile {
   }
 }
 
+class _MintedCustomerUploads {
+  final String scratchId;
+  final Map<String, String> singleFiles;
+  final List<TitledLocalFile> documents;
+  final List<TitledLocalFile> images;
+
+  const _MintedCustomerUploads({
+    required this.scratchId,
+    required this.singleFiles,
+    required this.documents,
+    required this.images,
+  });
+}
+
 class _PredefinedLeadFile {
   final String title;
   final bool imageOnly;
@@ -1174,8 +1188,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   /// Customer portal save:
   /// POST `/customers/leads` only when this customer has no lead yet.
-  /// Edit always PUTs `/customers/leads/:id` on that same lead so the
-  /// staff web list does not grow duplicate New Lead rows.
+  /// Edit always JSON-PUTs `/customers/leads/:id` on that same lead.
+  ///
+  /// Customer PUT copies Lead columns from the body and ignores multipart
+  /// files, so new images/docs are uploaded through a hidden scratch POST
+  /// (the only customer endpoint that stores files) and the returned
+  /// `leads/...` paths are written onto the existing lead.
   Future<void> _saveCustomerPortalLead({
     required LeadRepository repo,
     required Map<String, dynamic> data,
@@ -1232,32 +1250,180 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       documents: documents,
       images: images,
     );
+
+    final scratchIds = <String>[];
+    if (_customerHasNewLocalFiles(singleFiles, documents, images)) {
+      final minted = await _mintCustomerUploadPaths(
+        repo: repo,
+        data: data,
+        keepLeadId: leadId,
+        singleFiles: singleFiles,
+        documents: documents,
+        images: images,
+      );
+      for (final entry in minted.singleFiles.entries) {
+        final path = _storedLeadFilePath(entry.value);
+        if (path.isNotEmpty) data[entry.key] = path;
+      }
+      data['additional_documents'] = _remoteTitledJson(minted.documents);
+      data['additional_images'] = _remoteTitledJson(minted.images);
+      if (minted.documents.any((item) => _isLocalPickedPath(item.path)) ||
+          minted.images.any((item) => _isLocalPickedPath(item.path))) {
+        throw Exception(
+          'Could not upload the new image or document. Please try again.',
+        );
+      }
+      if (minted.scratchId.isNotEmpty) scratchIds.add(minted.scratchId);
+    }
+
     _mergeRemoteFilesFromLeads(
       data,
-      existingLeads.where((lead) => lead.id != leadId).toList(),
+      existingLeads
+          .where(
+            (lead) =>
+                lead.id != leadId &&
+                !lead.notes.toLowerCase().contains('[file-scratch]'),
+          )
+          .toList(),
     );
 
-    // Never POST a second lead to upload files — that created duplicate
-    // New Lead rows on the customer and staff lists after edit/save.
-    if (_customerHasNewLocalFiles(singleFiles, documents, images)) {
-      await repo.updateLeadWithFiles(
-        leadId,
-        data,
-        singleFilePaths: {
-          for (final e in singleFiles.entries)
-            if (e.value.isNotEmpty) e.key: e.value,
-        },
-        additionalImageEntries: imagePayload,
-        additionalDocumentEntries: documentPayload,
-      );
-    } else {
+    try {
       await repo.updateLead(leadId, data);
+    } finally {
+      for (final extra in existingLeads) {
+        if (extra.id == leadId || !canCustomerEditLead(extra)) continue;
+        await _deactivateCustomerLead(repo, extra.id);
+      }
+      for (final scratchId in scratchIds) {
+        if (scratchId == leadId) continue;
+        await _deactivateCustomerLead(repo, scratchId);
+      }
+    }
+  }
+
+  /// Customer PUT does not read `req.files`. POST `/customers/leads` does, so
+  /// new local picks are stored there as an inactive Rejected scratch, then
+  /// their server paths are copied onto the lead being edited.
+  Future<_MintedCustomerUploads> _mintCustomerUploadPaths({
+    required LeadRepository repo,
+    required Map<String, dynamic> data,
+    required String keepLeadId,
+    required Map<String, String> singleFiles,
+    required List<TitledLocalFile> documents,
+    required List<TitledLocalFile> images,
+  }) async {
+    final localSingles = <String, String>{
+      for (final entry in singleFiles.entries)
+        if (_isLocalPickedPath(entry.value)) entry.key: entry.value,
+    };
+    final localDocs =
+        documents.where((item) => _isLocalPickedPath(item.path)).toList();
+    final localImages =
+        images.where((item) => _isLocalPickedPath(item.path)).toList();
+
+    final mintData = <String, dynamic>{
+      'full_name': data['full_name'],
+      'mobile': data['mobile'],
+      'email': data['email'],
+      'source': 'Customer Portal',
+      'status': 'Rejected',
+      'status_remarks': 'Temporary file upload for existing lead',
+      'is_active': false,
+      'notes': '[file-scratch]',
+    };
+
+    var minted = await repo.createLead(
+      mintData,
+      singleFilePaths: localSingles,
+      additionalImageEntries: localImages.map((e) => e.toPayload()).toList(),
+      additionalDocumentEntries: localDocs.map((e) => e.toPayload()).toList(),
+    );
+
+    if (minted == null || minted.id.trim().isEmpty || minted.id == keepLeadId) {
+      final latest = await repo.getAllLeads();
+      minted = _newestScratchLead(latest, keepLeadId: keepLeadId);
     }
 
-    for (final extra in existingLeads) {
-      if (extra.id == leadId || !canCustomerEditLead(extra)) continue;
-      await _deactivateCustomerLead(repo, extra.id);
+    if (minted == null) {
+      throw Exception(
+        'Could not upload the new image or document. Please try again.',
+      );
     }
+
+    final mintedSingles = <String, String>{};
+    void takeSingle(String field, String value) {
+      final path = _storedLeadFilePath(value);
+      if (path.isNotEmpty) mintedSingles[field] = path;
+    }
+
+    if (localSingles.containsKey('roof_photo')) {
+      takeSingle('roof_photo', minted.roofPhoto);
+    }
+    if (localSingles.containsKey('bank_clear_photo')) {
+      takeSingle('bank_clear_photo', minted.bankClearPhoto);
+    }
+    if (localSingles.containsKey('cheque_passbook_copy')) {
+      takeSingle('cheque_passbook_copy', minted.chequePassbookCopy);
+    }
+    if (localSingles.containsKey('pre_installation_photo')) {
+      takeSingle('pre_installation_photo', minted.preInstallationPhoto);
+    }
+    if (localSingles.containsKey('quotation_document')) {
+      takeSingle('quotation_document', minted.quotationDocument);
+    }
+
+    return _MintedCustomerUploads(
+      scratchId: minted.id.trim(),
+      singleFiles: mintedSingles,
+      documents: _applyMintedTitledFiles(
+        current: documents,
+        minted: parseTitledFileEntries(minted.additionalDocuments),
+      ),
+      images: _applyMintedTitledFiles(
+        current: images,
+        minted: parseTitledFileEntries(minted.additionalImages),
+      ),
+    );
+  }
+
+  LeadModel? _newestScratchLead(List<LeadModel> leads, {required String keepLeadId}) {
+    LeadModel? best;
+    for (final lead in leads) {
+      if (lead.id == keepLeadId) continue;
+      if (!canCustomerEditLead(lead)) continue;
+      final notes = lead.notes.toLowerCase();
+      final isScratch = notes.contains('[file-scratch]') || !lead.isActive;
+      if (!isScratch) continue;
+      if (best == null || lead.createdAt.compareTo(best.createdAt) > 0) {
+        best = lead;
+      }
+    }
+    return best;
+  }
+
+  List<TitledLocalFile> _applyMintedTitledFiles({
+    required List<TitledLocalFile> current,
+    required List<TitledFileEntry> minted,
+  }) {
+    final byTitle = <String, List<String>>{};
+    for (final item in minted) {
+      final path = _storedLeadFilePath(item.path);
+      if (path.isEmpty) continue;
+      byTitle.putIfAbsent(_normTitle(item.title), () => []).add(path);
+    }
+
+    return [
+      for (final item in current)
+        if (_isLocalPickedPath(item.path))
+          TitledLocalFile(
+            title: item.title,
+            path: (byTitle[_normTitle(item.title)]?.isNotEmpty ?? false)
+                ? byTitle[_normTitle(item.title)]!.removeAt(0)
+                : item.path,
+          )
+        else
+          item,
+    ];
   }
 
   Future<void> _deactivateCustomerLead(LeadRepository repo, String leadId) async {
