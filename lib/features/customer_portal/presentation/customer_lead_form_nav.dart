@@ -7,8 +7,8 @@ import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 /// Opens the customer lead form.
 ///
 /// [lead] == null → basic details in memory, then the full form POSTs one new
-/// lead (with files), matching the web create flow.
-/// [lead] != null → complete / edit form PUTs that lead, matching web update.
+/// lead (with files) only when this customer has no draft yet.
+/// [lead] != null → complete / edit form JSON-PUTs that same lead.
 Future<void> openCustomerLeadForm(
   BuildContext context,
   WidgetRef ref, {

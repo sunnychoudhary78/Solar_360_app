@@ -64,7 +64,7 @@ void main() {
       expect(canCustomerFillOrComplete([converted, draft]), isTrue);
     });
 
-    test('inactive leads are ignored when choosing a draft', () {
+    test('inactive leftovers are reused instead of creating another lead', () {
       final inactive = LeadModel.fromJson({
         'id': 'ghost',
         'status': 'New Lead',
@@ -74,7 +74,8 @@ void main() {
       });
       final draft = _lead(id: 'draft');
       expect(existingEditableCustomerLead([inactive, draft])?.id, 'draft');
-      expect(existingEditableCustomerLead([inactive]), isNull);
+      expect(existingEditableCustomerLead([inactive])?.id, 'ghost');
+      expect(canCustomerCreateLead([inactive]), isFalse);
     });
 
     test('duplicate drafts collapse to the oldest complete lead', () {

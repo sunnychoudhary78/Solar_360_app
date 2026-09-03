@@ -667,26 +667,81 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return [
       for (final file in files)
         if (file.title.trim().isNotEmpty &&
-            file.path.trim().isNotEmpty &&
+            _storedLeadFilePath(file.path).isNotEmpty &&
             _isExistingRemotePath(file.path))
-          {'title': file.title.trim(), 'file': file.path.trim()},
+          {
+            'title': file.title.trim(),
+            'file': _storedLeadFilePath(file.path),
+          },
     ];
   }
 
-  void _putRetainedCustomerFiles(
+  String _storedLeadFilePath(String? path) {
+    var value = LeadModel.filePathFrom(path).replaceAll('\\', '/').trim();
+    if (value.isEmpty) return '';
+    value = value.split('?').first.trim();
+    final leadsIndex = value.indexOf('/leads/');
+    if (leadsIndex != -1) return value.substring(leadsIndex + 1);
+    if (value.startsWith('leads/')) return value;
+    final uploadsIndex = value.indexOf('uploads/leads/');
+    if (uploadsIndex != -1) {
+      return value.substring(uploadsIndex + 'uploads/'.length);
+    }
+    return value;
+  }
+
+  String _normTitle(String title) => title.trim().toLowerCase();
+
+  List<Map<String, String>> _parseTitledJson(String raw) {
+    if (raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return [
+        for (final item in decoded.whereType<Map>())
+          if ((item['title']?.toString().trim() ?? '').isNotEmpty &&
+              _storedLeadFilePath(
+                (item['file'] ??
+                        item['path'] ??
+                        item['url'] ??
+                        item['existingPath'])
+                    ?.toString(),
+              ).isNotEmpty)
+            {
+              'title': item['title'].toString().trim(),
+              'file': _storedLeadFilePath(
+                (item['file'] ??
+                        item['path'] ??
+                        item['url'] ??
+                        item['existingPath'])
+                    ?.toString(),
+              ),
+            },
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Customer PUT copies Lead columns from a JSON body. Send `{title, file}`
+  /// arrays (not JSON strings / multipart) so the staff web panel can render
+  /// them the same way the app does.
+  void _putCustomerFileFieldsOnJson(
     Map<String, dynamic> data, {
     required List<TitledLocalFile> documents,
     required List<TitledLocalFile> images,
   }) {
     void keepSingle(String field, String? current) {
+      data.remove(field);
       final value = (current ?? '').trim();
-      final original = (_originalSingleFiles[field] ?? '').trim();
       if (value.isEmpty) {
-        if (original.isNotEmpty) data[field] = '';
+        if ((_originalSingleFiles[field] ?? '').trim().isNotEmpty) {
+          data[field] = '';
+        }
         return;
       }
       if (_isExistingRemotePath(value)) {
-        data[field] = value;
+        data[field] = _storedLeadFilePath(value);
       }
     }
 
@@ -696,30 +751,129 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     keepSingle('pre_installation_photo', preInstallationPhotoPath);
     keepSingle('quotation_document', quotationDocumentPath);
 
-    void keepTitled(
+    data['additional_documents'] = _remoteTitledJson(documents);
+    data['additional_images'] = _remoteTitledJson(images);
+  }
+
+  bool _customerHasNewLocalFiles(
+    Map<String, String> singleFiles,
+    List<TitledLocalFile> documents,
+    List<TitledLocalFile> images,
+  ) {
+    if (singleFiles.values.any(
+      (path) => path.trim().isNotEmpty && _isLocalPickedPath(path),
+    )) {
+      return true;
+    }
+    return documents.any((item) => _isLocalPickedPath(item.path)) ||
+        images.any((item) => _isLocalPickedPath(item.path));
+  }
+
+  void _mergeMintedUploadPaths(
+    Map<String, dynamic> data, {
+    required LeadModel minted,
+    required Map<String, String> singleFiles,
+    required List<TitledLocalFile> documents,
+    required List<TitledLocalFile> images,
+  }) {
+    void takeSingle(String field, String mintedPath) {
+      final local = (singleFiles[field] ?? '').trim();
+      if (local.isEmpty || !_isLocalPickedPath(local)) return;
+      final path = _storedLeadFilePath(mintedPath);
+      if (path.isNotEmpty) data[field] = path;
+    }
+
+    takeSingle('roof_photo', minted.roofPhoto);
+    takeSingle('bank_clear_photo', minted.bankClearPhoto);
+    takeSingle('cheque_passbook_copy', minted.chequePassbookCopy);
+    takeSingle('pre_installation_photo', minted.preInstallationPhoto);
+    takeSingle('quotation_document', minted.quotationDocument);
+
+    void takeTitled(
       String field,
       List<TitledLocalFile> current,
-      String originalJson,
+      String mintedJson,
     ) {
-      // Replacements are uploaded as multipart on the same PUT. Do not
-      // persist a remote-only snapshot that would drop the replaced file.
-      if (current.any((item) => _isLocalPickedPath(item.path))) return;
-      final remote = _remoteTitledJson(current);
-      if (remote.isNotEmpty) {
-        data[field] = jsonEncode(remote);
-        return;
+      final mintedByTitle = <String, String>{
+        for (final item in _parseTitledJson(mintedJson))
+          _normTitle(item['title'] ?? ''): item['file'] ?? '',
+      };
+      final byTitle = <String, Map<String, String>>{};
+      final existing = data[field];
+      if (existing is List) {
+        for (final item in existing.whereType<Map>()) {
+          final title = item['title']?.toString().trim() ?? '';
+          final file = _storedLeadFilePath(item['file']?.toString());
+          if (title.isEmpty || file.isEmpty) continue;
+          byTitle[_normTitle(title)] = {'title': title, 'file': file};
+        }
       }
-      if (originalJson.trim().isNotEmpty && originalJson.trim() != '[]') {
-        data[field] = '[]';
+      for (final item in current) {
+        final title = item.title.trim();
+        if (title.isEmpty) continue;
+        final key = _normTitle(title);
+        if (_isLocalPickedPath(item.path)) {
+          final mintedPath = mintedByTitle[key] ?? '';
+          if (mintedPath.isEmpty) continue;
+          byTitle[key] = {'title': title, 'file': mintedPath};
+        } else {
+          final path = _storedLeadFilePath(item.path);
+          if (path.isEmpty) continue;
+          byTitle[key] = {'title': title, 'file': path};
+        }
+      }
+      data[field] = byTitle.values.toList();
+    }
+
+    takeTitled('additional_documents', documents, minted.additionalDocuments);
+    takeTitled('additional_images', images, minted.additionalImages);
+  }
+
+  void _mergeRemoteFilesFromLeads(
+    Map<String, dynamic> data,
+    List<LeadModel> leads,
+  ) {
+    void fillSingle(String field, String Function(LeadModel lead) getter) {
+      final current = (data[field] as String?)?.trim() ?? '';
+      if (current.isNotEmpty) return;
+      for (final lead in leads) {
+        final path = _storedLeadFilePath(getter(lead));
+        if (path.isNotEmpty) {
+          data[field] = path;
+          return;
+        }
       }
     }
 
-    keepTitled(
-      'additional_documents',
-      documents,
-      _originalAdditionalDocumentsJson,
-    );
-    keepTitled('additional_images', images, _originalAdditionalImagesJson);
+    fillSingle('roof_photo', (lead) => lead.roofPhoto);
+    fillSingle('bank_clear_photo', (lead) => lead.bankClearPhoto);
+    fillSingle('cheque_passbook_copy', (lead) => lead.chequePassbookCopy);
+    fillSingle('pre_installation_photo', (lead) => lead.preInstallationPhoto);
+    fillSingle('quotation_document', (lead) => lead.quotationDocument);
+
+    void mergeTitled(String field, String Function(LeadModel lead) getter) {
+      final byTitle = <String, Map<String, String>>{};
+      final existing = data[field];
+      if (existing is List) {
+        for (final item in existing.whereType<Map>()) {
+          final title = item['title']?.toString().trim() ?? '';
+          final file = _storedLeadFilePath(item['file']?.toString());
+          if (title.isEmpty || file.isEmpty) continue;
+          byTitle[_normTitle(title)] = {'title': title, 'file': file};
+        }
+      }
+      for (final lead in leads) {
+        for (final item in _parseTitledJson(getter(lead))) {
+          final key = _normTitle(item['title'] ?? '');
+          if (key.isEmpty || byTitle.containsKey(key)) continue;
+          byTitle[key] = item;
+        }
+      }
+      data[field] = byTitle.values.toList();
+    }
+
+    mergeTitled('additional_documents', (lead) => lead.additionalDocuments);
+    mergeTitled('additional_images', (lead) => lead.additionalImages);
   }
 
   Map<String, String> _singleFileUploadsForSave() {
@@ -1098,9 +1252,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   /// Customer portal save matches the web app:
   /// POST `/customers/leads` only when this customer has no lead yet.
-  /// Edit / replace files always PUT `/customers/leads/:id` on that same lead.
-  /// Never create a second lead to store uploads — those leftovers show up on
-  /// the staff web list as duplicate "Rejected (Sales)" rows.
+  /// Edit always JSON-PUTs `/customers/leads/:id` on that same lead so the
+  /// staff web list does not grow duplicate New Lead rows.
   Future<void> _saveCustomerPortalLead({
     required LeadRepository repo,
     required Map<String, dynamic> data,
@@ -1113,48 +1266,147 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     data.remove('workflow_step');
     data.remove('current_department');
 
-    var leadId = widget.existingLead?.id.trim() ?? '';
     final existingLeads = await repo.getAllLeads();
-    leadId = leadId.isNotEmpty
-        ? leadId
-        : (existingEditableCustomerLead(existingLeads)?.id.trim() ?? '');
+    var leadId = widget.existingLead?.id.trim() ?? '';
+    if (leadId.isEmpty) {
+      leadId = existingEditableCustomerLead(existingLeads)?.id.trim() ?? '';
+    }
+
+    if (hasConvertedCustomerLead(existingLeads) &&
+        (leadId.isEmpty ||
+            !existingLeads.any(
+              (lead) => lead.id == leadId && canCustomerEditLead(lead),
+            ))) {
+      throw Exception(
+        'This lead is converted. Details can no longer be filled or updated.',
+      );
+    }
 
     final imagePayload = images.map((e) => e.toPayload()).toList();
     final documentPayload = documents.map((e) => e.toPayload()).toList();
 
-    if (leadId.isNotEmpty) {
-      _putRetainedCustomerFiles(
+    if (leadId.isEmpty) {
+      data['status'] = 'New Lead';
+      data['is_active'] = true;
+      await repo.createLead(
         data,
-        documents: documents,
-        images: images,
-      );
-
-      await repo.updateLeadWithFiles(
-        leadId,
-        data,
-        singleFilePaths: singleFiles,
+        singleFilePaths: {
+          for (final e in singleFiles.entries)
+            if (e.value.isNotEmpty) e.key: e.value,
+        },
         additionalImageEntries: imagePayload,
         additionalDocumentEntries: documentPayload,
       );
       return;
     }
 
-    if (hasConvertedCustomerLead(existingLeads)) {
-      throw Exception(
-        'This lead is converted. Details can no longer be filled or updated.',
-      );
+    data['is_active'] = true;
+    data['roof_load_bearing_capacity'] = roofLoadBearingCapacity;
+    data['shadow_free_roof'] = shadowFreeRoof;
+    data['vendor_visited_site'] = vendorVisitedSite;
+    _putCustomerFileFieldsOnJson(
+      data,
+      documents: documents,
+      images: images,
+    );
+    _mergeRemoteFilesFromLeads(
+      data,
+      existingLeads.where((lead) => lead.id != leadId).toList(),
+    );
+
+    LeadModel? minted;
+    if (_customerHasNewLocalFiles(singleFiles, documents, images)) {
+      try {
+        minted = await _mintCustomerUploadPaths(
+          repo: repo,
+          data: data,
+          singleFiles: singleFiles,
+          documents: documents,
+          images: images,
+          existingLeadIds: {leadId, ...existingLeads.map((lead) => lead.id)},
+        );
+        if (minted != null) {
+          _mergeMintedUploadPaths(
+            data,
+            minted: minted,
+            singleFiles: singleFiles,
+            documents: documents,
+            images: images,
+          );
+        }
+      } catch (_) {
+        minted = null;
+      }
     }
 
-    data['status'] = 'New Lead';
-    await repo.createLead(
-      data,
-      singleFilePaths: {
-        for (final e in singleFiles.entries)
-          if (e.value.isNotEmpty) e.key: e.value,
+    await repo.updateLead(leadId, data);
+
+    if (minted != null) {
+      await _deactivateCustomerLead(repo, minted.id);
+    }
+    for (final extra in existingLeads) {
+      if (extra.id == leadId || !canCustomerEditLead(extra)) continue;
+      await _deactivateCustomerLead(repo, extra.id);
+    }
+  }
+
+  Future<LeadModel?> _mintCustomerUploadPaths({
+    required LeadRepository repo,
+    required Map<String, dynamic> data,
+    required Map<String, String> singleFiles,
+    required List<TitledLocalFile> documents,
+    required List<TitledLocalFile> images,
+    required Set<String> existingLeadIds,
+  }) async {
+    final localSingles = {
+      for (final entry in singleFiles.entries)
+        if (entry.value.trim().isNotEmpty && _isLocalPickedPath(entry.value))
+          entry.key: entry.value,
+    };
+    final localDocs = [
+      for (final item in documents)
+        if (_isLocalPickedPath(item.path)) item.toPayload(),
+    ];
+    final localImages = [
+      for (final item in images)
+        if (_isLocalPickedPath(item.path)) item.toPayload(),
+    ];
+    if (localSingles.isEmpty && localDocs.isEmpty && localImages.isEmpty) {
+      return null;
+    }
+
+    final minted = await repo.createLead(
+      {
+        'full_name': data['full_name'],
+        'mobile': data['mobile'],
+        'email': data['email'],
+        'source': 'Customer Portal',
+        'is_active': false,
+        'status': 'New Lead',
       },
-      additionalImageEntries: imagePayload,
-      additionalDocumentEntries: documentPayload,
+      singleFilePaths: localSingles,
+      additionalDocumentEntries: localDocs,
+      additionalImageEntries: localImages,
     );
+    if (minted != null && minted.id.trim().isNotEmpty) return minted;
+
+    final after = await repo.getAllLeads();
+    LeadModel? newest;
+    for (final lead in after) {
+      if (existingLeadIds.contains(lead.id)) continue;
+      if (newest == null || lead.createdAt.compareTo(newest.createdAt) >= 0) {
+        newest = lead;
+      }
+    }
+    return newest;
+  }
+
+  Future<void> _deactivateCustomerLead(LeadRepository repo, String leadId) async {
+    final id = leadId.trim();
+    if (id.isEmpty) return;
+    try {
+      await repo.updateLead(id, {'is_active': false});
+    } catch (_) {}
   }
 
   Future<void> saveLead() async {

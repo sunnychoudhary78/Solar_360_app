@@ -23,31 +23,31 @@ bool canCustomerCreateLead(List<LeadModel> leads) {
       existingEditableCustomerLead(leads) == null;
 }
 
+int _customerDraftRank(LeadModel a, LeadModel b) {
+  final activeCmp = (a.isActive ? 0 : 1).compareTo(b.isActive ? 0 : 1);
+  if (activeCmp != 0) return activeCmp;
+  final completeCmp = (isCustomerLeadIncomplete(a) ? 1 : 0).compareTo(
+    isCustomerLeadIncomplete(b) ? 1 : 0,
+  );
+  if (completeCmp != 0) return completeCmp;
+  final createdCmp = a.createdAt.compareTo(b.createdAt);
+  if (createdCmp != 0) return createdCmp;
+  return a.id.compareTo(b.id);
+}
+
 /// Draft lead the customer should update (New Lead / Follow Up / Rejected).
-/// If older duplicate drafts exist from a previous save, keep the oldest
-/// complete one so Edit Details always targets a single lead.
+/// Includes inactive leftovers from an older save so Edit Details updates
+/// that same row instead of POSTing another lead onto the staff web list.
 LeadModel? existingEditableCustomerLead(List<LeadModel> leads) {
-  final editable = leads
-      .where((lead) => lead.isActive && canCustomerEditLead(lead))
-      .toList();
+  final editable = leads.where(canCustomerEditLead).toList();
   if (editable.isEmpty) return null;
-  editable.sort((a, b) {
-    final completeCmp = (isCustomerLeadIncomplete(a) ? 1 : 0).compareTo(
-      isCustomerLeadIncomplete(b) ? 1 : 0,
-    );
-    if (completeCmp != 0) return completeCmp;
-    return a.createdAt.compareTo(b.createdAt);
-  });
+  editable.sort(_customerDraftRank);
   return editable.first;
 }
 
 LeadModel? customerLeadNeedingCompletion(List<LeadModel> leads) {
-  for (final lead in leads) {
-    if (!lead.isActive) continue;
-    if (canCustomerEditLead(lead) && isCustomerLeadIncomplete(lead)) {
-      return lead;
-    }
-  }
+  final draft = existingEditableCustomerLead(leads);
+  if (draft != null && isCustomerLeadIncomplete(draft)) return draft;
   return null;
 }
 
