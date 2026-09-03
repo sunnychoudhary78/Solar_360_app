@@ -85,6 +85,7 @@ class QuotationModel {
   final PartyAddressModel? shipTo;
   final PartyAddressModel? fromParty;
   final String? fromBranchId;
+  final String? marketingTemplateId;
 
   const QuotationModel({
     required this.id,
@@ -105,6 +106,7 @@ class QuotationModel {
     this.shipTo,
     this.fromParty,
     this.fromBranchId,
+    this.marketingTemplateId,
   });
 
   factory QuotationModel.fromJson(Map<String, dynamic> json) {
@@ -157,6 +159,11 @@ class QuotationModel {
           ? fromPartyRaw['branch_id']?.toString() ??
                 fromPartyRaw['branchId']?.toString()
           : null,
+      marketingTemplateId: json['marketing_template_id']?.toString() ??
+          json['marketingTemplateId']?.toString() ??
+          (json['marketingTemplate'] is Map
+              ? (json['marketingTemplate'] as Map)['id']?.toString()
+              : null),
     );
   }
 

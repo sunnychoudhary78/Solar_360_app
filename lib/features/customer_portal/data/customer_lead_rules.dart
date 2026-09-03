@@ -51,7 +51,16 @@ LeadModel? customerLeadNeedingCompletion(List<LeadModel> leads) {
   return null;
 }
 
+List<LeadModel> customerDraftLeads(List<LeadModel> leads) {
+  return leads.where(canCustomerEditLead).toList();
+}
+
+List<LeadModel> customerPipelineLeads(List<LeadModel> leads) {
+  return leads
+      .where((lead) => lead.isActive && !canCustomerEditLead(lead))
+      .toList();
+}
+
 bool canCustomerFillOrComplete(List<LeadModel> leads) {
-  return canCustomerCreateLead(leads) ||
-      existingEditableCustomerLead(leads) != null;
+  return !hasConvertedCustomerLead(leads);
 }

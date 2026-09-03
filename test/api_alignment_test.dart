@@ -37,14 +37,25 @@ void main() {
       );
     });
 
-    test('production API points at the Billbook host', () {
-      expect(ApiConstants.baseUrl, 'https://imt-billbook.immortalgroup.in/api');
+    test('marketing templates endpoint matches backend', () {
+      expect(ApiEndpoints.marketingTemplates, 'marketing-templates');
+    });
+
+    test('API host follows the selected environment', () {
+      expect(ApiConstants.baseUrl, contains('immortalgroup.in/api'));
+      expect(
+        ApiConstants.baseUrl,
+        ApiConstants.current == Environment.uat
+            ? 'https://uat-imt-billbook.immortalgroup.in/api'
+            : 'https://imt-billbook.immortalgroup.in/api',
+      );
     });
 
     test('lead upload URLs use the backend /api/uploads mount', () {
+      final host = ApiConstants.baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
       expect(
         resolveUploadUrl('leads/example.jpg'),
-        'https://imt-billbook.immortalgroup.in/api/uploads/leads/example.jpg',
+        '$host/api/uploads/leads/example.jpg',
       );
       expect(
         resolveUploadUrl('https://example.com/api/uploads/leads/example.jpg'),
@@ -53,8 +64,9 @@ void main() {
     });
 
     test('profile URLs use the backend /api/uploads mount', () {
+      final host = ApiConstants.baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
       expect(resolveProfilePictureUrls('users/avatar.jpg'), [
-        'https://imt-billbook.immortalgroup.in/api/uploads/users/avatar.jpg',
+        '$host/api/uploads/users/avatar.jpg',
       ]);
     });
 

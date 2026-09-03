@@ -23,6 +23,7 @@ import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/document_totals_summary.dart';
 import 'package:solar_sales/shared/widgets/party_address_fields.dart';
 import 'package:solar_sales/shared/widgets/warehouse_field.dart';
+import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
 
 import '../../data/models/quotation_model.dart';
 import '../providers/quotation_providers.dart';
@@ -82,6 +83,7 @@ class _QuotationFormScreenState
   String? _fromBranchId = '';
 
   bool _shipSameAsBill = true;
+  String? _marketingTemplateId;
 
   bool get isEdit => widget.quotationId != null;
 
@@ -125,6 +127,7 @@ class _QuotationFormScreenState
     _quotationNumber.text = q.quotationNumber;
     _notes.text = q.notes ?? '';
     _validUntil = q.validUntil;
+    _marketingTemplateId = q.marketingTemplateId;
 
     for (final line in _lines) {
       line.dispose();
@@ -401,6 +404,7 @@ class _QuotationFormScreenState
           shipSameAsBill:
               _shipSameAsBill,
           fromParty: fromParty,
+          marketingTemplateId: _marketingTemplateId,
         );
       } else {
         await repo.create(
@@ -419,6 +423,7 @@ class _QuotationFormScreenState
           shipSameAsBill:
               _shipSameAsBill,
           fromParty: fromParty,
+          marketingTemplateId: _marketingTemplateId,
         );
       }
 
@@ -1159,6 +1164,14 @@ class _QuotationFormScreenState
                           max: 500,
                           field: 'Notes',
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      MarketingTemplatePicker(
+                        appliesTo: 'quotation',
+                        value: _marketingTemplateId,
+                        onChanged: (id) =>
+                            setState(() => _marketingTemplateId = id),
+                        enabled: !_editBlocked,
                       ),
                     ],
                   ),

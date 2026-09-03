@@ -56,27 +56,13 @@ class AppRoutes {
     '/dashboard': (_) => const DashboardScreen(),
     '/settings': (_) => const SettingsScreen(),
     '/change-password': (_) => const ChangePasswordScreen(),
+    '/solar/converted-leads': (_) =>
+        const AllLeadsScreen(convertedOnly: true),
     '/customer/lead-form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is LeadModel) {
-        return LeadFormScreen(
-          mode: LeadFormMode.completeDetails,
-          existingLead: args,
-          customerPortal: true,
-        );
-      }
-      if (args is Map) {
-        return LeadFormScreen(
-          mode: LeadFormMode.completeDetails,
-          customerPortal: true,
-          customerDraft: {
-            for (final entry in args.entries)
-              entry.key.toString(): entry.value?.toString() ?? '',
-          },
-        );
-      }
-      return const LeadFormScreen(
-        mode: LeadFormMode.basicCreate,
+      return LeadFormScreen(
+        mode: LeadFormMode.completeDetails,
+        existingLead: args is LeadModel ? args : null,
         customerPortal: true,
       );
     },

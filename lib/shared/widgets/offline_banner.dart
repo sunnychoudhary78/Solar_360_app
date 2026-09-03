@@ -18,8 +18,9 @@ class OfflineBanner extends ConsumerWidget {
     await ref.read(connectivityRecheckProvider.future);
 
     ref.invalidate(allLeadsProvider);
-    ref.invalidate(leadListProvider(false));
-    ref.invalidate(leadListProvider(true));
+    ref.invalidate(leadListProvider(LeadListScope.all));
+    ref.invalidate(leadListProvider(LeadListScope.converted));
+    ref.invalidate(leadListProvider(LeadListScope.completed));
     ref.invalidate(unreadNotificationCountProvider);
 
     try {

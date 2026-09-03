@@ -40,6 +40,7 @@ class QuotationRepository {
     PartyAddressModel? shipTo,
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
+    String? marketingTemplateId,
     required bool clearNotesIfEmpty,
   }) {
     final resolvedShip = shipSameAsBill ? billTo : shipTo;
@@ -56,6 +57,8 @@ class QuotationRepository {
       if (resolvedShip != null) 'shipTo': resolvedShip.toJson(),
       'shipSameAsBill': shipSameAsBill,
       if (fromParty != null && fromParty.isNotEmpty) 'fromParty': fromParty,
+      'marketing_template_id':
+          (marketingTemplateId ?? '').trim().isEmpty ? null : marketingTemplateId,
     };
   }
 
@@ -69,6 +72,7 @@ class QuotationRepository {
     PartyAddressModel? shipTo,
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
+    String? marketingTemplateId,
   }) {
     return _api.create(
       _payload(
@@ -81,6 +85,7 @@ class QuotationRepository {
         shipTo: shipTo,
         shipSameAsBill: shipSameAsBill,
         fromParty: fromParty,
+        marketingTemplateId: marketingTemplateId,
         clearNotesIfEmpty: false,
       ),
     );
@@ -97,6 +102,7 @@ class QuotationRepository {
     PartyAddressModel? shipTo,
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
+    String? marketingTemplateId,
   }) {
     return _api.update(
       id,
@@ -110,6 +116,7 @@ class QuotationRepository {
         shipTo: shipTo,
         shipSameAsBill: shipSameAsBill,
         fromParty: fromParty,
+        marketingTemplateId: marketingTemplateId,
         clearNotesIfEmpty: true,
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/core/workflow/lead_workflow.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
@@ -13,8 +14,19 @@ import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 class AllLeadsScreen extends ConsumerStatefulWidget {
   final bool completedOnly;
+  final bool convertedOnly;
 
-  const AllLeadsScreen({super.key, this.completedOnly = false});
+  const AllLeadsScreen({
+    super.key,
+    this.completedOnly = false,
+    this.convertedOnly = false,
+  });
+
+  LeadListScope get scope {
+    if (convertedOnly) return LeadListScope.converted;
+    if (completedOnly) return LeadListScope.completed;
+    return LeadListScope.all;
+  }
 
   @override
   ConsumerState<AllLeadsScreen> createState() => _AllLeadsScreenState();
@@ -31,7 +43,7 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
   }
 
   LeadListNotifier get _notifier =>
-      ref.read(leadListProvider(widget.completedOnly).notifier);
+      ref.read(leadListProvider(widget.scope).notifier);
 
   Future<void> _refreshLeads() => _notifier.refresh();
 
@@ -53,16 +65,23 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
     setState(() => _openingLead = false);
   }
 
+  String get _title {
+    if (widget.convertedOnly) return 'Converted Lead';
+    if (widget.completedOnly) return 'Completed Leads';
+    return 'All Leads';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(leadListProvider(widget.completedOnly));
+    final state = ref.watch(leadListProvider(widget.scope));
     final canCreate = ref.watch(authProvider).hasPermission('lead.create');
+    final scoped = widget.completedOnly || widget.convertedOnly;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
       appBar: AppAppBar(
-        title: widget.completedOnly ? 'Completed Leads' : 'All Leads',
+        title: _title,
         subtitle: 'Green Energy pipeline',
         actions: [
           Tooltip(
@@ -74,7 +93,7 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
           ),
         ],
       ),
-      floatingActionButton: canCreate && !widget.completedOnly
+      floatingActionButton: canCreate && !scoped
           ? FloatingActionButton.extended(
               icon: const Icon(Icons.add_rounded),
               label: const Text('Create Lead'),
@@ -126,12 +145,16 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
                         onRefresh: _refreshLeads,
                         onLoadMore: () => _notifier.loadMore(),
                         empty: EmptyState(
-                          title: widget.completedOnly
-                              ? 'No completed leads found'
-                              : 'No leads found',
+                          title: widget.convertedOnly
+                              ? 'No converted leads yet'
+                              : widget.completedOnly
+                                  ? 'No completed leads found'
+                                  : 'No leads found',
                           subtitle: state.search.isNotEmpty
                               ? 'Try a different search'
-                              : 'Leads will appear here',
+                              : widget.completedOnly
+                                  ? 'Final Complete, Lead Completed, or Lead Closed appear here'
+                                  : 'Leads will appear here',
                           icon: Icons.handshake_outlined,
                         ),
                         itemBuilder: (context, lead, index) {
@@ -149,7 +172,11 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
                                 lead.currentDepartment,
                             ].join(' · '),
                             leadingIcon: Icons.handshake_rounded,
-                            status: lead.status.isEmpty ? null : lead.status,
+                            status: lead.status.isEmpty
+                                ? null
+                                : LeadWorkflow.getStatusDisplayLabel(
+                                    lead.status,
+                                  ),
                             onTap: _openingLead
                                 ? null
                                 : () => _openLead(lead),

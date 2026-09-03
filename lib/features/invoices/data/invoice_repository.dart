@@ -34,6 +34,7 @@ class InvoiceRepository {
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
     List<InvoiceItemModel>? items,
+    String? marketingTemplateId,
   }) =>
       _api.createFromQuotation(
         quotationId: quotationId,
@@ -47,6 +48,7 @@ class InvoiceRepository {
         shipSameAsBill: shipSameAsBill,
         fromParty: fromParty,
         items: items,
+        marketingTemplateId: marketingTemplateId,
       );
 
   Future<InvoiceModel> createDirect({
@@ -61,6 +63,7 @@ class InvoiceRepository {
     PartyAddressModel? shipTo,
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
+    String? marketingTemplateId,
   }) {
     final resolvedShip = shipSameAsBill ? billTo : shipTo;
     return _api.create({
@@ -79,6 +82,8 @@ class InvoiceRepository {
       if (resolvedShip != null) 'shipTo': resolvedShip.toJson(),
       'shipSameAsBill': shipSameAsBill,
       if (fromParty != null && fromParty.isNotEmpty) 'fromParty': fromParty,
+      'marketing_template_id':
+          (marketingTemplateId ?? '').trim().isEmpty ? null : marketingTemplateId,
     });
   }
 
@@ -94,6 +99,7 @@ class InvoiceRepository {
     PartyAddressModel? shipTo,
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
+    String? marketingTemplateId,
   }) {
     final resolvedShip = shipSameAsBill ? billTo : shipTo;
     return _api.update(id, {
@@ -108,6 +114,8 @@ class InvoiceRepository {
       if (resolvedShip != null) 'shipTo': resolvedShip.toJson(),
       'shipSameAsBill': shipSameAsBill,
       if (fromParty != null && fromParty.isNotEmpty) 'fromParty': fromParty,
+      'marketing_template_id':
+          (marketingTemplateId ?? '').trim().isEmpty ? null : marketingTemplateId,
     });
   }
 

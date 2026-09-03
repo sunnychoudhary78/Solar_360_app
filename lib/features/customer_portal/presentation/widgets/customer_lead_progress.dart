@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:solar_sales/core/workflow/lead_workflow.dart';
 import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/widgets/workflow_stepper.dart';
@@ -20,11 +21,9 @@ class CustomerLeadProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final draft = existingEditableCustomerLead(leads);
-    final draftLeads = draft == null ? const <LeadModel>[] : [draft];
-    final pipelineLeads = leads
-        .where((lead) => lead.isActive && !canCustomerEditLead(lead))
-        .toList();
+    final draftLeads = customerDraftLeads(leads);
+    final pipelineLeads = customerPipelineLeads(leads);
+    final canFill = canCustomerFillOrComplete(leads);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,7 +42,7 @@ class CustomerLeadProgress extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'After conversion you can track the current stage here.',
+                    'Only your own leads are shown here. After conversion you can track the current stage.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -51,7 +50,7 @@ class CustomerLeadProgress extends StatelessWidget {
                 ],
               ),
             ),
-            if (onFillDetails != null)
+            if (canFill && onFillDetails != null)
               FilledButton.tonal(
                 onPressed: onFillDetails,
                 child: Text(
@@ -59,7 +58,7 @@ class CustomerLeadProgress extends StatelessWidget {
                       ? 'Complete details'
                       : existingEditableCustomerLead(leads) != null
                           ? 'Edit details'
-                          : 'Fill details',
+                          : 'Fill lead details',
                 ),
               ),
           ],
@@ -73,20 +72,20 @@ class CustomerLeadProgress extends StatelessWidget {
                 Icon(Icons.assignment_outlined, color: scheme.outline, size: 32),
                 const SizedBox(height: 10),
                 const Text(
-                  'Start with basic details',
+                  'Complete your lead details',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Fill your basic information, then complete the full lead form yourself. Sales will process the status after you submit.',
+                  'Fill in your information. Once your lead is converted, fill and update options will be hidden.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
-                if (onFillDetails != null) ...[
+                if (canFill && onFillDetails != null) ...[
                   const SizedBox(height: 14),
                   FilledButton(
                     onPressed: onFillDetails,
-                    child: const Text('Fill basic details'),
+                    child: const Text('Fill lead details'),
                   ),
                 ],
               ],
@@ -126,21 +125,33 @@ class CustomerLeadProgress extends StatelessWidget {
                       Chip(
                         visualDensity: VisualDensity.compact,
                         label: Text(
-                          lead.status.isEmpty ? 'New Lead' : lead.status,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => onEditDetails(lead),
-                          child: Text(
-                            isCustomerLeadIncomplete(lead)
-                                ? 'Complete details'
-                                : 'Edit details',
+                          LeadWorkflow.getStatusDisplayLabel(
+                            lead.status.isEmpty ? 'New Lead' : lead.status,
                           ),
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        LeadWorkflow.nextActorHint(lead.status),
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (canFill) ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => onEditDetails(lead),
+                            child: Text(
+                              isCustomerLeadIncomplete(lead)
+                                  ? 'Complete details'
+                                  : 'Edit details',
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -149,7 +160,7 @@ class CustomerLeadProgress extends StatelessWidget {
           if (pipelineLeads.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              'In progress',
+              'Converted leads — current stage',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                     fontWeight: FontWeight.w700,
@@ -159,18 +170,27 @@ class CustomerLeadProgress extends StatelessWidget {
             for (final lead in pipelineLeads)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 8),
-                      child: Text(
+                child: AppCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         lead.fullName.isEmpty ? 'Your lead' : lead.fullName,
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
-                    ),
-                    WorkflowStepper(currentStatus: lead.status),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (lead.leadCode.isNotEmpty) lead.leadCode,
+                          if (lead.city.isNotEmpty) lead.city,
+                        ].join(' · '),
+                        style: TextStyle(color: scheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 10),
+                      WorkflowStepper(currentStatus: lead.status),
+                    ],
+                  ),
                 ),
               ),
           ],

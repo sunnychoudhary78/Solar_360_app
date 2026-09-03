@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/core/workflow/lead_workflow.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
@@ -165,7 +166,19 @@ class _SolarHomeContent extends ConsumerWidget {
       auth.hasPermission,
     );
 
-    final leadCount = leadsAsync.asData?.value.length ?? 0;
+    final leads = leadsAsync.asData?.value ?? const [];
+    final leadCount = leads.length;
+    final convertedCount = leads
+        .where((lead) => LeadWorkflow.isConvertedPipelineStatus(lead.status))
+        .length;
+    final completedCount = leads
+        .where(
+          (lead) => LeadWorkflow.isCompletedStatus(
+            lead.status,
+            department: lead.currentDepartment,
+          ),
+        )
+        .length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,9 +200,27 @@ class _SolarHomeContent extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: MetricTile(
-                    label: 'Your role',
-                    value: auth.roleName.isNotEmpty ? auth.roleName : '—',
-                    icon: Icons.badge_outlined,
+                    label: 'Converted',
+                    value: '$convertedCount',
+                    icon: Icons.verified_outlined,
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      '/solar/converted-leads',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: MetricTile(
+                    label: 'Completed',
+                    value: '$completedCount',
+                    icon: Icons.task_alt_outlined,
+                    onTap: auth.hasPermission('closedlead.read')
+                        ? () => Navigator.pushNamed(
+                              context,
+                              '/solar/completed-leads',
+                            )
+                        : null,
                   ),
                 ),
               ],

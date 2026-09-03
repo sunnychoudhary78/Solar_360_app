@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/theme/theme_mode_provider.dart';
-import 'package:solar_sales/core/workflow/lead_workflow.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/module/presentation/widgets/module_toggle.dart';
 import 'package:solar_sales/features/notifications/presentation/providers/notification_providers.dart';
@@ -58,10 +57,6 @@ class AppDrawer extends ConsumerWidget {
       return auth.hasPermission(permission);
     }
 
-    final isSolarSalesUser =
-        activeModule == AppModules.solar &&
-        LeadWorkflow.resolveRoleKey(auth.effectiveRoleName) == 'Sales';
-
     final sections = <NavSection>[
       NavSection.main,
       NavSection.catalog,
@@ -83,21 +78,6 @@ class AppDrawer extends ConsumerWidget {
             : '${assignedRoles.length} assigned role${assignedRoles.length == 1 ? '' : 's'}',
         onTap: () async {
           await _showRoleSwitcher(context, ref);
-        },
-      );
-    }
-
-    Widget customersTile() {
-      final dest = NavDestinations.solarCustomers;
-      return AppDrawerTile(
-        index: animIndex++,
-        icon: dest.icon,
-        selectedIcon: dest.effectiveSelectedIcon,
-        title: dest.label,
-        isActive: _isActive(dest, routeName),
-        onTap: () {
-          Navigator.pop(context);
-          onSelectDestination(dest);
         },
       );
     }
@@ -134,21 +114,15 @@ class AppDrawer extends ConsumerWidget {
           ),
         );
 
-        // Sales User only: Customers sits above Switch Role (after Alerts).
+        // Switch Role sits after Alerts / Notifications in Main.
         if (!switchRoleInserted &&
             (dest.id == 'ge_alerts' || dest.id == 'bb_notifications')) {
-          if (isSolarSalesUser) {
-            navChildren.add(customersTile());
-          }
           navChildren.add(switchRoleTile());
           switchRoleInserted = true;
         }
       }
 
       if (!switchRoleInserted && section == NavSection.main) {
-        if (isSolarSalesUser) {
-          navChildren.add(customersTile());
-        }
         navChildren.add(switchRoleTile());
         switchRoleInserted = true;
       }
@@ -156,9 +130,6 @@ class AppDrawer extends ConsumerWidget {
 
     if (!switchRoleInserted) {
       navChildren.add(const AppDrawerSectionLabel('Account'));
-      if (isSolarSalesUser) {
-        navChildren.add(customersTile());
-      }
       navChildren.add(switchRoleTile());
     }
 

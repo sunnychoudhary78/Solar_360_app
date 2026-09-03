@@ -61,7 +61,8 @@ void main() {
       final converted = _lead(id: 'done', status: 'Converted');
       expect(existingEditableCustomerLead([converted, draft])?.id, 'draft');
       expect(existingEditableCustomerLead([converted]), isNull);
-      expect(canCustomerFillOrComplete([converted, draft]), isTrue);
+      expect(canCustomerFillOrComplete([converted, draft]), isFalse);
+      expect(canCustomerFillOrComplete([draft]), isTrue);
     });
 
     test('inactive leftovers are reused instead of creating another lead', () {
@@ -98,6 +99,15 @@ void main() {
         'load_section_kw': '5',
       });
       expect(existingEditableCustomerLead([newer, older])?.id, 'old');
+    });
+
+    test('all pre-convert drafts are listed, not only the ranked first', () {
+      final first = _lead(id: 'a');
+      final second = _lead(id: 'b', status: 'Follow Up');
+      expect(
+        customerDraftLeads([first, second]).map((lead) => lead.id),
+        ['a', 'b'],
+      );
     });
 
     test('fill/complete action continues an incomplete draft', () {

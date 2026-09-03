@@ -22,8 +22,9 @@ void invalidateRoleScopedData(Ref ref) {
 
   ref.invalidate(reportsProvider);
   ref.invalidate(allLeadsProvider);
-  ref.invalidate(leadListProvider(false));
-  ref.invalidate(leadListProvider(true));
+  ref.invalidate(leadListProvider(LeadListScope.all));
+  ref.invalidate(leadListProvider(LeadListScope.converted));
+  ref.invalidate(leadListProvider(LeadListScope.completed));
   ref.invalidate(unreadNotificationCountProvider);
   ref.invalidate(myNotificationsProvider);
   ref.invalidate(pendingQuotationsProvider);

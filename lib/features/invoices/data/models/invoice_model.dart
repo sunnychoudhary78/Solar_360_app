@@ -90,6 +90,7 @@ class InvoiceModel {
   final PartyAddressModel? shipTo;
   final PartyAddressModel? fromParty;
   final String? fromBranchId;
+  final String? marketingTemplateId;
 
   const InvoiceModel({
     required this.id,
@@ -115,6 +116,7 @@ class InvoiceModel {
     this.shipTo,
     this.fromParty,
     this.fromBranchId,
+    this.marketingTemplateId,
   });
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -179,6 +181,11 @@ class InvoiceModel {
           ? fromPartyRaw['branch_id']?.toString() ??
                 fromPartyRaw['branchId']?.toString()
           : null,
+      marketingTemplateId: json['marketing_template_id']?.toString() ??
+          json['marketingTemplateId']?.toString() ??
+          (json['marketingTemplate'] is Map
+              ? (json['marketingTemplate'] as Map)['id']?.toString()
+              : null),
     );
   }
 

@@ -9,6 +9,7 @@ import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/utils/upload_url.dart';
 import 'package:solar_sales/features/installation/presentation/providers/installation_providers.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
+import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
@@ -186,7 +187,7 @@ class _InstallationFormScreenState
       selectedInstallationImages.isNotEmpty ||
       existingInstallationImages.isNotEmpty;
 
-  Future<void> _save() async {
+  Future<void> _save({bool markAsDone = false}) async {
     FocusScope.of(context).unfocus();
 
     if (widget.materialOnly) {
@@ -277,10 +278,36 @@ class _InstallationFormScreenState
       'application_no': applicationNo.text.trim(),
       'sp_numbers': spNumbers,
       'installation_status': 'In Progress',
-    });
+    }, markAsDone: markAsDone);
   }
 
-  Future<void> _persist(Map<String, dynamic> body) async {
+  Future<void> _syncLeadStatusAfterSave({required bool markAsDone}) async {
+    try {
+      final repo = ref.read(leadRepositoryProvider);
+      if (markAsDone) {
+        await repo.updateLeadStatus(
+          leadId: widget.lead.id,
+          status: 'Installation Done',
+          remarks: 'Installation completed via form.',
+        );
+        return;
+      }
+      if (widget.lead.status.trim() == 'Amount Received') {
+        await repo.updateLeadStatus(
+          leadId: widget.lead.id,
+          status: 'Installation In Progress',
+          remarks: 'Installation details filled, moving to in progress.',
+        );
+      }
+    } catch (_) {
+      // Match web: save still succeeds if auto-status patch is rejected.
+    }
+  }
+
+  Future<void> _persist(
+    Map<String, dynamic> body, {
+    bool markAsDone = false,
+  }) async {
     setState(() => loading = true);
 
     try {
@@ -302,12 +329,18 @@ class _InstallationFormScreenState
 
       if (!mounted) return;
 
+      await _syncLeadStatusAfterSave(markAsDone: markAsDone);
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            widget.materialOnly
-                ? 'Material details saved successfully'
-                : 'Installation photos saved successfully',
+            markAsDone
+                ? 'Lead sent to next step successfully'
+                : widget.materialOnly
+                    ? 'Material details saved successfully'
+                    : 'Installation photos saved successfully',
           ),
         ),
       );
@@ -468,7 +501,7 @@ class _InstallationFormScreenState
             width: double.infinity,
             height: 54,
             child: FilledButton(
-              onPressed: loading ? null : _save,
+              onPressed: loading ? null : () => _save(),
               child: loading
                   ? SizedBox(
                       height: 22,
@@ -484,6 +517,20 @@ class _InstallationFormScreenState
                     ),
             ),
           ),
+          if (!widget.materialOnly) ...[
+            const SizedBox(height: AppSpacing.sm),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: OutlinedButton(
+                onPressed: loading ? null : () => _save(markAsDone: true),
+                child: const Text(
+                  'Mark installation done',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

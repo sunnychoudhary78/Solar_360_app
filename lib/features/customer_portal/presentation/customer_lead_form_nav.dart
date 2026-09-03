@@ -1,33 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:solar_sales/core/widgets/app_message.dart';
+import 'package:solar_sales/core/workflow/lead_workflow.dart';
+import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.dart';
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 
-/// Opens the customer lead form.
+/// Opens the customer lead form as a single full form (web LeadFormDialog).
 ///
-/// [lead] == null → basic details in memory, then the full form POSTs one new
-/// lead (with files) only when this customer has no draft yet.
-/// [lead] != null → complete / edit form JSON-PUTs that same lead.
+/// Reuses an existing New Lead / Follow Up / Rejected draft via PUT instead of
+/// POSTing a second lead onto the staff list.
 Future<void> openCustomerLeadForm(
   BuildContext context,
   WidgetRef ref, {
   LeadModel? lead,
 }) async {
-  var result = await Navigator.pushNamed(
+  final leads = ref.read(customerLeadsProvider).asData?.value ?? const <LeadModel>[];
+  if (hasConvertedCustomerLead(leads) &&
+      (lead == null || !canCustomerEditLead(lead))) {
+    showAppMessage(
+      context,
+      LeadWorkflow.convertedLeadLockMessage,
+      isError: true,
+    );
+    return;
+  }
+
+  final target = lead ?? existingEditableCustomerLead(leads);
+  final result = await Navigator.pushNamed(
     context,
     '/customer/lead-form',
-    arguments: lead,
+    arguments: target,
   );
-
-  if (lead == null && result is Map) {
-    if (!context.mounted) return;
-    result = await Navigator.pushNamed(
-      context,
-      '/customer/lead-form',
-      arguments: result,
-    );
-  }
 
   if (result == true) {
     ref.invalidate(customerLeadsProvider);

@@ -264,7 +264,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   void initState() {
     super.initState();
 
-    if (_isCompleteDetails) {
+    if (_isCompleteDetails || widget.customerPortal) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _isClosing) return;
         setState(() => _mediaSectionReady = true);
@@ -293,7 +293,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
     _applyCustomerSiteChecklistDefaults();
 
-    if (_isBasicCreate) {
+    if (_isBasicCreate || widget.customerPortal) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _fetchCurrentLocation();
       });
@@ -1410,20 +1410,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         );
         return;
       }
-    }
-
-    if (widget.customerPortal && _isBasicCreate) {
-      Navigator.of(context).pop(<String, String>{
-        'full_name': fullName.text.trim(),
-        'mobile': mobile.text.trim(),
-        'email': email.text.trim(),
-        'address': address.text.trim(),
-        'city': city.text.trim(),
-        'state': state.text.trim(),
-        'pincode': pincode.text.trim(),
-        'load_section_kw': kw.text.trim(),
-      });
-      return;
     }
 
     final data = <String, dynamic>{
@@ -2853,12 +2839,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       resizeToAvoidBottomInset: true,
       appBar: AppAppBar(
         title: widget.customerPortal
-            ? (_isBasicCreate
-                ? 'Fill basic details'
-                : (widget.existingLead != null &&
-                      isCustomerLeadIncomplete(widget.existingLead!)
-                  ? 'Complete lead details'
-                  : 'Edit lead details'))
+            ? (widget.existingLead != null &&
+                    isCustomerLeadIncomplete(widget.existingLead!)
+                ? 'Complete lead details'
+                : widget.existingLead != null
+                    ? 'Edit lead details'
+                    : 'Fill lead details')
             : _isCompleteDetails
             ? 'Complete Lead Details'
             : 'Create Lead (Basic)',
@@ -3108,15 +3094,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     projectType = value;
                   },
                 ),
-                dropdown(
-                  label: 'Source',
-                  value: source,
-                  items: sourceOptions,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    source = value;
-                  },
-                ),
+                if (!widget.customerPortal)
+                  dropdown(
+                    label: 'Source',
+                    value: source,
+                    items: sourceOptions,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      source = value;
+                    },
+                  ),
                 dropdown(
                   label: 'Priority',
                   value: priority,
@@ -3305,9 +3292,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                           ),
                         )
                       : Text(
-                          widget.customerPortal && _isBasicCreate
-                              ? 'Save & continue'
-                              : widget.customerPortal && _isCompleteDetails
+                          widget.customerPortal
                               ? 'Submit details'
                               : _isCompleteDetails
                               ? 'Save Details'

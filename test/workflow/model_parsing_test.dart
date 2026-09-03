@@ -71,6 +71,21 @@ void main() {
       expect(DocumentWorkflow.isInvoiceApproved(inv.status), isTrue);
     });
 
+    test('quotation and invoice parse marketing_template_id', () {
+      final q = QuotationModel.fromJson({
+        'id': 'q1',
+        'marketing_template_id': 'tpl-q',
+        'items': [],
+      });
+      final inv = InvoiceModel.fromJson({
+        'id': 'inv1',
+        'marketingTemplate': {'id': 'tpl-i', 'name': 'Invoice wrap'},
+        'items': [],
+      });
+      expect(q.marketingTemplateId, 'tpl-q');
+      expect(inv.marketingTemplateId, 'tpl-i');
+    });
+
     test('ItemModel parses pending → approved', () {
       final pending = ItemModel.fromJson({
         'id': 'i1',

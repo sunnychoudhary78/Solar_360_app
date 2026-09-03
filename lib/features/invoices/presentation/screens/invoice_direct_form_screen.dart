@@ -18,6 +18,7 @@ import 'package:solar_sales/shared/widgets/document_totals_summary.dart';
 import 'package:solar_sales/shared/widgets/invoice_dispatch_fields.dart';
 import 'package:solar_sales/shared/widgets/party_address_fields.dart';
 import 'package:solar_sales/shared/widgets/warehouse_field.dart';
+import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
 
 import '../../data/models/invoice_model.dart';
 import '../providers/invoice_providers.dart';
@@ -62,6 +63,7 @@ class _InvoiceDirectFormScreenState
   PartyAddressModel _shipTo = PartyAddressModel.empty();
   String? _fromBranchId = '';
   bool _shipSameAsBill = true;
+  String? _marketingTemplateId;
 
   @override
   void initState() {
@@ -193,6 +195,7 @@ class _InvoiceDirectFormScreenState
             shipTo: _shipSameAsBill ? _billTo : _shipTo,
             shipSameAsBill: _shipSameAsBill,
             fromParty: _fromPartyPayload(),
+            marketingTemplateId: _marketingTemplateId,
           );
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showSuccess('Invoice created');
@@ -375,6 +378,13 @@ class _InvoiceDirectFormScreenState
                     max: 500,
                     field: 'Notes',
                   ),
+                ),
+                const SizedBox(height: 12),
+                MarketingTemplatePicker(
+                  appliesTo: 'invoice',
+                  value: _marketingTemplateId,
+                  onChanged: (id) =>
+                      setState(() => _marketingTemplateId = id),
                 ),
                 const SizedBox(height: 20),
                 DocumentTotalsSummary(lines: _lineTotalsInputs()),

@@ -18,6 +18,7 @@ import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/document_totals_summary.dart';
 import 'package:solar_sales/shared/widgets/invoice_dispatch_fields.dart';
 import 'package:solar_sales/shared/widgets/party_address_fields.dart';
+import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
 import 'package:solar_sales/shared/widgets/warehouse_field.dart';
 
 import '../../data/models/invoice_model.dart';
@@ -68,6 +69,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   PartyAddressModel _shipTo = PartyAddressModel.empty();
   String? _fromBranchId = '';
   bool _shipSameAsBill = true;
+  String? _marketingTemplateId;
 
   @override
   void dispose() {
@@ -91,6 +93,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     _motorVehicleNo.text = inv.motorVehicleNo ?? '';
     _ewayBillNo.text = inv.ewayBillNo ?? '';
     _notes.text = inv.notes ?? '';
+    _marketingTemplateId = inv.marketingTemplateId;
     for (final l in _lines) {
       l.dispose();
     }
@@ -216,6 +219,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             shipTo: _shipSameAsBill ? _billTo : _shipTo,
             shipSameAsBill: _shipSameAsBill,
             fromParty: _fromPartyPayload(),
+            marketingTemplateId: _marketingTemplateId,
           );
       ref.invalidate(invoiceListProvider);
       ref.invalidate(pendingInvoicesProvider);
@@ -414,6 +418,12 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               inputFormatters: [LengthLimitingTextInputFormatter(500)],
               validator: (v) =>
                   AppValidators.maxLength(v, max: 500, field: 'Notes'),
+            ),
+            const SizedBox(height: 12),
+            MarketingTemplatePicker(
+              appliesTo: 'invoice',
+              value: _marketingTemplateId,
+              onChanged: (id) => setState(() => _marketingTemplateId = id),
             ),
             const SizedBox(height: 16),
             DocumentTotalsSummary(lines: _lineTotalsInputs()),

@@ -44,6 +44,7 @@ class _CustomerSupportFormScreenState
         .showLoading('Submitting request...');
     try {
       await ref.read(customerPortalApiServiceProvider).createTicket({
+        'source': 'customer_portal',
         'request_type': _requestType,
         'subject': _subject.text.trim(),
         'description': _description.text.trim(),

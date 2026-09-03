@@ -18,6 +18,7 @@ import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/document_totals_summary.dart';
 import 'package:solar_sales/shared/widgets/invoice_dispatch_fields.dart';
 import 'package:solar_sales/shared/widgets/party_address_fields.dart';
+import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
 import 'package:solar_sales/shared/widgets/warehouse_field.dart';
 
 import '../../data/models/invoice_model.dart';
@@ -63,6 +64,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   PartyAddressModel _shipTo = PartyAddressModel.empty();
   String? _fromBranchId = '';
   bool _shipSameAsBill = true;
+  String? _marketingTemplateId;
   String? _paymentMode;
   QuotationModel? _preview;
 
@@ -150,6 +152,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         if (_notes.text.isEmpty && q.notes != null) {
           _notes.text = q.notes!;
         }
+        _marketingTemplateId ??= q.marketingTemplateId;
         _fillLinesFromQuotation(q);
       });
     } catch (e) {
@@ -239,6 +242,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             shipSameAsBill: _shipSameAsBill,
             fromParty: _fromPartyPayload(),
             items: items,
+            marketingTemplateId: _marketingTemplateId,
           );
       ref.invalidate(invoiceListProvider);
       ref.invalidate(quotationListProvider);
@@ -471,6 +475,13 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                         max: 500,
                         field: 'Notes',
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    MarketingTemplatePicker(
+                      appliesTo: 'invoice',
+                      value: _marketingTemplateId,
+                      onChanged: (id) =>
+                          setState(() => _marketingTemplateId = id),
                     ),
                     if (_lines.isNotEmpty) ...[
                       const SizedBox(height: 12),

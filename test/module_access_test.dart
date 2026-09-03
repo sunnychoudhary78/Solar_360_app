@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:solar_sales/features/shell/presentation/nav_destinations.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
 
 void main() {
@@ -126,6 +127,43 @@ void main() {
       expect(normalizeProductModule('green_energy'), AppModules.solar);
       expect(normalizeProductModule('erp'), AppModules.billbook);
       expect(normalizeProductModule('nope'), isNull);
+    });
+  });
+
+  group('Green Energy nav permissions match web', () {
+    AppDestination dest(String id) =>
+        NavDestinations.solar.firstWhere((d) => d.id == id);
+
+    test('leads and converted use leads.read or lead.read', () {
+      expect(dest('ge_leads').visibleFor((p) => p == 'leads.read'), isTrue);
+      expect(dest('ge_leads').visibleFor((p) => p == 'lead.read'), isTrue);
+      expect(dest('ge_converted').visibleFor((p) => p == 'lead.read'), isTrue);
+      expect(
+        dest('ge_converted').visibleFor((p) => p == 'invoice.read'),
+        isFalse,
+      );
+    });
+
+    test('customers use customer.read; completed uses closedlead.read', () {
+      expect(dest('ge_customers').visibleFor((p) => p == 'customer.read'), isTrue);
+      expect(dest('ge_customers').visibleFor((p) => p == 'lead.read'), isFalse);
+      expect(
+        dest('ge_completed').visibleFor((p) => p == 'closedlead.read'),
+        isTrue,
+      );
+      expect(dest('ge_completed').visibleFor((p) => p == 'lead.read'), isFalse);
+    });
+
+    test('support is visible with either solar or ticket permission', () {
+      expect(
+        dest('ge_support').visibleFor((p) => p == 'solar.support.read'),
+        isTrue,
+      );
+      expect(
+        dest('ge_support').visibleFor((p) => p == 'support_ticket.read'),
+        isTrue,
+      );
+      expect(dest('ge_support').visibleFor((p) => p == 'lead.read'), isFalse);
     });
   });
 }

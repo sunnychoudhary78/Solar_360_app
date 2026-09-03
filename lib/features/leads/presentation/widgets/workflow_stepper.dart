@@ -23,7 +23,8 @@ class WorkflowStepper extends StatelessWidget {
     final current = _currentIndex();
     final displayStatus = currentStatus.trim().isEmpty
         ? 'No status'
-        : currentStatus.trim();
+        : LeadWorkflow.getStatusDisplayLabel(currentStatus);
+    final hint = LeadWorkflow.nextActorHint(currentStatus);
     final trackColor = scheme.surfaceContainerHighest;
 
     return AppCard(
@@ -45,6 +46,14 @@ class WorkflowStepper extends StatelessWidget {
             style: textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            hint,
+            style: textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              fontSize: 11,
             ),
           ),
           const SizedBox(height: AppSpacing.md - 4),

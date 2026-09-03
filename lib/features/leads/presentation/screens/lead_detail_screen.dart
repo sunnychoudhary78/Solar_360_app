@@ -668,8 +668,21 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       return;
     }
 
+    if (nextStatus == 'KYC Collected') {
+      final missing = LeadWorkflow.getMissingKycDetails(_lead.toJson());
+      if (missing.isNotEmpty) {
+        showAppMessage(
+          context,
+          'Please complete KYC details first: ${missing.take(4).join(', ')}'
+          '${missing.length > 4 ? '…' : ''}',
+          isError: true,
+        );
+        return;
+      }
+    }
+
     String? remarks;
-    if (nextStatus == 'Follow Up' || nextStatus == 'Rejected') {
+    if (LeadWorkflow.requiresStatusRemarks(nextStatus)) {
       remarks = await _requestStatusRemarks(nextStatus);
       if (remarks == null || !mounted) return;
     }
@@ -1194,6 +1207,10 @@ registration_time=${result.regTime.trim()}
         isInstallationUser && isInstallationDoneAndMovedToSupport
         ? <String>[]
         : nextStatuses.where((status) {
+            if (status == 'KYC Collected' &&
+                !LeadWorkflow.hasFilledKycDetails(_lead.toJson())) {
+              return false;
+            }
             if (status == 'Material Completed' &&
                 roleKey == 'Material Engineer' &&
                 !materialDetailsFilled) {

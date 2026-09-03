@@ -128,7 +128,7 @@ class ApiEndpoints {
       'notifications/mark-as-read/$id';
   static const markAllNotificationsRead = 'notifications/mark-all-as-read';
 
-  // Profile photo
+  static const marketingTemplates = 'marketing-templates';
   static const employeePhoto = 'employee-photo';
   static const employeePhotoUpload = 'employee-photo/photo';
 }

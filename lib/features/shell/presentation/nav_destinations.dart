@@ -34,6 +34,7 @@ class AppDestination {
     required this.section,
     required this.kind,
     this.permission = '',
+    this.anyOf = const <String>[],
     this.route,
     this.screen,
     this.quickAction = false,
@@ -50,6 +51,9 @@ class AppDestination {
   /// Empty string = always visible (subject to module).
   final String permission;
 
+  /// If non-empty, destination is visible when the user has any of these.
+  final List<String> anyOf;
+
   /// Named route for [NavKind.route] destinations.
   final String? route;
 
@@ -61,13 +65,18 @@ class AppDestination {
   final String? quickActionSubtitle;
 
   IconData get effectiveSelectedIcon => selectedIcon ?? icon;
+
+  bool visibleFor(bool Function(String permission) hasPermission) {
+    if (anyOf.isNotEmpty) return anyOf.any(hasPermission);
+    if (permission.isEmpty) return true;
+    return hasPermission(permission);
+  }
 }
 
 class NavDestinations {
   NavDestinations._();
 
-  /// Green Energy Customers — shown in the drawer for Sales User only
-  /// (injected above Switch Role; not part of the default section list).
+  /// Green Energy Customers — also listed in [solar] for `customer.read`.
   static const AppDestination solarCustomers = AppDestination(
     id: 'ge_customers',
     label: 'Customers',
@@ -75,6 +84,7 @@ class NavDestinations {
     selectedIcon: Icons.people_rounded,
     section: NavSection.main,
     kind: NavKind.route,
+    permission: 'customer.read',
     route: '/customers',
   );
 
@@ -250,7 +260,7 @@ class NavDestinations {
       selectedIcon: Icons.handshake_rounded,
       section: NavSection.main,
       kind: NavKind.shellTab,
-      permission: 'lead.read',
+      anyOf: ['leads.read', 'lead.read'],
       screen: AllLeadsScreen(),
       quickAction: true,
       quickActionSubtitle: 'Pipeline overview',
@@ -267,13 +277,35 @@ class NavDestinations {
       quickActionSubtitle: 'Notifications',
     ),
     AppDestination(
+      id: 'ge_converted',
+      label: 'Converted Lead',
+      icon: Icons.verified_outlined,
+      selectedIcon: Icons.verified_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      anyOf: ['lead.read', 'leads.read', 'dashboard.read'],
+      route: '/solar/converted-leads',
+      quickAction: true,
+      quickActionSubtitle: 'Post-conversion pipeline',
+    ),
+    AppDestination(
+      id: 'ge_customers',
+      label: 'Customers',
+      icon: Icons.people_outline,
+      selectedIcon: Icons.people_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      permission: 'customer.read',
+      route: '/customers',
+    ),
+    AppDestination(
       id: 'ge_completed',
       label: 'Completed Leads',
       icon: Icons.task_alt_outlined,
       selectedIcon: Icons.task_alt_rounded,
       section: NavSection.solarCrm,
       kind: NavKind.route,
-      permission: 'lead.read',
+      permission: 'closedlead.read',
       route: '/solar/completed-leads',
     ),
     AppDestination(
@@ -295,7 +327,7 @@ class NavDestinations {
       selectedIcon: Icons.headset_mic_rounded,
       section: NavSection.solarCrm,
       kind: NavKind.shellTab,
-      permission: 'support_ticket.read',
+      anyOf: ['solar.support.read', 'support_ticket.read'],
       screen: SupportTicketsScreen(),
       quickAction: true,
       quickActionSubtitle: 'Customer requests',
@@ -322,8 +354,7 @@ class NavDestinations {
   ) {
     return forModule(moduleId).where((d) {
       if (d.kind != NavKind.shellTab) return false;
-      if (d.permission.isEmpty) return true;
-      return hasPermission(d.permission);
+      return d.visibleFor(hasPermission);
     }).toList();
   }
 
@@ -335,8 +366,7 @@ class NavDestinations {
   ) {
     return forModule(moduleId).where((d) {
       if (d.section != section) return false;
-      if (d.permission.isEmpty) return true;
-      return hasPermission(d.permission);
+      return d.visibleFor(hasPermission);
     }).toList();
   }
 
@@ -347,8 +377,7 @@ class NavDestinations {
   ) {
     return forModule(moduleId).where((d) {
       if (!d.quickAction) return false;
-      if (d.permission.isEmpty) return true;
-      return hasPermission(d.permission);
+      return d.visibleFor(hasPermission);
     }).toList();
   }
 

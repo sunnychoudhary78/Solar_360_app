@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/providers/network_providers.dart';
 import 'package:solar_sales/core/utils/role_utils.dart';
 import 'package:solar_sales/core/workflow/lead_workflow.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
 import 'package:solar_sales/features/leads/data/lead_api_service.dart';
 import 'package:solar_sales/features/leads/data/lead_repository.dart';
@@ -30,9 +31,11 @@ final allLeadsProvider = FutureProvider.autoDispose<List<LeadModel>>((
   return leads.where((lead) => lead.isActive).toList();
 });
 
-/// Client-chunked All Leads list. [completedOnly] mirrors Completed Leads screen.
+/// Client-chunked lead lists for All / Converted / Completed screens.
+enum LeadListScope { all, converted, completed }
+
 final leadListProvider =
-    NotifierProvider.family<LeadListNotifier, LeadListState, bool>(
+    NotifierProvider.family<LeadListNotifier, LeadListState, LeadListScope>(
       LeadListNotifier.new,
     );
 
@@ -93,21 +96,24 @@ class LeadListState {
   }
 }
 
-bool _isCompletedLead(LeadModel lead) {
-  return lead.status == 'Final Complete' ||
-      lead.status == 'Lead Completed' ||
-      lead.currentDepartment == 'Completed';
-}
-
-List<LeadModel> _completedFiltered(List<LeadModel> all, bool completedOnly) {
-  if (!completedOnly) return all;
-  return all.where(_isCompletedLead).toList();
+bool _matchesScope(LeadModel lead, LeadListScope scope) {
+  switch (scope) {
+    case LeadListScope.all:
+      return true;
+    case LeadListScope.converted:
+      return LeadWorkflow.isConvertedPipelineStatus(lead.status);
+    case LeadListScope.completed:
+      return LeadWorkflow.isCompletedStatus(
+        lead.status,
+        department: lead.currentDepartment,
+      );
+  }
 }
 
 class LeadListNotifier extends Notifier<LeadListState> {
-  LeadListNotifier(this.completedOnly);
+  LeadListNotifier(this.scope);
 
-  final bool completedOnly;
+  final LeadListScope scope;
   static const int pageSize = 20;
   Timer? _debounce;
 
@@ -121,7 +127,13 @@ class LeadListNotifier extends Notifier<LeadListState> {
   LeadRepository get _repo => ref.read(leadRepositoryProvider);
 
   List<LeadModel> _applyFilters(List<LeadModel> source) {
-    var list = _completedFiltered(source, completedOnly);
+    var list = source.where((lead) => _matchesScope(lead, scope)).toList();
+    final role = ref.read(authProvider).effectiveRoleName;
+    if (!LeadWorkflow.canViewRejectedLeads(role)) {
+      list = list
+          .where((lead) => !LeadWorkflow.isRejectedStatus(lead.status))
+          .toList();
+    }
     final status = state.statusFilter;
     if (status != null && status.isNotEmpty && status != 'All') {
       list = list.where((l) => l.status.trim() == status).toList();
