@@ -45,6 +45,26 @@ LeadModel? existingEditableCustomerLead(List<LeadModel> leads) {
   return editable.first;
 }
 
+/// Id to PUT on save. Prefers the open form's lead, then any reusable draft.
+/// Never returns a converted/pipeline lead.
+String? reusableCustomerLeadId({
+  String? existingLeadId,
+  required List<LeadModel> existingLeads,
+}) {
+  final fromForm = (existingLeadId ?? '').trim();
+  if (fromForm.isNotEmpty) {
+    LeadModel? match;
+    for (final lead in existingLeads) {
+      if (lead.id == fromForm) {
+        match = lead;
+        break;
+      }
+    }
+    if (match == null || canCustomerEditLead(match)) return fromForm;
+  }
+  return existingEditableCustomerLead(existingLeads)?.id.trim();
+}
+
 LeadModel? customerLeadNeedingCompletion(List<LeadModel> leads) {
   final draft = existingEditableCustomerLead(leads);
   if (draft != null && isCustomerLeadIncomplete(draft)) return draft;
@@ -52,7 +72,9 @@ LeadModel? customerLeadNeedingCompletion(List<LeadModel> leads) {
 }
 
 List<LeadModel> customerDraftLeads(List<LeadModel> leads) {
-  return leads.where(canCustomerEditLead).toList();
+  return leads
+      .where((lead) => lead.isActive && canCustomerEditLead(lead))
+      .toList();
 }
 
 List<LeadModel> customerPipelineLeads(List<LeadModel> leads) {

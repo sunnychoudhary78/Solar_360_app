@@ -110,6 +110,44 @@ void main() {
       );
     });
 
+    test('inactive leftovers stay hidden but are reused instead of a new POST', () {
+      final inactive = LeadModel.fromJson({
+        'id': 'ghost',
+        'status': 'New Lead',
+        'is_active': false,
+        'full_name': 'Ghost',
+        'mobile': '9876543210',
+      });
+      expect(customerDraftLeads([inactive]), isEmpty);
+      expect(canCustomerCreateLead([inactive]), isFalse);
+      expect(
+        reusableCustomerLeadId(
+          existingLeadId: null,
+          existingLeads: [inactive],
+        ),
+        'ghost',
+      );
+    });
+
+    test('edit save reuses the open lead id even when another draft exists', () {
+      final first = _lead(id: 'keep');
+      final extra = _lead(id: 'extra');
+      expect(
+        reusableCustomerLeadId(
+          existingLeadId: 'keep',
+          existingLeads: [first, extra],
+        ),
+        'keep',
+      );
+      expect(
+        reusableCustomerLeadId(
+          existingLeadId: null,
+          existingLeads: [first],
+        ),
+        'keep',
+      );
+    });
+
     test('fill/complete action continues an incomplete draft', () {
       final basic = _lead(id: 'draft');
       final complete = _lead(

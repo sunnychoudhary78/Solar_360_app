@@ -751,66 +751,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         images.any((item) => _isLocalPickedPath(item.path));
   }
 
-  void _mergeMintedUploadPaths(
-    Map<String, dynamic> data, {
-    required LeadModel minted,
-    required Map<String, String> singleFiles,
-    required List<TitledLocalFile> documents,
-    required List<TitledLocalFile> images,
-  }) {
-    void takeSingle(String field, String mintedPath) {
-      final local = (singleFiles[field] ?? '').trim();
-      if (local.isEmpty || !_isLocalPickedPath(local)) return;
-      final path = _storedLeadFilePath(mintedPath);
-      if (path.isNotEmpty) data[field] = path;
-    }
-
-    takeSingle('roof_photo', minted.roofPhoto);
-    takeSingle('bank_clear_photo', minted.bankClearPhoto);
-    takeSingle('cheque_passbook_copy', minted.chequePassbookCopy);
-    takeSingle('pre_installation_photo', minted.preInstallationPhoto);
-    takeSingle('quotation_document', minted.quotationDocument);
-
-    void takeTitled(
-      String field,
-      List<TitledLocalFile> current,
-      String mintedJson,
-    ) {
-      final mintedByTitle = <String, String>{
-        for (final item in _parseTitledJson(mintedJson))
-          _normTitle(item['title'] ?? ''): item['file'] ?? '',
-      };
-      final byTitle = <String, Map<String, String>>{};
-      final existing = data[field];
-      if (existing is List) {
-        for (final item in existing.whereType<Map>()) {
-          final title = item['title']?.toString().trim() ?? '';
-          final file = _storedLeadFilePath(item['file']?.toString());
-          if (title.isEmpty || file.isEmpty) continue;
-          byTitle[_normTitle(title)] = {'title': title, 'file': file};
-        }
-      }
-      for (final item in current) {
-        final title = item.title.trim();
-        if (title.isEmpty) continue;
-        final key = _normTitle(title);
-        if (_isLocalPickedPath(item.path)) {
-          final mintedPath = mintedByTitle[key] ?? '';
-          if (mintedPath.isEmpty) continue;
-          byTitle[key] = {'title': title, 'file': mintedPath};
-        } else {
-          final path = _storedLeadFilePath(item.path);
-          if (path.isEmpty) continue;
-          byTitle[key] = {'title': title, 'file': path};
-        }
-      }
-      data[field] = byTitle.values.toList();
-    }
-
-    takeTitled('additional_documents', documents, minted.additionalDocuments);
-    takeTitled('additional_images', images, minted.additionalImages);
-  }
-
   void _mergeRemoteFilesFromLeads(
     Map<String, dynamic> data,
     List<LeadModel> leads,
@@ -1232,9 +1172,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
   }
 
-  /// Customer portal save matches the web app:
+  /// Customer portal save:
   /// POST `/customers/leads` only when this customer has no lead yet.
-  /// Edit always JSON-PUTs `/customers/leads/:id` on that same lead so the
+  /// Edit always PUTs `/customers/leads/:id` on that same lead so the
   /// staff web list does not grow duplicate New Lead rows.
   Future<void> _saveCustomerPortalLead({
     required LeadRepository repo,
@@ -1249,10 +1189,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     data.remove('current_department');
 
     final existingLeads = await repo.getAllLeads();
-    var leadId = widget.existingLead?.id.trim() ?? '';
-    if (leadId.isEmpty) {
-      leadId = existingEditableCustomerLead(existingLeads)?.id.trim() ?? '';
-    }
+    final leadId = reusableCustomerLeadId(
+          existingLeadId: widget.existingLead?.id,
+          existingLeads: existingLeads,
+        ) ??
+        '';
 
     if (hasConvertedCustomerLead(existingLeads) &&
         (leadId.isEmpty ||
@@ -1296,91 +1237,27 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       existingLeads.where((lead) => lead.id != leadId).toList(),
     );
 
-    LeadModel? minted;
+    // Never POST a second lead to upload files — that created duplicate
+    // New Lead rows on the customer and staff lists after edit/save.
     if (_customerHasNewLocalFiles(singleFiles, documents, images)) {
-      try {
-        minted = await _mintCustomerUploadPaths(
-          repo: repo,
-          data: data,
-          singleFiles: singleFiles,
-          documents: documents,
-          images: images,
-          existingLeadIds: {leadId, ...existingLeads.map((lead) => lead.id)},
-        );
-        if (minted != null) {
-          _mergeMintedUploadPaths(
-            data,
-            minted: minted,
-            singleFiles: singleFiles,
-            documents: documents,
-            images: images,
-          );
-        }
-      } catch (_) {
-        minted = null;
-      }
+      await repo.updateLeadWithFiles(
+        leadId,
+        data,
+        singleFilePaths: {
+          for (final e in singleFiles.entries)
+            if (e.value.isNotEmpty) e.key: e.value,
+        },
+        additionalImageEntries: imagePayload,
+        additionalDocumentEntries: documentPayload,
+      );
+    } else {
+      await repo.updateLead(leadId, data);
     }
 
-    await repo.updateLead(leadId, data);
-
-    if (minted != null) {
-      await _deactivateCustomerLead(repo, minted.id);
-    }
     for (final extra in existingLeads) {
       if (extra.id == leadId || !canCustomerEditLead(extra)) continue;
       await _deactivateCustomerLead(repo, extra.id);
     }
-  }
-
-  Future<LeadModel?> _mintCustomerUploadPaths({
-    required LeadRepository repo,
-    required Map<String, dynamic> data,
-    required Map<String, String> singleFiles,
-    required List<TitledLocalFile> documents,
-    required List<TitledLocalFile> images,
-    required Set<String> existingLeadIds,
-  }) async {
-    final localSingles = {
-      for (final entry in singleFiles.entries)
-        if (entry.value.trim().isNotEmpty && _isLocalPickedPath(entry.value))
-          entry.key: entry.value,
-    };
-    final localDocs = [
-      for (final item in documents)
-        if (_isLocalPickedPath(item.path)) item.toPayload(),
-    ];
-    final localImages = [
-      for (final item in images)
-        if (_isLocalPickedPath(item.path)) item.toPayload(),
-    ];
-    if (localSingles.isEmpty && localDocs.isEmpty && localImages.isEmpty) {
-      return null;
-    }
-
-    final minted = await repo.createLead(
-      {
-        'full_name': data['full_name'],
-        'mobile': data['mobile'],
-        'email': data['email'],
-        'source': 'Customer Portal',
-        'is_active': false,
-        'status': 'New Lead',
-      },
-      singleFilePaths: localSingles,
-      additionalDocumentEntries: localDocs,
-      additionalImageEntries: localImages,
-    );
-    if (minted != null && minted.id.trim().isNotEmpty) return minted;
-
-    final after = await repo.getAllLeads();
-    LeadModel? newest;
-    for (final lead in after) {
-      if (existingLeadIds.contains(lead.id)) continue;
-      if (newest == null || lead.createdAt.compareTo(newest.createdAt) >= 0) {
-        newest = lead;
-      }
-    }
-    return newest;
   }
 
   Future<void> _deactivateCustomerLead(LeadRepository repo, String leadId) async {
@@ -1470,7 +1347,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           ? ref.read(customerLeadRepositoryProvider)
           : ref.read(leadRepositoryProvider);
 
-      if (widget.customerPortal && _isCompleteDetails) {
+      if (widget.customerPortal) {
         await _saveCustomerPortalLead(
           repo: repo,
           data: data,
