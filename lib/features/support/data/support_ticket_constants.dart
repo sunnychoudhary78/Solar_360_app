@@ -111,6 +111,36 @@ class SupportTicketConstants {
     return _titleCase(value);
   }
 
+  /// Persist request type in [sub_category] because the API does not yet
+  /// store a dedicated `request_type` column. Format: `rt:<value>` or
+  /// `rt:<value>|<user sub category>`.
+  static String encodeRequestTypeInSubCategory({
+    String? requestType,
+    String? subCategory,
+  }) {
+    final rt = (requestType ?? '').trim();
+    final sub = (subCategory ?? '').trim();
+    if (rt.isEmpty) return sub;
+    if (sub.isEmpty) return 'rt:$rt';
+    return 'rt:$rt|$sub';
+  }
+
+  static ({String requestType, String subCategory})
+  decodeRequestTypeFromSubCategory(String? raw) {
+    final value = (raw ?? '').trim();
+    final match = RegExp(
+      r'^rt:([a-z0-9_]+)(?:\|(.*))?$',
+      caseSensitive: false,
+    ).firstMatch(value);
+    if (match == null) {
+      return (requestType: '', subCategory: value);
+    }
+    return (
+      requestType: (match.group(1) ?? '').trim().toLowerCase(),
+      subCategory: (match.group(2) ?? '').trim(),
+    );
+  }
+
   static String _titleCase(String value) {
     return value
         .split('_')

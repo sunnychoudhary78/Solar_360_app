@@ -48,9 +48,10 @@ class _CustomerSupportFormScreenState
         'subject': _subject.text.trim(),
         'description': _description.text.trim(),
         'category': _category,
-        'sub_category': _subCategory.text.trim().isEmpty
-            ? null
-            : _subCategory.text.trim(),
+        'sub_category': SupportTicketConstants.encodeRequestTypeInSubCategory(
+          requestType: _requestType,
+          subCategory: _subCategory.text.trim(),
+        ),
         'priority': _priority,
       });
       ref.read(globalLoadingProvider.notifier).hide();

@@ -45,7 +45,7 @@ class ApiEndpoints {
       'support-tickets/$id/messages/read';
   static String supportTicketVerify(String id) => 'support-tickets/$id/verify';
 
-  // Staff / Company Admin support (Billbook)
+  // Staff / Company Admin support (Green Energy)
   static const adminSupportTickets = 'support-tickets/admin/list';
   static String adminSupportTicket(String id) => 'support-tickets/admin/$id';
   static String adminSupportTicketMessages(String id) =>

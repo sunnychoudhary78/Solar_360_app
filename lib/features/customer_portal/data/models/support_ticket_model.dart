@@ -225,14 +225,15 @@ class SupportTicketModel {
         json['unread_count'] ??
         json['unread_messages'] ??
         json['unreadMessageCount'];
+    final resolved = _resolveRequestType(json);
     return SupportTicketModel(
       id: asString(json['id']),
       ticketNumber: asString(json['ticket_number'] ?? json['ticketNumber']),
       subject: asString(json['subject']),
       description: asString(json['description']),
-      requestType: asString(json['request_type'] ?? json['requestType']),
+      requestType: resolved.$1,
       category: asString(json['category']),
-      subCategory: asString(json['sub_category'] ?? json['subCategory']),
+      subCategory: resolved.$2,
       priority: asString(json['priority']).isEmpty
           ? 'medium'
           : asString(json['priority']),
@@ -256,6 +257,25 @@ class SupportTicketModel {
       history: _parseHistory(historyRaw),
       unreadCountHint: unreadRaw is num ? unreadRaw.toInt() : 0,
     );
+  }
+
+  static (String requestType, String subCategory) _resolveRequestType(
+    Map<String, dynamic> json,
+  ) {
+    final apiRequestType = asString(
+      json['request_type'] ?? json['requestType'],
+    ).trim();
+    final rawSub = asString(json['sub_category'] ?? json['subCategory']);
+    final decoded = SupportTicketConstants.decodeRequestTypeFromSubCategory(
+      rawSub,
+    );
+    if (apiRequestType.isNotEmpty) {
+      return (
+        apiRequestType,
+        decoded.requestType.isNotEmpty ? decoded.subCategory : rawSub,
+      );
+    }
+    return (decoded.requestType, decoded.subCategory);
   }
 
   SupportTicketModel copyWith({

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/customer_portal/data/models/support_ticket_model.dart';
+import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 class TicketConversation extends StatelessWidget {
@@ -403,9 +403,7 @@ class TicketTimelineCard extends StatelessWidget {
                             ),
                           if (item.createdAt != null)
                             Text(
-                              DateFormat(
-                                'dd MMM yyyy, hh:mm a',
-                              ).format(item.createdAt!),
+                              formatDateTime(item.createdAt),
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: scheme.onSurfaceVariant),
                             ),
@@ -444,7 +442,7 @@ class _MessageBubble extends StatelessWidget {
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final time = message.createdAt == null
         ? ''
-        : DateFormat('dd MMM, hh:mm a').format(message.createdAt!);
+        : formatDateTimeShort(message.createdAt);
 
     final bubble = ConstrainedBox(
       constraints: BoxConstraints(

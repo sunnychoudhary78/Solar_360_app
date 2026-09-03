@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import 'package:solar_sales/features/customer_portal/data/models/support_ticket_model.dart';
+import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 class SupportTicketCard extends StatelessWidget {
@@ -24,9 +24,8 @@ class SupportTicketCard extends StatelessWidget {
     final unreadCount = ticket.unreadIncomingCount(
       isCustomerView: isCustomerView,
     );
-    final created = ticket.createdAt == null
-        ? null
-        : DateFormat('dd MMM yyyy, hh:mm a').format(ticket.createdAt!);
+    final created =
+        ticket.createdAt == null ? null : formatDateTime(ticket.createdAt);
 
     return AppCard(
       onTap: onOpen,
@@ -34,45 +33,73 @@ class SupportTicketCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Ticket No. + NEW stay on their own row so status/request chips
+          // cannot squeeze them into a tiny width.
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (ticket.ticketNumber.isNotEmpty)
-                      Text(
-                        ticket.ticketNumber,
-                        style: TextStyle(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    if (ticket.isNewTag)
-                      Chip(
-                        visualDensity: VisualDensity.compact,
-                        label: const Text('NEW'),
-                        backgroundColor: Colors.amber.withValues(alpha: 0.18),
-                        side: BorderSide.none,
-                      ),
-                    _PriorityChip(priority: ticket.priority),
-                    if (unreadCount > 0)
-                      Chip(
-                        visualDensity: VisualDensity.compact,
-                        backgroundColor: Colors.amber.withValues(alpha: 0.18),
-                        side: BorderSide.none,
-                        label: Text('$unreadCount new'),
-                      ),
-                  ],
+              if (ticket.ticketNumber.isNotEmpty)
+                Flexible(
+                  child: Text(
+                    ticket.ticketNumber,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
                 ),
-              ),
+              if (ticket.isNewTag) ...[
+                const SizedBox(width: 8),
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  label: const Text('NEW'),
+                  backgroundColor: Colors.amber.withValues(alpha: 0.18),
+                  side: BorderSide.none,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _PriorityChip(priority: ticket.priority),
+              if (ticket.requestType.isNotEmpty)
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  backgroundColor: scheme.primary.withValues(alpha: 0.10),
+                  side: BorderSide.none,
+                  label: Text(
+                    ticket.requestTypeLabel,
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               Chip(
                 visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 label: Text(ticket.statusLabel),
               ),
+              if (unreadCount > 0)
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  backgroundColor: Colors.amber.withValues(alpha: 0.18),
+                  side: BorderSide.none,
+                  label: Text('$unreadCount new'),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -173,6 +200,7 @@ class _PriorityChip extends StatelessWidget {
     }
     return Chip(
       visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       backgroundColor: color.withValues(alpha: 0.14),
       side: BorderSide.none,
       label: Text(

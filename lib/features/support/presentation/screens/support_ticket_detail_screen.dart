@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
@@ -8,6 +7,7 @@ import 'package:solar_sales/features/customer_portal/data/models/support_ticket_
 import 'package:solar_sales/features/support/data/support_ticket_constants.dart';
 import 'package:solar_sales/features/support/presentation/providers/support_providers.dart';
 import 'package:solar_sales/features/support/presentation/widgets/ticket_conversation.dart';
+import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/dialogs.dart';
@@ -289,7 +289,7 @@ class _SupportTicketDetailScreenState
                 if (ticket.createdAt != null) ...[
                   const SizedBox(height: 12),
                   Text(
-                    'Created ${DateFormat('dd MMM yyyy, hh:mm a').format(ticket.createdAt!)}',
+                    'Created ${formatDateTime(ticket.createdAt)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
