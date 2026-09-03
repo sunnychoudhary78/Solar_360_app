@@ -46,5 +46,32 @@ void main() {
         hasLength(1),
       );
     });
+
+    test('getForm reads nested installationDetails from the lead payload', () async {
+      pair.adapter.on('GET', 'installations/form/lead-1', (_) {
+        return {
+          'success': true,
+          'data': {
+            'id': 'lead-1',
+            'full_name': 'Test Lead',
+            'installationDetails': {
+              'id': 'inst-1',
+              'file_no': 'FILE-1',
+              'solar_panel_brand': 'Waaree',
+              'number_of_solar_panels': 10,
+            },
+          },
+        };
+      });
+
+      final details = await service.getForm('lead-1');
+      expect(details?['id'], 'inst-1');
+      expect(details?['file_no'], 'FILE-1');
+      expect(details?['solar_panel_brand'], 'Waaree');
+      expect(
+        pair.adapter.of('GET', 'installations/form/lead-1'),
+        hasLength(1),
+      );
+    });
   });
 }

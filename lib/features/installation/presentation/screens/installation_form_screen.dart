@@ -57,11 +57,30 @@ class _InstallationFormScreenState
   @override
   void initState() {
     super.initState();
-    _prefill();
+    _prefillFrom(widget.lead.installationDetails);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadFormFromApi();
+    });
   }
 
-  void _prefill() {
-    final d = widget.lead.installationDetails;
+  Future<void> _loadFormFromApi() async {
+    try {
+      final details = await ref
+          .read(installationRepositoryProvider)
+          .getForm(widget.lead.id);
+      if (!mounted || details == null || details.isEmpty) return;
+      final hasSavedDetails =
+          (details['id']?.toString() ?? '').trim().isNotEmpty ||
+          (details['file_no']?.toString() ?? '').trim().isNotEmpty ||
+          (details['solar_panel_brand']?.toString() ?? '').trim().isNotEmpty;
+      if (!hasSavedDetails) return;
+      setState(() => _prefillFrom(details));
+    } catch (_) {
+      // Keep values already prefilled from the lead payload.
+    }
+  }
+
+  void _prefillFrom(Map<String, dynamic>? d) {
     if (d == null) return;
 
     existingId = d['id']?.toString();
@@ -84,14 +103,17 @@ class _InstallationFormScreenState
     final rawSpNumbers = d['sp_numbers'];
 
     if (rawSpNumbers is List && rawSpNumbers.isNotEmpty) {
-      for (final controller in spControllers) {
-        controller.dispose();
+      final values = rawSpNumbers.map((item) => item?.toString() ?? '').toList();
+      while (spControllers.length > values.length) {
+        final extra = spControllers.removeLast();
+        extra.dispose();
       }
-
-      spControllers.clear();
-
-      for (final item in rawSpNumbers) {
-        spControllers.add(TextEditingController(text: item?.toString() ?? ''));
+      for (var i = 0; i < values.length; i++) {
+        if (i < spControllers.length) {
+          spControllers[i].text = values[i];
+        } else {
+          spControllers.add(TextEditingController(text: values[i]));
+        }
       }
     }
 

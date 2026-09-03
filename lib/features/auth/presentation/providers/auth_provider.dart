@@ -447,6 +447,9 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    if (state.isCustomerSession) {
+      await _repo.customerLogout();
+    }
     await _repo.logoutLocal();
     state = const AuthState(isLoading: false, isInitializing: false);
     await safeResetToRoute('/login');

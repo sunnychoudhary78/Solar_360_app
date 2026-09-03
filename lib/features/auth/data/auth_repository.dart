@@ -60,6 +60,12 @@ class AuthRepository {
     );
   }
 
+  Future<void> customerLogout() async {
+    try {
+      await _api.customerLogout();
+    } catch (_) {}
+  }
+
   Future<void> logoutLocal() => _tokenStorage.clear();
 
   Future<String?> getStoredToken() => _tokenStorage.getJwt();

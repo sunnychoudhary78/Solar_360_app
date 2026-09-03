@@ -978,6 +978,20 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return null;
   }
 
+  String? _validatePositiveNumber(String? value, String label) {
+    final formatError = _validateNumber(value, label);
+    if (formatError != null) return formatError;
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (num.parse(v) <= 0) return '$label must be greater than 0';
+    return null;
+  }
+
+  String? _requiredThen(String? value, String label, String? Function(String?)? next) {
+    if (value == null || value.trim().isEmpty) return '$label is required';
+    return next?.call(value);
+  }
+
   String? _validateMaxDigitNumber(String? value, String label, int maxLength) {
     final v = value?.trim() ?? '';
     if (v.isEmpty) return null;
@@ -1084,9 +1098,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   /// Customer portal save matches the web app:
   /// POST `/customers/leads` only when this customer has no lead yet.
-  /// Later Edit Details calls PUT `/customers/leads/:id` on that same lead.
-  /// New files are stored through create (the only customer API that keeps
-  /// uploads), then those stored paths are written onto the existing lead.
+  /// Edit / replace files always PUT `/customers/leads/:id` on that same lead.
+  /// Never create a second lead to store uploads — those leftovers show up on
+  /// the staff web list as duplicate "Rejected (Sales)" rows.
   Future<void> _saveCustomerPortalLead({
     required LeadRepository repo,
     required Map<String, dynamic> data,
@@ -1100,7 +1114,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     data.remove('current_department');
 
     var leadId = widget.existingLead?.id.trim() ?? '';
-    List<LeadModel>? existingLeads = await repo.getAllLeads();
+    final existingLeads = await repo.getAllLeads();
     leadId = leadId.isNotEmpty
         ? leadId
         : (existingEditableCustomerLead(existingLeads)?.id.trim() ?? '');
@@ -1115,54 +1129,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         images: images,
       );
 
-      final newSingleFiles = {
-        for (final entry in singleFiles.entries)
-          if (entry.value.trim().isNotEmpty &&
-              !_isExistingRemotePath(entry.value))
-            entry.key: entry.value.trim(),
-      };
-      final hasNewFiles =
-          newSingleFiles.isNotEmpty ||
-          documents.any((item) => _isLocalPickedPath(item.path)) ||
-          images.any((item) => _isLocalPickedPath(item.path));
-
-      // Keep text + already-stored paths on the original lead. New local
-      // files are persisted in a second step so this PUT cannot wipe them.
-      final retainedSingleFiles = {
-        for (final entry in singleFiles.entries)
-          if (entry.value.trim().isEmpty || _isExistingRemotePath(entry.value))
-            entry.key: entry.value.trim(),
-      };
-      if (hasNewFiles) {
-        // JSON PUT only: multipart on customer update is ignored, and an
-        // empty additional_* snapshot would wipe files before they land.
-        await repo.updateLead(leadId, data);
-        await _persistNewCustomerFilesOnExistingLead(
-          repo: repo,
-          leadId: leadId,
-          data: data,
-          existingLeads: existingLeads,
-          newSingleFiles: newSingleFiles,
-          documents: documents,
-          images: images,
-          imagePayload: imagePayload,
-          documentPayload: documentPayload,
-        );
-      } else {
-        await repo.updateLeadWithFiles(
-          leadId,
-          data,
-          singleFilePaths: retainedSingleFiles,
-          additionalImageEntries: images
-              .where((item) => _isExistingRemotePath(item.path))
-              .map((item) => item.toPayload())
-              .toList(),
-          additionalDocumentEntries: documents
-              .where((item) => _isExistingRemotePath(item.path))
-              .map((item) => item.toPayload())
-              .toList(),
-        );
-      }
+      await repo.updateLeadWithFiles(
+        leadId,
+        data,
+        singleFilePaths: singleFiles,
+        additionalImageEntries: imagePayload,
+        additionalDocumentEntries: documentPayload,
+      );
       return;
     }
 
@@ -1184,123 +1157,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
   }
 
-  /// Customer PUT ignores multipart files. POST /customers/leads stores them
-  /// and returns `leads/…` paths, which PUT can then save on this lead.
-  Future<void> _persistNewCustomerFilesOnExistingLead({
-    required LeadRepository repo,
-    required String leadId,
-    required Map<String, dynamic> data,
-    required List<LeadModel> existingLeads,
-    required Map<String, String> newSingleFiles,
-    required List<TitledLocalFile> documents,
-    required List<TitledLocalFile> images,
-    required List<Map<String, String>> imagePayload,
-    required List<Map<String, String>> documentPayload,
-  }) async {
-    if (hasConvertedCustomerLead(existingLeads)) {
-      throw Exception(
-        'This lead is converted. Details can no longer be filled or updated.',
-      );
-    }
-
-    const fileFields = <String>[
-      'roof_photo',
-      'bank_clear_photo',
-      'cheque_passbook_copy',
-      'pre_installation_photo',
-      'quotation_document',
-      'additional_documents',
-      'additional_images',
-    ];
-
-    final createData = Map<String, dynamic>.from(data);
-    createData['status'] = 'New Lead';
-    createData['is_active'] = 'false';
-    for (final field in fileFields) {
-      createData.remove(field);
-    }
-
-    final copyDocs = documents.any((item) => _isLocalPickedPath(item.path));
-    final copyImages = images.any((item) => _isLocalPickedPath(item.path));
-
-    var created = await repo.createLead(
-      createData,
-      singleFilePaths: newSingleFiles.isEmpty ? null : newSingleFiles,
-      additionalImageEntries: imagePayload,
-      additionalDocumentEntries: documentPayload,
-    );
-
-    Map<String, dynamic> storedFields(LeadModel lead) {
-      final fields = <String, dynamic>{};
-      final values = <String, String>{
-        'roof_photo': lead.roofPhoto,
-        'bank_clear_photo': lead.bankClearPhoto,
-        'cheque_passbook_copy': lead.chequePassbookCopy,
-        'pre_installation_photo': lead.preInstallationPhoto,
-        'quotation_document': lead.quotationDocument,
-      };
-      for (final field in newSingleFiles.keys) {
-        final path = LeadModel.filePathFrom(values[field]);
-        if (path.isNotEmpty) fields[field] = path;
-      }
-
-      dynamic decodeStored(String raw) {
-        final value = raw.trim();
-        if (value.isEmpty || value == '[]') return null;
-        try {
-          return jsonDecode(value);
-        } catch (_) {
-          return value;
-        }
-      }
-
-      if (copyDocs) {
-        final docs = decodeStored(lead.additionalDocuments);
-        if (docs != null) fields['additional_documents'] = docs;
-      }
-      if (copyImages) {
-        final imgs = decodeStored(lead.additionalImages);
-        if (imgs != null) fields['additional_images'] = imgs;
-      }
-      return fields;
-    }
-
-    var fileFieldsToSave =
-        created == null ? <String, dynamic>{} : storedFields(created);
-
-    if (fileFieldsToSave.isEmpty) {
-      final leads = await repo.getAllLeads();
-      final others = leads.where((lead) => lead.id != leadId).toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      for (final candidate in others) {
-        final fields = storedFields(candidate);
-        if (fields.isEmpty) continue;
-        created = candidate;
-        fileFieldsToSave = fields;
-        break;
-      }
-    }
-
-    if (fileFieldsToSave.isEmpty) {
-      throw Exception(
-        'The new document could not be saved. Please try again.',
-      );
-    }
-
-    await repo.updateLead(leadId, fileFieldsToSave);
-
-    final mintId = created?.id.trim() ?? '';
-    if (mintId.isNotEmpty && mintId != leadId) {
-      try {
-        await repo.updateLead(mintId, {
-          'is_active': false,
-          'status': 'Rejected',
-          'status_remarks': 'Unused upload record',
-        });
-      } catch (_) {}
-    }
-  }
-
   Future<void> saveLead() async {
     FocusScope.of(context).unfocus();
 
@@ -1308,6 +1164,18 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     if (formState == null || !formState.validate()) {
       showAppMessage(context, 'Please fix validation errors', isError: true);
       return;
+    }
+
+    if (_isCompleteDetails) {
+      final missingUploads = _missingRequiredUploads();
+      if (missingUploads.isNotEmpty) {
+        showAppMessage(
+          context,
+          '${missingUploads.first} is required',
+          isError: true,
+        );
+        return;
+      }
     }
 
     if (widget.customerPortal && _isBasicCreate) {
@@ -1492,6 +1360,19 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
   }
 
+  List<String> _missingRequiredUploads() {
+    final missing = <String>[];
+    if ((chequePassbookPath ?? '').trim().isEmpty) {
+      missing.add('Cheque/Passbook Copy');
+    }
+    for (final title in kycRequiredDocumentTitles) {
+      if ((predefinedDocPaths[title] ?? '').trim().isEmpty) {
+        missing.add(title);
+      }
+    }
+    return missing;
+  }
+
   String _saveErrorMessage(Object error) {
     var message = error.toString().trim();
     if (message.startsWith('Exception: ')) {
@@ -1540,6 +1421,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         maxLines > 1 && identical(keyboardType, TextInputType.text)
             ? TextInputType.multiline
             : keyboardType;
+    final resolvedValidator = isRequired
+        ? (String? value) => _requiredThen(value, label, validator)
+        : validator;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md - 2),
@@ -1550,7 +1434,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         readOnly: readOnly,
         keyboardType: resolvedKeyboardType,
         maxLines: maxLines,
-        validator: validator,
+        validator: resolvedValidator,
         inputFormatters: inputFormatters,
         textCapitalization: textCapitalization,
         autofillHints: autofillHints,
@@ -1581,26 +1465,55 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     bool isRequired = false,
   }) {
     final textValue = controller.text.trim();
-    final currentValue = items.contains(textValue) ? textValue : null;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md - 2),
-      child: DropdownButtonFormField<String>(
-        value: currentValue,
-        isExpanded: true,
-        decoration: InputDecoration(
-          label: _requiredFieldLabel(label, isRequired: isRequired),
-          hintText: hintText,
-        ),
-        items: menuItems ??
-            items
+    final resolvedItems = _menuItemsWithCurrent(items, textValue);
+    final currentValue =
+        resolvedItems.contains(textValue) && textValue.isNotEmpty
+            ? textValue
+            : null;
+    final resolvedMenuItems = textValue.isNotEmpty && !items.contains(textValue)
+        ? [
+            DropdownMenuItem<String>(
+              value: textValue,
+              child: Text(textValue),
+            ),
+            ...(menuItems ??
+                items
+                    .map(
+                      (item) => DropdownMenuItem<String>(
+                        value: item,
+                        child: Text(item),
+                      ),
+                    )
+                    .toList(growable: false)),
+          ]
+        : menuItems ??
+            resolvedItems
                 .map(
                   (item) => DropdownMenuItem<String>(
                     value: item,
                     child: Text(item),
                   ),
                 )
-                .toList(growable: false),
+                .toList(growable: false);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md - 2),
+      child: DropdownButtonFormField<String>(
+        value: currentValue,
+        isExpanded: true,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        validator: isRequired
+            ? (value) {
+                final selected = (value ?? controller.text).trim();
+                if (selected.isEmpty) return '$label is required';
+                return null;
+              }
+            : null,
+        decoration: InputDecoration(
+          label: _requiredFieldLabel(label, isRequired: isRequired),
+          hintText: hintText,
+        ),
+        items: resolvedMenuItems,
         onChanged: isLoading
             ? null
             : (value) {
@@ -1703,13 +1616,51 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   }) {
     return StatefulBuilder(
       builder: (context, setLocal) {
-        return switchTile(
-          title: title,
-          value: getter(),
-          isRequired: isRequired,
-          onChanged: (value) {
-            setter(value);
-            setLocal(() {});
+        Widget tile({ValueChanged<bool>? onChanged}) {
+          return switchTile(
+            title: title,
+            value: getter(),
+            isRequired: isRequired,
+            onChanged: (value) {
+              setter(value);
+              onChanged?.call(value);
+              setLocal(() {});
+            },
+          );
+        }
+
+        if (!isRequired) return tile();
+
+        return FormField<bool>(
+          initialValue: getter(),
+          validator: (_) {
+            if (!getter()) return '$title must be confirmed';
+            return null;
+          },
+          builder: (field) {
+            final scheme = Theme.of(context).colorScheme;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                tile(onChanged: field.didChange),
+                if (field.hasError)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: AppSpacing.sm + 2,
+                    ),
+                    child: Text(
+                      field.errorText!,
+                      style: TextStyle(
+                        color: scheme.error,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            );
           },
         );
       },
@@ -2783,7 +2734,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                validator: (v) => _validateNumber(v, 'Load Section'),
+                validator: (v) => _validatePositiveNumber(v, 'Load Section'),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
@@ -2960,7 +2911,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   quotationAmount,
                   isRequired: true,
                   keyboardType: TextInputType.number,
-                  validator: (v) => _validateNumber(v, 'Quotation Amount'),
+                  validator: (v) =>
+                      _validatePositiveNumber(v, 'Quotation Amount'),
                 ),
                 input(
                   'Visited Employee Name',

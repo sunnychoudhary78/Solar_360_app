@@ -97,4 +97,8 @@ class AuthApiService {
       'confirmPassword': confirmPassword,
     });
   }
+
+  Future<void> customerLogout() async {
+    await _api.post(ApiEndpoints.customerLogout);
+  }
 }

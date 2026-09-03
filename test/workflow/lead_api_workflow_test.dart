@@ -223,6 +223,46 @@ void main() {
       expect(pair.adapter.of('POST', 'customers/leads'), isEmpty);
     });
 
+    test('customer lead file replace uses PUT and does not create a lead', () async {
+      final customerRepo = LeadRepository(
+        LeadApiService(
+          ApiService(pair.dio),
+          pair.dio,
+          leadsPath: 'customers/leads',
+          leadPath: (id) => 'customers/leads/$id',
+        ),
+      );
+
+      pair.adapter.on('PUT', 'customers/leads/lead-1', (_) {
+        return {
+          'success': true,
+          'data': {
+            ..._leadJson(),
+            'cheque_passbook_copy': 'leads/passbook.jpg',
+          },
+        };
+      });
+
+      await customerRepo.updateLeadWithFiles(
+        'lead-1',
+        {
+          'full_name': 'Pakistan',
+          'mobile': '9433464646',
+          'source': 'Customer Portal',
+        },
+        singleFilePaths: const {
+          'cheque_passbook_copy': 'leads/passbook.jpg',
+        },
+        additionalDocumentEntries: const [
+          {'title': 'Aadhaar Front', 'path': 'leads/aadhaar.jpg'},
+        ],
+      );
+
+      expect(pair.adapter.of('PUT', 'customers/leads/lead-1'), hasLength(1));
+      expect(pair.adapter.of('POST', 'customers/leads'), isEmpty);
+      expect(pair.adapter.of('POST', 'leads'), isEmpty);
+    });
+
     test('customer lead update uses PUT and does not create a lead', () async {
       final customerRepo = LeadRepository(
         LeadApiService(

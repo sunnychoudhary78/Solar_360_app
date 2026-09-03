@@ -12,11 +12,20 @@ class InstallationApiService {
   Future<Map<String, dynamic>?> getByLeadId(String leadId) async {
     try {
       final data = await _api.get(ApiEndpoints.installationByLead(leadId));
-      if (data is Map && data['data'] != null) {
-        return Map<String, dynamic>.from(data['data'] as Map);
-      }
-      if (data is Map) return Map<String, dynamic>.from(data);
-      return null;
+      return _extractInstallationMap(data);
+    } catch (e) {
+      final message = e.toString().toLowerCase();
+      if (message.contains('404') || message.contains('not found')) return null;
+      rethrow;
+    }
+  }
+
+  /// Backend form endpoint used by the web Installation form.
+  /// Returns nested `installationDetails` from the lead payload.
+  Future<Map<String, dynamic>?> getForm(String leadId) async {
+    try {
+      final data = await _api.get(ApiEndpoints.installationForm(leadId));
+      return _extractInstallationMap(data, preferNestedDetails: true);
     } catch (e) {
       final message = e.toString().toLowerCase();
       if (message.contains('404') || message.contains('not found')) return null;
@@ -96,5 +105,30 @@ class InstallationApiService {
       }
       rethrow;
     }
+  }
+
+  Map<String, dynamic>? _extractInstallationMap(
+    dynamic data, {
+    bool preferNestedDetails = false,
+  }) {
+    Map<String, dynamic>? map;
+    if (data is Map && data['data'] is Map) {
+      map = Map<String, dynamic>.from(data['data'] as Map);
+    } else if (data is Map) {
+      map = Map<String, dynamic>.from(data);
+    }
+    if (map == null) return null;
+
+    if (preferNestedDetails) {
+      final nested =
+          map['installationDetails'] ??
+          map['installation_details'] ??
+          map['InstallationDetails'];
+      if (nested is Map) {
+        return Map<String, dynamic>.from(nested);
+      }
+    }
+
+    return map;
   }
 }

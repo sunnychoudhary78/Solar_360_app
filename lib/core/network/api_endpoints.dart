@@ -116,6 +116,8 @@ class ApiEndpoints {
   // Solar CRM — installations
   static String installationByLead(String leadId) =>
       'installations/lead/$leadId';
+  static String installationForm(String leadId) =>
+      'installations/form/$leadId';
   static String installation(String id) => 'installations/$id';
   static const installations = 'installations';
 

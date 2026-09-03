@@ -11,6 +11,21 @@ import 'helpers/recording_adapter.dart';
 
 void main() {
   group('Solar360 backend alignment', () {
+    test('installation form endpoint matches backend route', () {
+      expect(
+        ApiEndpoints.installationForm('lead-id'),
+        'installations/form/lead-id',
+      );
+      expect(
+        ApiEndpoints.installationByLead('lead-id'),
+        'installations/lead/lead-id',
+      );
+    });
+
+    test('customer logout endpoint matches backend route', () {
+      expect(ApiEndpoints.customerLogout, 'customers/logout');
+    });
+
     test('notification endpoints match backend routes', () {
       expect(
         ApiEndpoints.markNotificationRead('notification-id'),
@@ -58,6 +73,16 @@ void main() {
         newPassword: 'new-password',
         confirmPassword: 'new-password',
       );
+    });
+
+    test('customer logout posts the backend logout route', () async {
+      final pair = createTestApi();
+      pair.adapter.on('POST', 'customers/logout', (_) {
+        return {'success': true};
+      });
+
+      await AuthApiService(ApiService(pair.dio)).customerLogout();
+      expect(pair.adapter.of('POST', 'customers/logout'), hasLength(1));
     });
 
     test('notification count and mark-read contracts match backend', () async {

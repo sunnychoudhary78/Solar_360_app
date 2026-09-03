@@ -8,6 +8,8 @@ class InstallationRepository {
   Future<Map<String, dynamic>?> getByLeadId(String leadId) =>
       _api.getByLeadId(leadId);
 
+  Future<Map<String, dynamic>?> getForm(String leadId) => _api.getForm(leadId);
+
   Future<void> createForLead(
     String leadId,
     Map<String, dynamic> body, {
