@@ -188,5 +188,71 @@ void main() {
       expect(labels, contains('Geo Tag Photo'));
       expect(files.every((item) => item.url.contains('/api/uploads/')), isTrue);
     });
+
+    test('collectLeadFiles shows every titled file, not only the first four', () {
+      final lead = LeadModel.fromJson({
+        'id': 'lead-9',
+        'cheque_passbook_copy': 'leads/cheque.png',
+        'bank_clear_photo': 'leads/bank.png',
+        'roof_photo': 'leads/roof.jpg',
+        'pre_installation_photo': 'leads/pre.jpg',
+        'additional_documents': {
+          '0': {'title': 'Aadhaar Front', 'file': 'leads/aadhaar-front.pdf'},
+          '1': {'title': 'Aadhaar Back', 'file': 'leads/aadhaar-back.pdf'},
+          '2': {'title': 'PAN Card', 'existingPath': 'leads/pan.pdf'},
+          '3': {'title': 'Electricity Bill', 'path': 'leads/bill.pdf'},
+          '4': {'title': 'House Registry', 'file': 'leads/registry.pdf'},
+          '5': {'title': 'NOC', 'url': 'leads/noc.pdf'},
+        },
+        'additional_images': [
+          {'title': 'Geo Tag Photo', 'path': 'leads/geo.jpg'},
+          {'title': 'Site Photo 2', 'file': 'leads/site-2.jpg'},
+          {'title': 'Site Photo 3', 'file': 'leads/site-3.jpg'},
+        ],
+      });
+
+      final files = collectLeadFiles(lead);
+      final labels = files.map((item) => item.label).toList();
+      expect(labels, contains('Aadhaar Front'));
+      expect(labels, contains('Aadhaar Back'));
+      expect(labels, contains('PAN Card'));
+      expect(labels, contains('Electricity Bill'));
+      expect(labels, contains('House Registry'));
+      expect(labels, contains('NOC'));
+      expect(labels, contains('Geo Tag Photo'));
+      expect(labels, contains('Site Photo 2'));
+      expect(labels, contains('Site Photo 3'));
+      expect(
+        files.where((item) => item.path.contains('leads/')).length,
+        greaterThanOrEqualTo(9),
+      );
+    });
+
+    test('filePathsFrom expands json arrays and map wrappers', () {
+      expect(
+        LeadModel.filePathsFrom([
+          'leads/a.jpg',
+          {'file': 'leads/b.jpg'},
+          {'path': 'leads/c.jpg'},
+        ]),
+        ['leads/a.jpg', 'leads/b.jpg', 'leads/c.jpg'],
+      );
+      expect(
+        LeadModel.filePathsFrom({
+          '0': 'leads/one.png',
+          '1': 'leads/two.png',
+          '2': 'leads/three.png',
+          '3': 'leads/four.png',
+          '4': 'leads/five.png',
+        }),
+        [
+          'leads/one.png',
+          'leads/two.png',
+          'leads/three.png',
+          'leads/four.png',
+          'leads/five.png',
+        ],
+      );
+    });
   });
 }

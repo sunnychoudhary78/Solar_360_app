@@ -346,7 +346,7 @@ class LeadModel {
       installationReport: filePathFrom(
         json['installation_report'] ?? json['installationReport'],
       ),
-      installationImages: filePathFrom(
+      installationImages: _fileListString(
         json['installation_images'] ?? json['installationImages'],
       ),
       statusRemarks: _str(json['status_remarks'] ?? json['statusRemarks']),
@@ -732,24 +732,32 @@ class LeadModel {
   }
 
   /// Resolves a stored upload path from string, nested map, or JSON text.
+  /// For arrays, this returns the first path; use [filePathsFrom] for all.
   static String filePathFrom(dynamic value) {
-    if (value == null) return '';
+    final all = filePathsFrom(value);
+    return all.isEmpty ? '' : all.first;
+  }
+
+  /// Every upload path nested in [value]. JSON arrays, numeric-key maps, and
+  /// `{file|path|url}` objects are expanded fully — nothing is capped.
+  static List<String> filePathsFrom(dynamic value, [int depth = 0]) {
+    if (value == null || depth > 8) return const <String>[];
 
     if (value is String) {
       final trimmed = value.trim();
       if (trimmed.isEmpty ||
           trimmed.toLowerCase() == 'null' ||
           trimmed.toLowerCase() == 'undefined') {
-        return '';
+        return const <String>[];
       }
       if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
         try {
-          return filePathFrom(jsonDecode(trimmed));
+          return filePathsFrom(jsonDecode(trimmed), depth + 1);
         } catch (_) {
-          return trimmed;
+          return <String>[trimmed];
         }
       }
-      return trimmed;
+      return <String>[trimmed];
     }
 
     if (value is Map) {
@@ -762,17 +770,48 @@ class LeadModel {
         'src',
         'location',
       ]) {
-        final extracted = filePathFrom(value[key]);
+        final extracted = filePathsFrom(value[key], depth + 1);
         if (extracted.isNotEmpty) return extracted;
       }
-      return '';
+
+      final keys = value.keys.map((key) => key.toString()).toList();
+      final numeric = keys.isNotEmpty &&
+          keys.every((key) => int.tryParse(key) != null);
+      if (numeric) {
+        keys.sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+        return [
+          for (final key in keys)
+            ...filePathsFrom(value[key] ?? value[int.tryParse(key)], depth + 1),
+        ];
+      }
+      return const <String>[];
     }
 
-    if (value is List && value.isNotEmpty) {
-      return filePathFrom(value.first);
+    if (value is List) {
+      return [
+        for (final item in value) ...filePathsFrom(item, depth + 1),
+      ];
     }
 
-    return value.toString().trim();
+    final asString = value.toString().trim();
+    if (asString.isEmpty ||
+        asString == 'null' ||
+        asString == 'undefined') {
+      return const <String>[];
+    }
+    return <String>[asString];
+  }
+
+  /// Preserves a JSON array of files as text instead of collapsing to item 0.
+  static String _fileListString(dynamic value) {
+    if (value == null) return '';
+    if (value is List || value is Map) return _str(value);
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) return trimmed;
+      return filePathFrom(trimmed);
+    }
+    return filePathFrom(value);
   }
 
   static String _str(dynamic value) {
@@ -802,32 +841,9 @@ class LeadModel {
   }
 
   static List<String> _stringList(dynamic value) {
-    if (value == null) return const <String>[];
-
-    if (value is List) {
-      return value
-          .map((item) => item?.toString().trim() ?? '')
-          .where((item) => item.isNotEmpty)
-          .toList();
-    }
-
-    if (value is String) {
-      final trimmed = value.trim();
-      if (trimmed.isEmpty) return const <String>[];
-
-      try {
-        final decoded = jsonDecode(trimmed);
-        if (decoded is List) {
-          return decoded
-              .map((item) => item?.toString().trim() ?? '')
-              .where((item) => item.isNotEmpty)
-              .toList();
-        }
-      } catch (_) {
-        return <String>[trimmed];
-      }
-    }
-
-    return const <String>[];
+    return filePathsFrom(value)
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 }

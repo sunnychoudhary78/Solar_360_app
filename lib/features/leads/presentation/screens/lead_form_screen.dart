@@ -18,6 +18,7 @@ import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.da
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
+import 'package:solar_sales/features/leads/data/lead_files.dart';
 import 'package:solar_sales/features/leads/data/lead_repository.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
@@ -625,26 +626,25 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     List<TitledLocalFile> freeformTarget,
   ) {
     if (raw.trim().isEmpty) return;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return;
-      for (final item in decoded.whereType<Map>()) {
-        final title = item['title']?.toString().trim() ?? '';
-        final path = LeadModel.filePathFrom(
-          item['file'] ??
-              item['path'] ??
-              item['url'] ??
-              item['existingPath'],
-        );
-        if (title.isEmpty || path.isEmpty) continue;
-        if (predefinedTarget.containsKey(title)) {
+    for (final item in parseTitledFileEntries(raw)) {
+      final title = item.title.trim();
+      final path = item.path.trim();
+      if (path.isEmpty) continue;
+      if (title.isNotEmpty && predefinedTarget.containsKey(title)) {
+        final existing = (predefinedTarget[title] ?? '').trim();
+        if (existing.isEmpty) {
           predefinedTarget[title] = path;
-        } else {
+        } else if (existing != path) {
           freeformTarget.add(TitledLocalFile(title: title, path: path));
         }
+      } else {
+        freeformTarget.add(
+          TitledLocalFile(
+            title: title.isEmpty ? 'Document' : title,
+            path: path,
+          ),
+        );
       }
-    } catch (_) {
-      return;
     }
   }
 
@@ -694,33 +694,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   List<Map<String, String>> _parseTitledJson(String raw) {
     if (raw.trim().isEmpty) return const [];
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return const [];
-      return [
-        for (final item in decoded.whereType<Map>())
-          if ((item['title']?.toString().trim() ?? '').isNotEmpty &&
-              _storedLeadFilePath(
-                (item['file'] ??
-                        item['path'] ??
-                        item['url'] ??
-                        item['existingPath'])
-                    ?.toString(),
-              ).isNotEmpty)
-            {
-              'title': item['title'].toString().trim(),
-              'file': _storedLeadFilePath(
-                (item['file'] ??
-                        item['path'] ??
-                        item['url'] ??
-                        item['existingPath'])
-                    ?.toString(),
-              ),
-            },
-      ];
-    } catch (_) {
-      return const [];
-    }
+    return [
+      for (final item in parseTitledFileEntries(raw))
+        if (item.title.trim().isNotEmpty &&
+            _storedLeadFilePath(item.path).isNotEmpty)
+          {
+            'title': item.title.trim(),
+            'file': _storedLeadFilePath(item.path),
+          },
+    ];
   }
 
   /// Customer PUT copies Lead columns from a JSON body. Send `{title, file}`
@@ -2591,7 +2573,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           ],
           if (files.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Wrap(
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
               spacing: 10,
               runSpacing: 14,
               children: files.asMap().entries.map((entry) {
@@ -2675,6 +2659,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   ),
                 );
               }).toList(),
+            ),
             ),
           ],
         ],

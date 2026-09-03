@@ -474,24 +474,9 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
   List<String> _installationImagePaths() {
     final d = _lead.installationDetails;
     if (d == null) return const [];
-
-    final raw = d['installation_images'] ?? d['installationImages'];
-    if (raw is! List) return const [];
-
-    return raw
-        .map((item) {
-          if (item is Map) {
-            return (item['url'] ??
-                    item['path'] ??
-                    item['file'] ??
-                    item.toString())
-                .toString()
-                .trim();
-          }
-          return item?.toString().trim() ?? '';
-        })
-        .where((path) => path.isNotEmpty)
-        .toList();
+    return LeadModel.filePathsFrom(
+      d['installation_images'] ?? d['installationImages'],
+    );
   }
 
   bool get _hasMaterialDetails {
@@ -1960,21 +1945,17 @@ registration_time=${result.regTime.trim()}
   }
 
   List<LeadFileItem> _registrationImageFiles() {
-    return _lead.registrationImages
-        .where((path) => path.trim().isNotEmpty)
-        .toList()
-        .asMap()
-        .entries
-        .map(
-          (entry) => LeadFileItem(
-            label: 'Registration Image ${entry.key + 1}',
-            path: entry.value,
-            url: resolveUploadUrl(entry.value),
-            isImage: true,
-            isPdf: false,
-          ),
-        )
-        .toList();
+    final paths = LeadModel.filePathsFrom(_lead.registrationImages);
+    return [
+      for (var i = 0; i < paths.length; i++)
+        LeadFileItem(
+          label: 'Registration Image ${i + 1}',
+          path: paths[i],
+          url: resolveUploadUrl(paths[i]),
+          isImage: true,
+          isPdf: false,
+        ),
+    ];
   }
 
   Widget _headerCard(String customerName) {
@@ -2086,7 +2067,7 @@ registration_time=${result.regTime.trim()}
       margin: const EdgeInsets.only(bottom: AppSpacing.md - 2),
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             title,
@@ -2492,7 +2473,9 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
           ],
           if (files.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Wrap(
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
               spacing: 10,
               runSpacing: 14,
               children: files.asMap().entries.map((entry) {
@@ -2572,6 +2555,7 @@ class _UploadDocumentsDialogState extends State<_UploadDocumentsDialog> {
                   ),
                 );
               }).toList(),
+            ),
             ),
           ],
         ],

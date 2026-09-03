@@ -93,7 +93,14 @@ class LeadAttachmentsView extends StatelessWidget {
       );
     }
 
-    return Wrap(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        return SizedBox(
+          width: maxWidth,
+          child: Wrap(
       spacing: 12,
       runSpacing: 12,
       children: files.map((item) {
@@ -209,6 +216,9 @@ class LeadAttachmentsView extends StatelessWidget {
           ),
         );
       }).toList(),
+          ),
+        );
+      },
     );
   }
 
