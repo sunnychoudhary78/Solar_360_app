@@ -71,7 +71,7 @@ class _InstallationFormScreenState
           .getForm(widget.lead.id);
       if (!mounted || details == null || details.isEmpty) return;
       final hasSavedDetails =
-          (details['id']?.toString() ?? '').trim().isNotEmpty ||
+          _installationIdFrom(details) != null ||
           (details['file_no']?.toString() ?? '').trim().isNotEmpty ||
           (details['solar_panel_brand']?.toString() ?? '').trim().isNotEmpty;
       if (!hasSavedDetails) return;
@@ -81,10 +81,18 @@ class _InstallationFormScreenState
     }
   }
 
+  /// Never treat the lead id as an installation row id.
+  String? _installationIdFrom(Map<String, dynamic>? d) {
+    if (d == null) return null;
+    final id = d['id']?.toString().trim() ?? '';
+    if (id.isEmpty || id == widget.lead.id.trim()) return null;
+    return id;
+  }
+
   void _prefillFrom(Map<String, dynamic>? d) {
     if (d == null) return;
 
-    existingId = d['id']?.toString();
+    existingId = _installationIdFrom(d);
 
     fileNo.text = d['file_no']?.toString() ?? '';
     capacity.text =
@@ -313,19 +321,12 @@ class _InstallationFormScreenState
     try {
       final repo = ref.read(installationRepositoryProvider);
 
-      if (existingId != null && existingId!.isNotEmpty) {
-        await repo.update(
-          existingId!,
-          body,
-          installationImagePaths: selectedInstallationImages,
-        );
-      } else {
-        await repo.createForLead(
-          widget.lead.id,
-          body,
-          installationImagePaths: selectedInstallationImages,
-        );
-      }
+      await repo.saveForLead(
+        leadId: widget.lead.id,
+        installationId: existingId,
+        body: body,
+        installationImagePaths: selectedInstallationImages,
+      );
 
       if (!mounted) return;
 

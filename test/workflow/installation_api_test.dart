@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/features/installation/data/installation_api_service.dart';
+import 'package:solar_sales/features/installation/data/installation_repository.dart';
 
 import '../helpers/recording_adapter.dart';
 
@@ -72,6 +73,45 @@ void main() {
         pair.adapter.of('GET', 'installations/form/lead-1'),
         hasLength(1),
       );
+    });
+
+    test('getForm returns null when the lead has no installation row', () async {
+      pair.adapter.on('GET', 'installations/form/lead-1', (_) {
+        return {
+          'success': true,
+          'data': {
+            'id': 'lead-1',
+            'full_name': 'Test Lead',
+            'installationDetails': null,
+          },
+        };
+      });
+
+      final details = await service.getForm('lead-1');
+      expect(details, isNull);
+    });
+
+    test('saveForLead creates when the id is missing or is the lead id', () async {
+      final repo = InstallationRepository(service);
+      var posts = 0;
+      pair.adapter.on('POST', 'installations/lead/lead-1', (_) {
+        posts += 1;
+        return {'success': true};
+      });
+
+      await repo.saveForLead(
+        leadId: 'lead-1',
+        installationId: 'lead-1',
+        body: {'file_no': 'INV-1', 'panel_type': 'DCR'},
+      );
+      await repo.saveForLead(
+        leadId: 'lead-1',
+        installationId: null,
+        body: {'file_no': 'INV-1', 'panel_type': 'DCR'},
+      );
+
+      expect(posts, 2);
+      expect(pair.adapter.of('PUT', 'installations/'), isEmpty);
     });
   });
 }

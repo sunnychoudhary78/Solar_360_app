@@ -127,6 +127,10 @@ class InstallationApiService {
       if (nested is Map) {
         return Map<String, dynamic>.from(nested);
       }
+      // Form endpoint wraps a lead. No nested row means nothing is saved yet.
+      // Returning the lead itself would make callers treat lead.id as an
+      // installation id and PUT /installations/:leadId (404).
+      return null;
     }
 
     return map;
