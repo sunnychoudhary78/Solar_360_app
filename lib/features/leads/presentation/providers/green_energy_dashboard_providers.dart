@@ -68,8 +68,15 @@ class TerritoryFiltersNotifier extends Notifier<TerritoryFilters> {
   }
 }
 
+/// Same permission name as web (`territoryFilters`). Assigned per role in Roles UI.
+const territoryFiltersPermission = 'territoryFilters';
+
 final territoryUsersProvider =
     FutureProvider.autoDispose<List<TerritoryUser>>((ref) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.hasPermission(territoryFiltersPermission)) {
+    return const [];
+  }
   final repo = ref.watch(leadRepositoryProvider);
   try {
     final users = await repo.getAllUsers();
@@ -95,9 +102,15 @@ final greenEnergyDashboardLeadsProvider =
 final greenEnergyDashboardProvider =
     Provider.autoDispose<AsyncValue<GreenEnergyDashboardSnapshot>>((ref) {
   final leadsAsync = ref.watch(greenEnergyDashboardLeadsProvider);
-  final usersAsync = ref.watch(territoryUsersProvider);
-  final filters = ref.watch(territoryFiltersProvider);
   final auth = ref.watch(authProvider);
+  final canUseTerritoryFilters =
+      auth.hasPermission(territoryFiltersPermission);
+  final usersAsync = canUseTerritoryFilters
+      ? ref.watch(territoryUsersProvider)
+      : const AsyncValue<List<TerritoryUser>>.data([]);
+  final filters = canUseTerritoryFilters
+      ? ref.watch(territoryFiltersProvider)
+      : const TerritoryFilters();
   final canSeeRejected =
       LeadWorkflow.canViewRejectedLeads(auth.effectiveRoleName);
 

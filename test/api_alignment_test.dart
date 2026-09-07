@@ -5,6 +5,7 @@ import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/core/utils/profile_url.dart';
 import 'package:solar_sales/core/utils/upload_url.dart';
 import 'package:solar_sales/features/auth/data/auth_api_service.dart';
+import 'package:solar_sales/features/leads/presentation/providers/green_energy_dashboard_providers.dart';
 import 'package:solar_sales/features/notifications/data/notification_api_service.dart';
 
 import 'helpers/recording_adapter.dart';
@@ -44,6 +45,10 @@ void main() {
     test('territory user endpoints match the web dashboard', () {
       expect(ApiEndpoints.users, 'users');
       expect(ApiEndpoints.usersByRole, 'users/by-role');
+    });
+
+    test('territory filters use the same permission name as web', () {
+      expect(territoryFiltersPermission, 'territoryFilters');
     });
 
     test('marketing templates endpoint matches backend', () {

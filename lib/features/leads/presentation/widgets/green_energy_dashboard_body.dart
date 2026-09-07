@@ -27,10 +27,13 @@ class GreenEnergyDashboardBody extends ConsumerWidget {
   const GreenEnergyDashboardBody({
     super.key,
     required this.canReadLeads,
+    this.canUseTerritoryFilters = false,
     this.onRetry,
   });
 
   final bool canReadLeads;
+  /// Matches web: only roles granted `territoryFilters` see State/District/Role/User.
+  final bool canUseTerritoryFilters;
   final Future<void> Function()? onRetry;
 
   @override
@@ -70,15 +73,24 @@ class GreenEnergyDashboardBody extends ConsumerWidget {
                 },
         ),
       ),
-      data: (snapshot) => _DashboardLoaded(snapshot: snapshot, onRetry: onRetry),
+      data: (snapshot) => _DashboardLoaded(
+        snapshot: snapshot,
+        canUseTerritoryFilters: canUseTerritoryFilters,
+        onRetry: onRetry,
+      ),
     );
   }
 }
 
 class _DashboardLoaded extends ConsumerStatefulWidget {
-  const _DashboardLoaded({required this.snapshot, this.onRetry});
+  const _DashboardLoaded({
+    required this.snapshot,
+    required this.canUseTerritoryFilters,
+    this.onRetry,
+  });
 
   final GreenEnergyDashboardSnapshot snapshot;
+  final bool canUseTerritoryFilters;
   final Future<void> Function()? onRetry;
 
   @override
@@ -90,9 +102,13 @@ class _DashboardLoadedState extends ConsumerState<_DashboardLoaded> {
 
   GreenEnergyDashboardSnapshot get snapshot => widget.snapshot;
 
+  bool get _canUseTerritoryFilters => widget.canUseTerritoryFilters;
+
   void _showStateTooltip(StateAnalytics data) {
     setState(() => _tooltip = data);
-    ref.read(territoryFiltersProvider.notifier).toggleState(data.name);
+    if (_canUseTerritoryFilters) {
+      ref.read(territoryFiltersProvider.notifier).toggleState(data.name);
+    }
   }
 
   @override
@@ -101,11 +117,14 @@ class _DashboardLoadedState extends ConsumerState<_DashboardLoaded> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _TerritoryFiltersCard(snapshot: snapshot),
-        const SizedBox(height: AppSpacing.lg),
+        if (_canUseTerritoryFilters) ...[
+          _TerritoryFiltersCard(snapshot: snapshot),
+          const SizedBox(height: AppSpacing.lg),
+        ],
         _IndiaDistributionCard(
           snapshot: snapshot,
           tooltip: _tooltip,
+          canFilterByState: _canUseTerritoryFilters,
           onStateTap: _showStateTooltip,
           onDismissTooltip: () => setState(() => _tooltip = null),
         ),
@@ -422,12 +441,14 @@ class _IndiaDistributionCard extends ConsumerWidget {
   const _IndiaDistributionCard({
     required this.snapshot,
     required this.tooltip,
+    required this.canFilterByState,
     required this.onStateTap,
     required this.onDismissTooltip,
   });
 
   final GreenEnergyDashboardSnapshot snapshot;
   final StateAnalytics? tooltip;
+  final bool canFilterByState;
   final ValueChanged<StateAnalytics> onStateTap;
   final VoidCallback onDismissTooltip;
 
@@ -596,7 +617,9 @@ class _IndiaDistributionCard extends ConsumerWidget {
                   ),
             const SizedBox(height: 6),
             Text(
-              'Click a state on the map or list to apply the same filter.',
+              canFilterByState
+                  ? 'Click a state on the map or list to apply the same filter.'
+                  : 'Tap a state on the map or list to see lead counts.',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),

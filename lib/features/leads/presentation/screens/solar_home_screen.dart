@@ -70,7 +70,8 @@ class _SalesAdminHomeState extends ConsumerState<_SalesAdminHome> {
       await Future.wait([
         ref.refresh(allLeadsProvider.future),
         ref.refresh(greenEnergyDashboardLeadsProvider.future),
-        ref.refresh(territoryUsersProvider.future),
+        if (widget.auth.hasPermission(territoryFiltersPermission))
+          ref.refresh(territoryUsersProvider.future),
         ref.refresh(unreadNotificationCountProvider.future),
       ]);
     } catch (_) {
@@ -153,6 +154,8 @@ class _SolarHomeContent extends ConsumerWidget {
 
   bool get _canReadLeads => auth.hasPermission('lead.read');
   bool get _canCreateLead => auth.hasPermission('lead.create');
+  bool get _canUseTerritoryFilters =>
+      auth.hasPermission(territoryFiltersPermission);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -173,12 +176,16 @@ class _SolarHomeContent extends ConsumerWidget {
       children: [
         GreenEnergyDashboardBody(
           canReadLeads: _canReadLeads,
+          canUseTerritoryFilters: _canUseTerritoryFilters,
           onRetry: () async {
             ref.invalidate(greenEnergyDashboardLeadsProvider);
-            ref.invalidate(territoryUsersProvider);
+            if (_canUseTerritoryFilters) {
+              ref.invalidate(territoryUsersProvider);
+            }
             await Future.wait([
               ref.refresh(greenEnergyDashboardLeadsProvider.future),
-              ref.refresh(territoryUsersProvider.future),
+              if (_canUseTerritoryFilters)
+                ref.refresh(territoryUsersProvider.future),
             ]);
           },
         ),
