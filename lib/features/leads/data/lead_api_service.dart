@@ -76,6 +76,20 @@ class LeadApiService {
     return true;
   }
 
+  String _storedLeadFilePath(String path) {
+    var value = LeadModel.filePathFrom(path).replaceAll('\\', '/').trim();
+    if (value.isEmpty) return '';
+    value = value.split('?').first.trim();
+    final leadsIndex = value.indexOf('/leads/');
+    if (leadsIndex != -1) return value.substring(leadsIndex + 1);
+    if (value.startsWith('leads/')) return value;
+    final uploadsIndex = value.indexOf('uploads/leads/');
+    if (uploadsIndex != -1) {
+      return value.substring(uploadsIndex + 'uploads/'.length);
+    }
+    return value;
+  }
+
   Future<LeadModel?> createLead(
     Map<String, dynamic> data, {
     Map<String, String>? singleFilePaths,
@@ -151,7 +165,11 @@ class LeadApiService {
       required String leadField,
       required List<Map<String, String>>? entries,
     }) async {
-      final items = (entries ?? [])
+      // null = leave this field unchanged on the server.
+      // [] = clear it. Never treat "not provided" as an empty replace.
+      if (entries == null) return;
+
+      final items = entries
           .where(
             (item) =>
                 (item['title'] ?? '').trim().isNotEmpty &&
@@ -160,7 +178,6 @@ class LeadApiService {
           .toList();
 
       if (items.isEmpty) {
-        // On edit, send [] so intentional clears persist; otherwise omit.
         if (alwaysSendMeta) {
           formDataMap[metaField] = '[]';
           formDataMap[leadField] = '[]';
@@ -175,8 +192,16 @@ class LeadApiService {
         final title = item['title']!.trim();
         final path = item['path']!.trim();
         if (_isExistingRemotePath(path)) {
-          meta.add({'title': title, 'existingPath': path, 'file': path});
+          final stored = _storedLeadFilePath(path);
+          if (stored.isEmpty) continue;
+          // Backend keeps this slot via existingPath and does not upload again.
+          meta.add({
+            'title': title,
+            'existingPath': stored,
+            'file': stored,
+          });
         } else {
+          // Replacement / new pick: no existingPath so multer consumes the file.
           meta.add({'title': title, 'existingPath': null});
           files.add(await _multipartFromPath(path));
         }
@@ -186,9 +211,6 @@ class LeadApiService {
       if (files.isNotEmpty) {
         formDataMap[filesField] = files;
       } else {
-        // Customer PUT copies Lead columns from the body. Persist titled
-        // remotes on additional_documents / additional_images, not only
-        // the unused *_entries_json field.
         formDataMap[leadField] = jsonEncode([
           for (final item in meta)
             if (item['file'] != null)
@@ -296,6 +318,23 @@ class LeadApiService {
         .toList();
   }
 
+  /// Existing web dashboard API: `GET /users`.
+  Future<List<Map<String, dynamic>>> getAllUsers() async {
+    final data = await _api.get(ApiEndpoints.users);
+    final list = data is Map && data['data'] is List
+        ? data['data'] as List
+        : data is Map && data['users'] is List
+        ? data['users'] as List
+        : data is List
+        ? data
+        : const [];
+
+    return list
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
   Future<void> updateLeadWithFiles(
     String leadId,
     Map<String, dynamic> data, {
@@ -315,7 +354,10 @@ class LeadApiService {
           continue;
         }
         if (_isExistingRemotePath(filePath)) {
-          formDataMap[entry.key] ??= filePath;
+          final stored = _storedLeadFilePath(filePath);
+          if (stored.isNotEmpty) {
+            formDataMap[entry.key] ??= stored;
+          }
           continue;
         }
 

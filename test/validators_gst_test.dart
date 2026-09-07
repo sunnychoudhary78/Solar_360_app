@@ -37,10 +37,18 @@ void main() {
       expect(AppValidators.gstWriteValue(null), isNull);
     });
 
-    test('optionalPhone accepts Indian and international', () {
+    test('email matches backend format (non-empty local, @, domain)', () {
+      expect(AppValidators.optionalEmail(''), isNull);
+      expect(AppValidators.optionalEmail('lead@example.com'), isNull);
+      expect(AppValidators.optionalEmail('a@b.c'), isNull);
+      expect(AppValidators.optionalEmail('not-an-email'), isNotNull);
+    });
+
+    test('optionalPhone accepts Indian mobiles and rejects invalid numbers', () {
       expect(AppValidators.optionalPhone('9876543210'), isNull);
       expect(AppValidators.optionalPhone('+919876543210'), isNull);
       expect(AppValidators.optionalPhone('123'), isNotNull);
+      expect(AppValidators.optionalPhone(''), isNull);
     });
 
     test('duplicateLineItems detects duplicates', () {

@@ -19,6 +19,7 @@ dependencies:
   google_fonts: ^8.0.1
   flutter_animate: ^4.5.2
   fl_chart: ^1.1.1
+  path_drawing: ^1.0.1
   intl: ^0.20.2
   path_provider: ^2.1.5
   open_filex: ^4.7.0
@@ -52,3 +53,4 @@ flutter:
     - assets/images/billbook_header.png
     - assets/logo/logo.png
     - assets/icon/icon.png
+    - assets/maps/india.json

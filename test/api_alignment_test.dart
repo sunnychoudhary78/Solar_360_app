@@ -26,6 +26,10 @@ void main() {
       expect(ApiEndpoints.customerLogout, 'customers/logout');
     });
 
+    test('users endpoint matches the web dashboard territory filter API', () {
+      expect(ApiEndpoints.users, 'users');
+    });
+
     test('notification endpoints match backend routes', () {
       expect(
         ApiEndpoints.markNotificationRead('notification-id'),
@@ -35,6 +39,11 @@ void main() {
         ApiEndpoints.markAllNotificationsRead,
         'notifications/mark-all-as-read',
       );
+    });
+
+    test('territory user endpoints match the web dashboard', () {
+      expect(ApiEndpoints.users, 'users');
+      expect(ApiEndpoints.usersByRole, 'users/by-role');
     });
 
     test('marketing templates endpoint matches backend', () {

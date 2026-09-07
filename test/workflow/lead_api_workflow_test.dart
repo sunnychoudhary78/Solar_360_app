@@ -125,6 +125,20 @@ void main() {
       expect(users.first['name'], 'Doc Admin');
     });
 
+    test('getAllUsers uses the existing /users API', () async {
+      pair.adapter.on('GET', 'users', (_) {
+        return {
+          'data': [
+            {'id': 'u1', 'name': 'Demo', 'state': 'Uttar Pradesh'},
+          ],
+        };
+      });
+
+      final users = await repo.getAllUsers();
+      expect(users, hasLength(1));
+      expect(users.first['name'], 'Demo');
+    });
+
     test('updateLead sends JSON final amount received payload', () async {
       pair.adapter.on('PUT', 'leads/lead-1', (req) {
         expect(req.data, isA<Map>());
@@ -274,7 +288,23 @@ void main() {
         ),
       );
 
-      pair.adapter.on('PUT', 'customers/leads/lead-1', (_) {
+      pair.adapter.on('PUT', 'customers/leads/lead-1', (req) {
+        expect(req.data, isA<FormData>());
+        final form = req.data as FormData;
+        final fields = {for (final field in form.fields) field.key: field.value};
+        expect(fields['cheque_passbook_copy'], 'leads/passbook.jpg');
+        expect(
+          fields['additional_documents_entries_json'],
+          contains('existingPath'),
+        );
+        expect(
+          fields['additional_documents_entries_json'],
+          contains('leads/aadhaar.jpg'),
+        );
+        expect(
+          form.files.any((f) => f.key == 'additional_documents_files'),
+          isFalse,
+        );
         return {
           'success': true,
           'data': {

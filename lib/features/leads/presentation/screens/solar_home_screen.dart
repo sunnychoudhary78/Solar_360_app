@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
-import 'package:solar_sales/core/workflow/lead_workflow.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
+import 'package:solar_sales/features/leads/presentation/providers/green_energy_dashboard_providers.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
+import 'package:solar_sales/features/leads/presentation/widgets/green_energy_dashboard_body.dart';
 import 'package:solar_sales/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:solar_sales/features/shell/presentation/nav_destinations.dart';
 import 'package:solar_sales/features/workflow/presentation/screens/workflow_team_screen.dart';
@@ -68,6 +69,8 @@ class _SalesAdminHomeState extends ConsumerState<_SalesAdminHome> {
     try {
       await Future.wait([
         ref.refresh(allLeadsProvider.future),
+        ref.refresh(greenEnergyDashboardLeadsProvider.future),
+        ref.refresh(territoryUsersProvider.future),
         ref.refresh(unreadNotificationCountProvider.future),
       ]);
     } catch (_) {
@@ -153,7 +156,6 @@ class _SolarHomeContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final leadsAsync = ref.watch(allLeadsProvider);
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -166,81 +168,20 @@ class _SolarHomeContent extends ConsumerWidget {
       auth.hasPermission,
     );
 
-    final leads = leadsAsync.asData?.value ?? const [];
-    final leadCount = leads.length;
-    final convertedCount = leads
-        .where((lead) => LeadWorkflow.isConvertedPipelineStatus(lead.status))
-        .length;
-    final completedCount = leads
-        .where(
-          (lead) => LeadWorkflow.isCompletedStatus(
-            lead.status,
-            department: lead.currentDepartment,
-          ),
-        )
-        .length;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_canReadLeads) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-            child: Row(
-              children: [
-                Expanded(
-                  child: MetricTile(
-                    label: 'Total leads',
-                    value: '$leadCount',
-                    icon: Icons.groups_rounded,
-                    onTap: () =>
-                        Navigator.pushNamed(context, '/solar/leads'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: MetricTile(
-                    label: 'Converted',
-                    value: '$convertedCount',
-                    icon: Icons.verified_outlined,
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      '/solar/converted-leads',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: MetricTile(
-                    label: 'Completed',
-                    value: '$completedCount',
-                    icon: Icons.task_alt_outlined,
-                    onTap: auth.hasPermission('closedlead.read')
-                        ? () => Navigator.pushNamed(
-                              context,
-                              '/solar/completed-leads',
-                            )
-                        : null,
-                  ),
-                ),
-              ],
-            ),
-          ).appFadeSlide(index: 0),
-          const SizedBox(height: AppSpacing.lg),
-        ] else
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: AppCard(
-              variant: AppCardVariant.flat,
-              child: Text(
-                'Your account does not have lead permissions yet. Ask an admin to assign lead.read / lead.create.',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.4,
-                ),
-              ),
-            ),
-          ),
+        GreenEnergyDashboardBody(
+          canReadLeads: _canReadLeads,
+          onRetry: () async {
+            ref.invalidate(greenEnergyDashboardLeadsProvider);
+            ref.invalidate(territoryUsersProvider);
+            await Future.wait([
+              ref.refresh(greenEnergyDashboardLeadsProvider.future),
+              ref.refresh(territoryUsersProvider.future),
+            ]);
+          },
+        ),
 
         if (_canCreateLead || _canReadLeads) ...[
           const Padding(
@@ -264,6 +205,7 @@ class _SolarHomeContent extends ConsumerWidget {
                     ),
                   );
                   ref.invalidate(allLeadsProvider);
+                  ref.invalidate(greenEnergyDashboardLeadsProvider);
                 },
                 padding: const EdgeInsets.all(16),
                 child: Row(
@@ -389,12 +331,6 @@ class _SolarHomeContent extends ConsumerWidget {
           destinations: quickDests,
           onDestination: (dest) => navigateDestination(context, dest, tabs),
         ).appFadeSlide(index: 3),
-
-        if (leadsAsync.isLoading && !leadsAsync.hasValue)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: SkeletonList(count: 2),
-          ),
       ],
     );
   }

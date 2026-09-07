@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -22,6 +21,7 @@ import 'package:solar_sales/features/leads/data/lead_files.dart';
 import 'package:solar_sales/features/leads/data/lead_repository.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
+import 'package:solar_sales/shared/utils/validators.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -41,20 +41,6 @@ class TitledLocalFile {
   TitledLocalFile copyWith({String? title, String? path}) {
     return TitledLocalFile(title: title ?? this.title, path: path ?? this.path);
   }
-}
-
-class _MintedCustomerUploads {
-  final String scratchId;
-  final Map<String, String> singleFiles;
-  final List<TitledLocalFile> documents;
-  final List<TitledLocalFile> images;
-
-  const _MintedCustomerUploads({
-    required this.scratchId,
-    required this.singleFiles,
-    required this.documents,
-    required this.images,
-  });
 }
 
 class _PredefinedLeadFile {
@@ -243,12 +229,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   String? preInstallationPhotoPath;
   String? quotationDocumentPath;
 
-  /// Server paths present when the form was opened, used so Edit Details
-  /// keeps files unless the customer removes or replaces them.
-  final Map<String, String> _originalSingleFiles = {};
-  String _originalAdditionalDocumentsJson = '[]';
-  String _originalAdditionalImagesJson = '[]';
-
   final List<TitledLocalFile> additionalImages = [];
   final List<TitledLocalFile> additionalDocs = [];
   final Map<String, String?> predefinedDocPaths = {
@@ -262,6 +242,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   bool isFetchingLocation = false;
   bool _isClosing = false;
   bool _mediaSectionReady = false;
+  String? _lastPickError;
 
   late final List<DropdownMenuItem<String>> _stateMenuItems = indianStates
       .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
@@ -413,34 +394,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         additionalImages,
       );
     }
-
-    if (!keepCurrentIfIncomingEmpty ||
-        _nonEmptyPath(lead.roofPhoto) != null ||
-        _nonEmptyPath(lead.chequePassbookCopy) != null ||
-        incomingDocs.isNotEmpty ||
-        incomingImages.isNotEmpty) {
-      _snapshotOriginalMedia();
-    }
-  }
-
-  void _snapshotOriginalMedia() {
-    _originalSingleFiles
-      ..clear()
-      ..addAll({
-        'roof_photo': (roofPhotoPath ?? '').trim(),
-        'bank_clear_photo': (bankClearPhotoPath ?? '').trim(),
-        'cheque_passbook_copy': (chequePassbookPath ?? '').trim(),
-        'pre_installation_photo': (preInstallationPhotoPath ?? '').trim(),
-        'quotation_document': (quotationDocumentPath ?? '').trim(),
-      });
-    _originalAdditionalDocumentsJson = jsonEncode(
-      _remoteTitledJson(_allTitledEntries(predefinedDocPaths, additionalDocs)),
-    );
-    _originalAdditionalImagesJson = jsonEncode(
-      _remoteTitledJson(
-        _allTitledEntries(predefinedImagePaths, additionalImages),
-      ),
-    );
   }
 
   void _applyLeadToForm(
@@ -645,12 +598,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       final path = item.path.trim();
       if (path.isEmpty) continue;
       if (title.isNotEmpty && predefinedTarget.containsKey(title)) {
-        final existing = (predefinedTarget[title] ?? '').trim();
-        if (existing.isEmpty) {
-          predefinedTarget[title] = path;
-        } else if (existing != path) {
-          freeformTarget.add(TitledLocalFile(title: title, path: path));
-        }
+        // Last path wins for a named slot so edit/replace never duplicates it.
+        predefinedTarget[title] = path;
       } else {
         freeformTarget.add(
           TitledLocalFile(
@@ -668,148 +617,21 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     Map<String, String?> predefined,
     List<TitledLocalFile> freeform,
   ) {
-    final out = <TitledLocalFile>[
-      for (final entry in predefined.entries)
-        if ((entry.value?.trim() ?? '').isNotEmpty)
-          TitledLocalFile(title: entry.key, path: entry.value!.trim()),
-      ...freeform.where((e) => e.path.trim().isNotEmpty),
-    ];
+    final seenPredefined = <String>{};
+    final out = <TitledLocalFile>[];
+    for (final entry in predefined.entries) {
+      final path = (entry.value ?? '').trim();
+      if (path.isEmpty) continue;
+      seenPredefined.add(entry.key.trim().toLowerCase());
+      out.add(TitledLocalFile(title: entry.key, path: path));
+    }
+    for (final item in freeform) {
+      if (item.path.trim().isEmpty) continue;
+      final key = item.title.trim().toLowerCase();
+      if (key.isNotEmpty && seenPredefined.contains(key)) continue;
+      out.add(item);
+    }
     return out;
-  }
-
-  List<Map<String, String>> _remoteTitledJson(List<TitledLocalFile> files) {
-    return [
-      for (final file in files)
-        if (file.title.trim().isNotEmpty &&
-            _storedLeadFilePath(file.path).isNotEmpty &&
-            _isExistingRemotePath(file.path))
-          {
-            'title': file.title.trim(),
-            'file': _storedLeadFilePath(file.path),
-          },
-    ];
-  }
-
-  String _storedLeadFilePath(String? path) {
-    var value = LeadModel.filePathFrom(path).replaceAll('\\', '/').trim();
-    if (value.isEmpty) return '';
-    value = value.split('?').first.trim();
-    final leadsIndex = value.indexOf('/leads/');
-    if (leadsIndex != -1) return value.substring(leadsIndex + 1);
-    if (value.startsWith('leads/')) return value;
-    final uploadsIndex = value.indexOf('uploads/leads/');
-    if (uploadsIndex != -1) {
-      return value.substring(uploadsIndex + 'uploads/'.length);
-    }
-    return value;
-  }
-
-  String _normTitle(String title) => title.trim().toLowerCase();
-
-  List<Map<String, String>> _parseTitledJson(String raw) {
-    if (raw.trim().isEmpty) return const [];
-    return [
-      for (final item in parseTitledFileEntries(raw))
-        if (item.title.trim().isNotEmpty &&
-            _storedLeadFilePath(item.path).isNotEmpty)
-          {
-            'title': item.title.trim(),
-            'file': _storedLeadFilePath(item.path),
-          },
-    ];
-  }
-
-  /// Customer PUT copies Lead columns from a JSON body. Send `{title, file}`
-  /// arrays (not JSON strings / multipart) so the staff web panel can render
-  /// them the same way the app does.
-  void _putCustomerFileFieldsOnJson(
-    Map<String, dynamic> data, {
-    required List<TitledLocalFile> documents,
-    required List<TitledLocalFile> images,
-  }) {
-    void keepSingle(String field, String? current) {
-      data.remove(field);
-      final value = (current ?? '').trim();
-      if (value.isEmpty) {
-        if ((_originalSingleFiles[field] ?? '').trim().isNotEmpty) {
-          data[field] = '';
-        }
-        return;
-      }
-      if (_isExistingRemotePath(value)) {
-        data[field] = _storedLeadFilePath(value);
-      }
-    }
-
-    keepSingle('roof_photo', roofPhotoPath);
-    keepSingle('bank_clear_photo', bankClearPhotoPath);
-    keepSingle('cheque_passbook_copy', chequePassbookPath);
-    keepSingle('pre_installation_photo', preInstallationPhotoPath);
-    keepSingle('quotation_document', quotationDocumentPath);
-
-    data['additional_documents'] = _remoteTitledJson(documents);
-    data['additional_images'] = _remoteTitledJson(images);
-  }
-
-  bool _customerHasNewLocalFiles(
-    Map<String, String> singleFiles,
-    List<TitledLocalFile> documents,
-    List<TitledLocalFile> images,
-  ) {
-    if (singleFiles.values.any(
-      (path) => path.trim().isNotEmpty && _isLocalPickedPath(path),
-    )) {
-      return true;
-    }
-    return documents.any((item) => _isLocalPickedPath(item.path)) ||
-        images.any((item) => _isLocalPickedPath(item.path));
-  }
-
-  void _mergeRemoteFilesFromLeads(
-    Map<String, dynamic> data,
-    List<LeadModel> leads,
-  ) {
-    void fillSingle(String field, String Function(LeadModel lead) getter) {
-      final current = (data[field] as String?)?.trim() ?? '';
-      if (current.isNotEmpty) return;
-      for (final lead in leads) {
-        final path = _storedLeadFilePath(getter(lead));
-        if (path.isNotEmpty) {
-          data[field] = path;
-          return;
-        }
-      }
-    }
-
-    fillSingle('roof_photo', (lead) => lead.roofPhoto);
-    fillSingle('bank_clear_photo', (lead) => lead.bankClearPhoto);
-    fillSingle('cheque_passbook_copy', (lead) => lead.chequePassbookCopy);
-    fillSingle('pre_installation_photo', (lead) => lead.preInstallationPhoto);
-    fillSingle('quotation_document', (lead) => lead.quotationDocument);
-
-    void mergeTitled(String field, String Function(LeadModel lead) getter) {
-      final byTitle = <String, Map<String, String>>{};
-      final existing = data[field];
-      if (existing is List) {
-        for (final item in existing.whereType<Map>()) {
-          final title = item['title']?.toString().trim() ?? '';
-          final file = _storedLeadFilePath(item['file']?.toString());
-          if (title.isEmpty || file.isEmpty) continue;
-          byTitle[_normTitle(title)] = {'title': title, 'file': file};
-        }
-      }
-      for (final lead in leads) {
-        for (final item in _parseTitledJson(getter(lead))) {
-          final key = _normTitle(item['title'] ?? '');
-          if (key.isEmpty || byTitle.containsKey(key)) continue;
-          byTitle[key] = item;
-        }
-      }
-      data[field] = byTitle.values.toList();
-    }
-
-    mergeTitled('additional_documents', (lead) => lead.additionalDocuments);
-    mergeTitled('additional_images', (lead) => lead.additionalImages);
   }
 
   Map<String, String> _singleFileUploadsForSave() {
@@ -819,8 +641,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     void put(String field, String? current, String previous) {
       final value = current?.trim() ?? '';
       if (value.isNotEmpty) {
-        // Skip re-uploading unchanged remote files; API keeps previous value.
-        if (_isExistingRemotePath(value)) return;
         map[field] = value;
         return;
       }
@@ -913,10 +733,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       '.png',
       '.webp',
       '.gif',
+      '.jfif',
       '.bmp',
       '.pdf',
       '.docx',
       '.doc',
+      '.xlsx',
+      '.xls',
+      '.csv',
+      '.txt',
+      '.rtf',
       '.heic',
       '.heif',
     ]) {
@@ -939,6 +765,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     String? originalName,
     required bool imageOnly,
   }) async {
+    _lastPickError = null;
     final rawPath = path?.trim() ?? '';
     List<int>? data = bytes;
     if ((data == null || data.isEmpty) && rawPath.isNotEmpty) {
@@ -952,6 +779,13 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     if (data == null || data.isEmpty) {
       return rawPath.isEmpty ? null : rawPath;
     }
+
+    _lastPickError = leadUploadRejection(
+      sizeBytes: data.length,
+      filename: originalName ?? rawPath,
+      imageOnly: imageOnly,
+    );
+    if (_lastPickError != null) return null;
 
     try {
       final dir = await getTemporaryDirectory();
@@ -1005,107 +839,16 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
   }
 
-  String? _validateFullName(String? value) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return 'Full name is required';
-    if (v.length < 3) return 'Full name must be at least 3 letters';
-    if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
-      return 'Only alphabets are allowed in full name';
-    }
-    return null;
-  }
+  String? _validateMobile(String? value) => AppValidators.phone(value);
 
-  String? _validateMobile(String? value) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return 'Mobile number is required';
-    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(v)) {
-      return 'Please enter a valid 10-digit mobile number';
-    }
-    return null;
-  }
+  String? _validateOptionalMobile(String? value) =>
+      AppValidators.optionalPhone(value);
 
-  String? _validateOptionalMobile(String? value) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
-    return _validateMobile(v);
-  }
-
-  String? _validateEmail(String? value) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
-    if (!RegExp(
-      r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$',
-    ).hasMatch(v)) {
-      return 'Please enter a valid email address';
-    }
-    return null;
-  }
-
-  String? _validateOptionalAlpha(String? value, String label) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
-    if (!RegExp(r'^[a-zA-Z ]+$').hasMatch(v)) {
-      return 'Only alphabets are allowed in $label';
-    }
-    return null;
-  }
-
-  String? _validatePincode(String? value) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
-    if (!RegExp(r'^\d{6}$').hasMatch(v)) {
-      return 'Please enter a valid 6-digit pincode';
-    }
-    return null;
-  }
-
-  String? _validateNumber(String? value, String label) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
-    if (!RegExp(r'^-?\d+(\.\d+)?$').hasMatch(v)) {
-      return 'Please enter a valid $label';
-    }
-    return null;
-  }
-
-  String? _validatePositiveNumber(String? value, String label) {
-    final formatError = _validateNumber(value, label);
-    if (formatError != null) return formatError;
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
-    if (num.parse(v) <= 0) return '$label must be greater than 0';
-    return null;
-  }
+  String? _validateEmail(String? value) => AppValidators.optionalEmail(value);
 
   String? _requiredThen(String? value, String label, String? Function(String?)? next) {
     if (value == null || value.trim().isEmpty) return '$label is required';
     return next?.call(value);
-  }
-
-  String? _validateMaxDigitNumber(String? value, String label, int maxLength) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
-    if (!RegExp(r'^\d+$').hasMatch(v)) return '$label must be numeric only';
-    if (v.length > maxLength) return '$label must be maximum $maxLength digits';
-    return null;
-  }
-
-  String? _validateAccount(String? value) {
-    final v = value?.trim() ?? '';
-    if (v.isEmpty) return null;
-    if (!RegExp(r'^\d{9,18}$').hasMatch(v)) {
-      return 'Account number must be 9 to 18 digits';
-    }
-    return null;
-  }
-
-  String? _validateIfsc(String? value) {
-    final v = value?.trim().toUpperCase() ?? '';
-    if (v.isEmpty) return null;
-    if (!RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(v)) {
-      return 'Please enter a valid IFSC code';
-    }
-    return null;
   }
 
   void _safeSetState(VoidCallback fn) {
@@ -1186,14 +929,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     }
   }
 
-  /// Customer portal save:
+  /// Customer portal save uses the same backend endpoints as the web app:
   /// POST `/customers/leads` only when this customer has no lead yet.
-  /// Edit always JSON-PUTs `/customers/leads/:id` on that same lead.
-  ///
-  /// Customer PUT copies Lead columns from the body and ignores multipart
-  /// files, so new images/docs are uploaded through a hidden scratch POST
-  /// (the only customer endpoint that stores files) and the returned
-  /// `leads/...` paths are written onto the existing lead.
+  /// Edit always multipart-PUTs `/customers/leads/:id` (multer is on that route).
   Future<void> _saveCustomerPortalLead({
     required LeadRepository repo,
     required Map<String, dynamic> data,
@@ -1245,185 +983,21 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     data['roof_load_bearing_capacity'] = roofLoadBearingCapacity;
     data['shadow_free_roof'] = shadowFreeRoof;
     data['vendor_visited_site'] = vendorVisitedSite;
-    _putCustomerFileFieldsOnJson(
+
+    await repo.updateLeadWithFiles(
+      leadId,
       data,
-      documents: documents,
-      images: images,
+      singleFilePaths: singleFiles,
+      additionalImageEntries: imagePayload,
+      additionalDocumentEntries: documentPayload,
     );
 
-    final scratchIds = <String>[];
-    if (_customerHasNewLocalFiles(singleFiles, documents, images)) {
-      final minted = await _mintCustomerUploadPaths(
-        repo: repo,
-        data: data,
-        keepLeadId: leadId,
-        singleFiles: singleFiles,
-        documents: documents,
-        images: images,
-      );
-      for (final entry in minted.singleFiles.entries) {
-        final path = _storedLeadFilePath(entry.value);
-        if (path.isNotEmpty) data[entry.key] = path;
-      }
-      data['additional_documents'] = _remoteTitledJson(minted.documents);
-      data['additional_images'] = _remoteTitledJson(minted.images);
-      if (minted.documents.any((item) => _isLocalPickedPath(item.path)) ||
-          minted.images.any((item) => _isLocalPickedPath(item.path))) {
-        throw Exception(
-          'Could not upload the new image or document. Please try again.',
-        );
-      }
-      if (minted.scratchId.isNotEmpty) scratchIds.add(minted.scratchId);
+    // Clean leftover scratch leads from older app versions. Do not POST extras.
+    for (final extra in existingLeads) {
+      if (extra.id == leadId) continue;
+      if (!extra.notes.toLowerCase().contains('[file-scratch]')) continue;
+      await _deactivateCustomerLead(repo, extra.id);
     }
-
-    _mergeRemoteFilesFromLeads(
-      data,
-      existingLeads
-          .where(
-            (lead) =>
-                lead.id != leadId &&
-                !lead.notes.toLowerCase().contains('[file-scratch]'),
-          )
-          .toList(),
-    );
-
-    try {
-      await repo.updateLead(leadId, data);
-    } finally {
-      for (final extra in existingLeads) {
-        if (extra.id == leadId || !canCustomerEditLead(extra)) continue;
-        await _deactivateCustomerLead(repo, extra.id);
-      }
-      for (final scratchId in scratchIds) {
-        if (scratchId == leadId) continue;
-        await _deactivateCustomerLead(repo, scratchId);
-      }
-    }
-  }
-
-  /// Customer PUT does not read `req.files`. POST `/customers/leads` does, so
-  /// new local picks are stored there as an inactive Rejected scratch, then
-  /// their server paths are copied onto the lead being edited.
-  Future<_MintedCustomerUploads> _mintCustomerUploadPaths({
-    required LeadRepository repo,
-    required Map<String, dynamic> data,
-    required String keepLeadId,
-    required Map<String, String> singleFiles,
-    required List<TitledLocalFile> documents,
-    required List<TitledLocalFile> images,
-  }) async {
-    final localSingles = <String, String>{
-      for (final entry in singleFiles.entries)
-        if (_isLocalPickedPath(entry.value)) entry.key: entry.value,
-    };
-    final localDocs =
-        documents.where((item) => _isLocalPickedPath(item.path)).toList();
-    final localImages =
-        images.where((item) => _isLocalPickedPath(item.path)).toList();
-
-    final mintData = <String, dynamic>{
-      'full_name': data['full_name'],
-      'mobile': data['mobile'],
-      'email': data['email'],
-      'source': 'Customer Portal',
-      'status': 'Rejected',
-      'status_remarks': 'Temporary file upload for existing lead',
-      'is_active': false,
-      'notes': '[file-scratch]',
-    };
-
-    var minted = await repo.createLead(
-      mintData,
-      singleFilePaths: localSingles,
-      additionalImageEntries: localImages.map((e) => e.toPayload()).toList(),
-      additionalDocumentEntries: localDocs.map((e) => e.toPayload()).toList(),
-    );
-
-    if (minted == null || minted.id.trim().isEmpty || minted.id == keepLeadId) {
-      final latest = await repo.getAllLeads();
-      minted = _newestScratchLead(latest, keepLeadId: keepLeadId);
-    }
-
-    if (minted == null) {
-      throw Exception(
-        'Could not upload the new image or document. Please try again.',
-      );
-    }
-
-    final mintedSingles = <String, String>{};
-    void takeSingle(String field, String value) {
-      final path = _storedLeadFilePath(value);
-      if (path.isNotEmpty) mintedSingles[field] = path;
-    }
-
-    if (localSingles.containsKey('roof_photo')) {
-      takeSingle('roof_photo', minted.roofPhoto);
-    }
-    if (localSingles.containsKey('bank_clear_photo')) {
-      takeSingle('bank_clear_photo', minted.bankClearPhoto);
-    }
-    if (localSingles.containsKey('cheque_passbook_copy')) {
-      takeSingle('cheque_passbook_copy', minted.chequePassbookCopy);
-    }
-    if (localSingles.containsKey('pre_installation_photo')) {
-      takeSingle('pre_installation_photo', minted.preInstallationPhoto);
-    }
-    if (localSingles.containsKey('quotation_document')) {
-      takeSingle('quotation_document', minted.quotationDocument);
-    }
-
-    return _MintedCustomerUploads(
-      scratchId: minted.id.trim(),
-      singleFiles: mintedSingles,
-      documents: _applyMintedTitledFiles(
-        current: documents,
-        minted: parseTitledFileEntries(minted.additionalDocuments),
-      ),
-      images: _applyMintedTitledFiles(
-        current: images,
-        minted: parseTitledFileEntries(minted.additionalImages),
-      ),
-    );
-  }
-
-  LeadModel? _newestScratchLead(List<LeadModel> leads, {required String keepLeadId}) {
-    LeadModel? best;
-    for (final lead in leads) {
-      if (lead.id == keepLeadId) continue;
-      if (!canCustomerEditLead(lead)) continue;
-      final notes = lead.notes.toLowerCase();
-      final isScratch = notes.contains('[file-scratch]') || !lead.isActive;
-      if (!isScratch) continue;
-      if (best == null || lead.createdAt.compareTo(best.createdAt) > 0) {
-        best = lead;
-      }
-    }
-    return best;
-  }
-
-  List<TitledLocalFile> _applyMintedTitledFiles({
-    required List<TitledLocalFile> current,
-    required List<TitledFileEntry> minted,
-  }) {
-    final byTitle = <String, List<String>>{};
-    for (final item in minted) {
-      final path = _storedLeadFilePath(item.path);
-      if (path.isEmpty) continue;
-      byTitle.putIfAbsent(_normTitle(item.title), () => []).add(path);
-    }
-
-    return [
-      for (final item in current)
-        if (_isLocalPickedPath(item.path))
-          TitledLocalFile(
-            title: item.title,
-            path: (byTitle[_normTitle(item.title)]?.isNotEmpty ?? false)
-                ? byTitle[_normTitle(item.title)]!.removeAt(0)
-                : item.path,
-          )
-        else
-          item,
-    ];
   }
 
   Future<void> _deactivateCustomerLead(LeadRepository repo, String leadId) async {
@@ -2006,7 +1580,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       final path = await _persistXFile(file);
       if (path == null || path.isEmpty || !mounted) {
         if (mounted) {
-          showAppMessage(context, 'Unable to pick image', isError: true);
+          showAppMessage(
+            context,
+            _lastPickError ?? 'Unable to pick image',
+            isError: true,
+          );
         }
         return;
       }
@@ -2023,23 +1601,31 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       if (imageOnly) {
         final file = await _pickCompressedImage(ImageSource.gallery);
         if (file == null) return null;
-        return _persistXFile(file);
+        final path = await _persistXFile(file);
+        if (path == null && mounted && _lastPickError != null) {
+          showAppMessage(context, _lastPickError!, isError: true);
+        }
+        return path;
       }
 
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: false,
         withData: true,
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
+        allowedExtensions: kLeadDocumentExtensions,
       );
       if (result == null || result.files.isEmpty) return null;
       final picked = result.files.single;
-      return _persistPickedBytes(
+      final path = await _persistPickedBytes(
         path: picked.path,
         bytes: picked.bytes,
         originalName: picked.name,
         imageOnly: false,
       );
+      if (path == null && mounted && _lastPickError != null) {
+        showAppMessage(context, _lastPickError!, isError: true);
+      }
+      return path;
     } catch (_) {
       return null;
     }
@@ -2919,12 +2505,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       'Full Name',
                       fullName,
                       isRequired: true,
-                      validator: _validateFullName,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[a-zA-Z ]'),
-                        ),
-                      ],
                       textCapitalization: TextCapitalization.words,
                       autofillHints: const [AutofillHints.name],
                       textInputAction: TextInputAction.next,
@@ -2961,12 +2541,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       'City',
                       city,
                       isRequired: _isCompleteDetails,
-                      validator: (v) => _validateOptionalAlpha(v, 'City'),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[a-zA-Z ]'),
-                        ),
-                      ],
                       textCapitalization: TextCapitalization.words,
                       autofillHints: const [AutofillHints.addressCity],
                       textInputAction: TextInputAction.next,
@@ -2987,11 +2561,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 pincode,
                 isRequired: _isCompleteDetails,
                 keyboardType: TextInputType.number,
-                validator: _validatePincode,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(6),
-                ],
               ),
               input(
                 'Load Section (kW)',
@@ -3000,10 +2569,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                validator: (v) => _validatePositiveNumber(v, 'Load Section'),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                ],
               ),
               if (!_isBasicCreate) ...[
                 sectionTitle('Connection Details'),
@@ -3011,33 +2576,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   'CA Number',
                   caNumber,
                   isRequired: true,
-                  keyboardType: TextInputType.number,
-                  validator: (v) => _validateMaxDigitNumber(v, 'CA Number', 10),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
                 ),
                 input(
                   'K Number',
                   kNumber,
-                  keyboardType: TextInputType.number,
-                  validator: (v) => _validateMaxDigitNumber(v, 'K Number', 20),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(20),
-                  ],
                 ),
                 input(
                   'Reference Number',
                   referenceNumber,
-                  keyboardType: TextInputType.number,
-                  validator: (v) =>
-                      _validateMaxDigitNumber(v, 'Reference Number', 10),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
                 ),
                 controllerDropdown(
                   label: 'DISCOM',
@@ -3067,7 +2613,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     decimal: true,
                     signed: true,
                   ),
-                  validator: (v) => _validateNumber(v, 'Latitude'),
                 ),
                 input(
                   'Longitude',
@@ -3076,7 +2621,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     decimal: true,
                     signed: true,
                   ),
-                  validator: (v) => _validateNumber(v, 'Longitude'),
                 ),
                 SizedBox(
                   width: double.infinity,
@@ -3105,27 +2649,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   accountNumber,
                   isRequired: true,
                   keyboardType: TextInputType.number,
-                  validator: _validateAccount,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(18),
-                  ],
                 ),
                 input(
                   'IFSC Code',
                   ifscCode,
                   isRequired: true,
-                  validator: _validateIfsc,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
-                    LengthLimitingTextInputFormatter(11),
-                    TextInputFormatter.withFunction((oldValue, newValue) {
-                      return newValue.copyWith(
-                        text: newValue.text.toUpperCase(),
-                        selection: newValue.selection,
-                      );
-                    }),
-                  ],
+                  textCapitalization: TextCapitalization.characters,
                 ),
                 sectionTitle('Project Details'),
                 dropdown(
@@ -3162,15 +2691,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   availableShadowFreeArea,
                   isRequired: true,
                   keyboardType: TextInputType.number,
-                  validator: (v) => _validateMaxDigitNumber(
-                    v,
-                    'Available Shadow Free Area',
-                    5,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(5),
-                  ],
                   suffixText: 'sqmtr',
                 ),
                 input(
@@ -3178,18 +2698,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   quotationAmount,
                   isRequired: true,
                   keyboardType: TextInputType.number,
-                  validator: (v) =>
-                      _validatePositiveNumber(v, 'Quotation Amount'),
                 ),
                 input(
                   'Visited Employee Name',
                   visitedEmployeeName,
                   isRequired: true,
-                  validator: (v) =>
-                      _validateOptionalAlpha(v, 'Visited Employee Name'),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                  ],
                   textCapitalization: TextCapitalization.words,
                 ),
                 input(

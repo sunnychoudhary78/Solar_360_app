@@ -246,7 +246,7 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
                 ),
                 textCapitalization: TextCapitalization.words,
                 inputFormatters: [LengthLimitingTextInputFormatter(100)],
-                validator: (v) => AppValidators.entityName(v, 'Name'),
+                validator: (v) => AppValidators.required(v, 'Name'),
               ),
 
               const SizedBox(height: AppSpacing.xl),
@@ -270,15 +270,13 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _email,
-                decoration: InputDecoration(
-                  labelText: isEdit ? 'Email' : 'Email *',
+                decoration: const InputDecoration(
+                  labelText: 'Email *',
                   hintText: 'Used for customer login',
                 ),
                 keyboardType: TextInputType.emailAddress,
                 inputFormatters: [LengthLimitingTextInputFormatter(100)],
-                validator: isEdit
-                    ? AppValidators.optionalEmail
-                    : AppValidators.email,
+                validator: AppValidators.email,
               ),
 
               const SizedBox(height: AppSpacing.xl),
@@ -349,9 +347,9 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
               TextFormField(
                 controller: _gst,
                 decoration: InputDecoration(
-                  labelText: 'GST Number *',
+                  labelText: 'GST Number',
                   hintText: '15-character GSTIN or URP',
-                  helperText: 'No GST? Enter URP',
+                  helperText: 'Optional. No GST? Enter URP',
                   helperMaxLines: 2,
                   suffixIcon: TextButton(
                     onPressed: _loading ? null : _fillUrp,
@@ -364,7 +362,7 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
                   LengthLimitingTextInputFormatter(15),
                   _UpperCaseTextFormatter(),
                 ],
-                validator: AppValidators.requiredGstOrUrp,
+                validator: AppValidators.gstNumber,
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(

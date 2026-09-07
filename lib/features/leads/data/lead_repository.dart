@@ -47,6 +47,8 @@ class LeadRepository {
   Future<List<Map<String, dynamic>>> getUsersByRole(List<String> roles) =>
       _api.getUsersByRole(roles);
 
+  Future<List<Map<String, dynamic>>> getAllUsers() => _api.getAllUsers();
+
   Future<void> updateLeadWithFiles(
     String leadId,
     Map<String, dynamic> data, {

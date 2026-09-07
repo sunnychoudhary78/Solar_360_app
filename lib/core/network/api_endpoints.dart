@@ -111,6 +111,7 @@ class ApiEndpoints {
   static String leadHistory(String id) => 'leads/$id/history';
   static const leadsWorkflowMeta = 'leads/workflow/meta';
   static const leadsTextAll = 'leads/text/all';
+  static const users = 'users';
   static const usersByRole = 'users/by-role';
 
   // Solar CRM — installations

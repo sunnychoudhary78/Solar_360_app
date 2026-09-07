@@ -10,6 +10,7 @@ class LeadModel {
   final String address;
   final String city;
   final String state;
+  final String district;
   final String pincode;
   final String loadSectionKw;
 
@@ -103,6 +104,7 @@ class LeadModel {
     required this.address,
     required this.city,
     required this.state,
+    this.district = '',
     required this.pincode,
     required this.loadSectionKw,
     required this.caNumber,
@@ -196,6 +198,7 @@ class LeadModel {
       address: _str(json['address']),
       city: _str(json['city']),
       state: _str(json['state']),
+      district: _str(json['district']),
       pincode: _str(json['pincode']),
       loadSectionKw: _str(json['load_section_kw'] ?? json['loadSectionKw']),
       caNumber: _str(json['ca_number'] ?? json['caNumber']),
@@ -441,6 +444,7 @@ class LeadModel {
       'address': address,
       'city': city,
       'state': state,
+      'district': district,
       'pincode': pincode,
       'load_section_kw': loadSectionKw,
       'ca_number': caNumber,
@@ -523,6 +527,7 @@ class LeadModel {
     String? address,
     String? city,
     String? state,
+    String? district,
     String? pincode,
     String? loadSectionKw,
     String? caNumber,
@@ -603,6 +608,7 @@ class LeadModel {
       address: address ?? this.address,
       city: city ?? this.city,
       state: state ?? this.state,
+      district: district ?? this.district,
       pincode: pincode ?? this.pincode,
       loadSectionKw: loadSectionKw ?? this.loadSectionKw,
       caNumber: caNumber ?? this.caNumber,

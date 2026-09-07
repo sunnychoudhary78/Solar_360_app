@@ -4,6 +4,55 @@ import 'package:solar_sales/core/utils/upload_url.dart';
 
 import 'models/lead_model.dart';
 
+/// Matches backend `middlewares/leadUpload.js` (5 MB, allowed image/doc types).
+const kLeadUploadMaxBytes = 5 * 1024 * 1024;
+
+const kLeadDocumentExtensions = <String>[
+  'pdf',
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'jfif',
+  'doc',
+  'docx',
+  'xls',
+  'xlsx',
+  'csv',
+  'txt',
+  'rtf',
+];
+
+const kLeadImageExtensions = <String>[
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'jfif',
+];
+
+String? leadUploadRejection({
+  required int sizeBytes,
+  required String filename,
+  bool imageOnly = false,
+}) {
+  if (sizeBytes > kLeadUploadMaxBytes) {
+    return 'File must be 5 MB or smaller';
+  }
+  final name = filename.toLowerCase().split(RegExp(r'[?#]')).first;
+  final dot = name.lastIndexOf('.');
+  final ext = dot == -1 ? '' : name.substring(dot + 1);
+  final allowed = imageOnly ? kLeadImageExtensions : kLeadDocumentExtensions;
+  if (!allowed.contains(ext)) {
+    return imageOnly
+        ? 'Only images (PNG, JPG, WEBP, GIF) are allowed'
+        : 'Only images (PNG, JPG, WEBP, GIF) and documents (PDF, DOC, DOCX, XLS, XLSX, CSV, TXT, RTF) are allowed';
+  }
+  return null;
+}
+
 class LeadFileItem {
   final String label;
   final String path;

@@ -37,8 +37,9 @@ class AppValidators {
 
   static String? email(String? value) {
     if (value == null || value.trim().isEmpty) return 'Email is required';
-    final regex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    if (!regex.hasMatch(value.trim())) return 'Enter a valid email';
+    // Same rule as backend lead/customer controllers.
+    final regex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+    if (!regex.hasMatch(value.trim())) return 'Invalid email format';
     return null;
   }
 
@@ -69,13 +70,10 @@ class AppValidators {
     return null;
   }
 
-  /// Optional phone: blank ok; Indian 10-digit or 10–15 digit international.
+  /// Optional phone: blank ok; otherwise the same 10-digit Indian rule as backend.
   static String? optionalPhone(String? value) {
     if (value == null || value.trim().isEmpty) return null;
-    final digits = normalizePhoneDigits(value);
-    if (RegExp(r'^[6-9]\d{9}$').hasMatch(digits)) return null;
-    if (digits.length >= 10 && digits.length <= 15) return null;
-    return 'Enter a valid 10-digit phone number';
+    return phone(value);
   }
 
   /// Optional 12-digit Aadhar number (digits only).
