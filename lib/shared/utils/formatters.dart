@@ -1,10 +1,50 @@
 import 'package:intl/intl.dart';
 
-final _inr = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
+final _inr = NumberFormat.currency(
+  locale: 'en_IN',
+  symbol: '₹',
+  decimalDigits: 2,
+);
 final _date = DateFormat('dd MMM yyyy');
 final _dateTime = DateFormat('dd MMM yyyy, hh:mm a');
 
 String formatInr(num? value) => _inr.format(value ?? 0);
+
+/// Compact rupee label used by the Billbook overview (web dashboard parity).
+String formatCompactInr(num? value) {
+  final v = (value ?? 0).toDouble();
+  final abs = v.abs();
+  final sign = v < 0 ? '-' : '';
+  if (abs >= 10000000) {
+    return '$sign₹${(abs / 10000000).toStringAsFixed(1)} Cr';
+  }
+  if (abs >= 100000) {
+    return '$sign₹${(abs / 100000).toStringAsFixed(1)} L';
+  }
+  if (abs >= 1000) {
+    final digits = abs >= 10000 ? 0 : 1;
+    return '$sign₹${(abs / 1000).toStringAsFixed(digits)}k';
+  }
+  return formatInr(v);
+}
+
+/// Compact axis tick for rupee charts.
+String formatAxisInr(num? value) {
+  final v = (value ?? 0).toDouble();
+  final abs = v.abs();
+  final sign = v < 0 ? '-' : '';
+  if (abs >= 10000000) {
+    return '$sign₹${(abs / 10000000).toStringAsFixed(1)}Cr';
+  }
+  if (abs >= 100000) {
+    return '$sign₹${(abs / 100000).toStringAsFixed(1)}L';
+  }
+  if (abs >= 1000) {
+    final digits = abs >= 10000 ? 0 : 1;
+    return '$sign₹${(abs / 1000).toStringAsFixed(digits)}k';
+  }
+  return '$sign₹${abs.round()}';
+}
 
 String formatDate(DateTime? value) {
   if (value == null) return '—';
