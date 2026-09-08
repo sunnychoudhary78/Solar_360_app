@@ -43,8 +43,10 @@ class LeadModel {
   final String customerId;
 
   final String assignedTo;
+  final String assignedToName;
   final String assignedBy;
   final String createdBy;
+  final String createdByName;
   final String updatedBy;
   final String assignedToDocumentAdmin;
   final String assignedToDocumentAdminName;
@@ -132,8 +134,10 @@ class LeadModel {
     required this.subsidyApplyStatus,
     required this.customerId,
     required this.assignedTo,
+    this.assignedToName = '',
     required this.assignedBy,
     required this.createdBy,
+    this.createdByName = '',
     required this.updatedBy,
     required this.assignedToDocumentAdmin,
     required this.assignedToDocumentAdminName,
@@ -238,8 +242,26 @@ class LeadModel {
       ),
       customerId: _str(json['customer_id'] ?? json['customerId']),
       assignedTo: _str(json['assigned_to'] ?? json['assignedTo']),
+      assignedToName: _str(
+        json['assigned_to_name'] ??
+            json['assignedToName'] ??
+            _nestedUserName(
+              json['assignedUser'] ??
+                  json['assigned_user'] ??
+                  json['assigned_to_user'],
+            ),
+      ),
       assignedBy: _str(json['assigned_by'] ?? json['assignedBy']),
       createdBy: _str(json['created_by'] ?? json['createdBy']),
+      createdByName: _str(
+        json['created_by_name'] ??
+            json['createdByName'] ??
+            _nestedUserName(
+              json['createdBy'] ??
+                  json['created_by_user'] ??
+                  json['creator'],
+            ),
+      ),
       updatedBy: _str(json['updated_by'] ?? json['updatedBy']),
       assignedToDocumentAdmin: _str(
         json['assigned_to_document_admin'] ?? json['assignedToDocumentAdmin'],
@@ -555,8 +577,10 @@ class LeadModel {
     String? subsidyApplyStatus,
     String? customerId,
     String? assignedTo,
+    String? assignedToName,
     String? assignedBy,
     String? createdBy,
+    String? createdByName,
     String? updatedBy,
     String? assignedToDocumentAdmin,
     String? assignedToDocumentAdminName,
@@ -636,8 +660,10 @@ class LeadModel {
       subsidyApplyStatus: subsidyApplyStatus ?? this.subsidyApplyStatus,
       customerId: customerId ?? this.customerId,
       assignedTo: assignedTo ?? this.assignedTo,
+      assignedToName: assignedToName ?? this.assignedToName,
       assignedBy: assignedBy ?? this.assignedBy,
       createdBy: createdBy ?? this.createdBy,
+      createdByName: createdByName ?? this.createdByName,
       updatedBy: updatedBy ?? this.updatedBy,
       assignedToDocumentAdmin:
           assignedToDocumentAdmin ?? this.assignedToDocumentAdmin,

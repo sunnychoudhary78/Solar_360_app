@@ -103,6 +103,23 @@ class CustomerListNotifier extends Notifier<CustomerListState> {
     }
   }
 
+  Future<List<CustomerModel>> fetchAllForExport() async {
+    final all = <CustomerModel>[];
+    var page = 1;
+    const limit = 100;
+    while (page <= 200) {
+      final result = await _repo.list(
+        search: state.search,
+        page: page,
+        limit: limit,
+      );
+      all.addAll(result.data);
+      if (!result.hasMore || result.data.isEmpty) break;
+      page += 1;
+    }
+    return all;
+  }
+
   void setSearch(String value) {
     state = state.copyWith(search: value);
     _debounce?.cancel();

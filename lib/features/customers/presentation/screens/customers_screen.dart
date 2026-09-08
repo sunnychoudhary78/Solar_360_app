@@ -3,10 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/shared/utils/app_snackbar.dart';
+import 'package:solar_sales/shared/utils/excel_download_action.dart';
+import 'package:solar_sales/shared/utils/excel_export.dart';
+import 'package:solar_sales/shared/utils/excel_rows.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
+import 'package:solar_sales/shared/widgets/excel_download_button.dart';
 import 'package:solar_sales/shared/widgets/paginated_list_view.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
+
+import 'package:solar_sales/shared/utils/formatters.dart';
 
 import '../../data/models/customer_model.dart';
 import '../providers/customer_providers.dart';
@@ -20,11 +27,37 @@ class CustomersScreen extends ConsumerStatefulWidget {
 
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   final TextEditingController _searchController = TextEditingController();
+  bool _exporting = false;
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _exportExcel() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final customers =
+          await ref.read(customerListProvider.notifier).fetchAllForExport();
+      if (!mounted) return;
+      await runExcelDownload(
+        context: context,
+        sheets: [
+          ExcelSheetData(
+            name: 'Customers',
+            rows: customerExcelRows(customers),
+          ),
+        ],
+        filePrefix: 'Customers',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showAppSnackBar(context, cleanError(e), isError: true);
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   @override
@@ -35,7 +68,18 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
-      appBar: const AppAppBar(title: 'Customers'),
+      appBar: AppAppBar(
+        title: 'Customers',
+        actions: [
+          ExcelDownloadButton(
+            compact: true,
+            tooltip: 'Download customers as Excel',
+            enabled: !state.isLoading && state.items.isNotEmpty,
+            busy: _exporting,
+            onPressed: _exportExcel,
+          ),
+        ],
+      ),
       floatingActionButton: canCreate
           ? FloatingActionButton.extended(
               heroTag: 'customers_screen_fab',

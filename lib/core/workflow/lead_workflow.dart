@@ -250,6 +250,28 @@ class LeadWorkflow {
     return _statusDisplayLabels[clean] ?? clean;
   }
 
+  /// Mirrors web `normalizeDepartmentValue`.
+  static String normalizeDepartmentValue(String? value) {
+    final raw = (value ?? '').trim();
+    if (raw.isEmpty) return '';
+    if (raw.toLowerCase() == 'liaising') return 'Bank Process';
+    return raw;
+  }
+
+  /// Mirrors web `resolveDepartmentLabel`.
+  static String resolveDepartmentLabel(String? value) {
+    final normalized = normalizeDepartmentValue(value);
+    if (normalized.isEmpty) return '';
+    const labels = {
+      'Sales': 'Sales',
+      'Support': 'Documents',
+      'Bank Process': 'Bank Process',
+      'Finance': 'Finance',
+      'Installation': 'Installation',
+    };
+    return labels[normalized] ?? normalized;
+  }
+
   static String nextActorHint(String? status) {
     const map = <String, String>{
       'New Lead': 'Waiting for Sales action',

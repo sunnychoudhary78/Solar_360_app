@@ -5,18 +5,45 @@ import 'package:intl/intl.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/widgets/status_badge.dart';
+import 'package:solar_sales/shared/utils/excel_download_action.dart';
+import 'package:solar_sales/shared/utils/excel_export.dart';
+import 'package:solar_sales/shared/utils/excel_rows.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
+import 'package:solar_sales/shared/widgets/excel_download_button.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 import '../providers/reports_providers.dart';
 
-class ReportsScreen extends ConsumerWidget {
+class ReportsScreen extends ConsumerStatefulWidget {
   const ReportsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
+}
+
+class _ReportsScreenState extends ConsumerState<ReportsScreen> {
+  String _exportingKey = '';
+
+  Future<void> _downloadSection({
+    required String key,
+    required String sheetName,
+    required String filePrefix,
+    required List<Map<String, Object?>> rows,
+  }) async {
+    if (_exportingKey.isNotEmpty) return;
+    setState(() => _exportingKey = key);
+    await runExcelDownload(
+      context: context,
+      sheets: [ExcelSheetData(name: sheetName, rows: rows)],
+      filePrefix: filePrefix,
+    );
+    if (mounted) setState(() => _exportingKey = '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(reportsProvider);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -90,9 +117,18 @@ class ReportsScreen extends ConsumerWidget {
                 _SectionCard(
                   title: 'Sales Performance',
                   subtitle: 'Monthly revenue overview',
-                  trailing: Icon(
-                    Icons.trending_up_rounded,
-                    color: scheme.primary,
+                  trailing: ExcelDownloadButton(
+                    compact: true,
+                    label: 'Download',
+                    tooltip: 'Download sales as Excel',
+                    enabled: data.sales.isNotEmpty,
+                    busy: _exportingKey == 'sales',
+                    onPressed: () => _downloadSection(
+                      key: 'sales',
+                      sheetName: 'Sales by Month',
+                      filePrefix: 'Billbook_Sales_by_Month',
+                      rows: billbookSalesRows(data),
+                    ),
                   ),
                   child: data.sales.isEmpty
                       ? const EmptyState(
@@ -140,9 +176,18 @@ class ReportsScreen extends ConsumerWidget {
                 _SectionCard(
                   title: 'Stock & Inventory',
                   subtitle: 'Current item quantities and stock health',
-                  trailing: Icon(
-                    Icons.inventory_2_outlined,
-                    color: scheme.secondary,
+                  trailing: ExcelDownloadButton(
+                    compact: true,
+                    label: 'Download',
+                    tooltip: 'Download stock as Excel',
+                    enabled: data.stock.isNotEmpty,
+                    busy: _exportingKey == 'stock',
+                    onPressed: () => _downloadSection(
+                      key: 'stock',
+                      sheetName: 'Stock',
+                      filePrefix: 'Billbook_Stock',
+                      rows: billbookStockRows(data.stock),
+                    ),
                   ),
                   child: data.stock.isEmpty
                       ? const EmptyState(
@@ -231,6 +276,19 @@ class ReportsScreen extends ConsumerWidget {
                 _SectionCard(
                   title: 'Recent Quotations',
                   subtitle: 'Latest generated estimates',
+                  trailing: ExcelDownloadButton(
+                    compact: true,
+                    label: 'Download',
+                    tooltip: 'Download quotations as Excel',
+                    enabled: data.quotations.isNotEmpty,
+                    busy: _exportingKey == 'quotations',
+                    onPressed: () => _downloadSection(
+                      key: 'quotations',
+                      sheetName: 'Quotations',
+                      filePrefix: 'Billbook_Quotations',
+                      rows: billbookQuotationRows(data),
+                    ),
+                  ),
                   child: data.quotations.isEmpty
                       ? const EmptyState(
                           title: 'No recent quotations',
@@ -268,6 +326,19 @@ class ReportsScreen extends ConsumerWidget {
                 _SectionCard(
                   title: 'Recent Invoices',
                   subtitle: 'Latest billing statements',
+                  trailing: ExcelDownloadButton(
+                    compact: true,
+                    label: 'Download',
+                    tooltip: 'Download invoices as Excel',
+                    enabled: data.invoices.isNotEmpty,
+                    busy: _exportingKey == 'invoices',
+                    onPressed: () => _downloadSection(
+                      key: 'invoices',
+                      sheetName: 'Invoices',
+                      filePrefix: 'Billbook_Invoices',
+                      rows: billbookInvoiceRows(data),
+                    ),
+                  ),
                   child: data.invoices.isEmpty
                       ? const EmptyState(
                           title: 'No recent invoices',
@@ -357,7 +428,7 @@ class _SectionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (trailing != null) trailing!,
+                ?trailing,
               ],
             ),
             const SizedBox(height: AppSpacing.sm),

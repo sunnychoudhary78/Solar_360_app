@@ -31,6 +31,12 @@ final allLeadsProvider = FutureProvider.autoDispose<List<LeadModel>>((
   return leads.where((lead) => lead.isActive).toList();
 });
 
+/// Unfiltered lead list used by Green Energy Reports (matches web `/solar/reports`).
+final greenEnergyReportsLeadsProvider =
+    FutureProvider.autoDispose<List<LeadModel>>((ref) {
+  return ref.watch(leadRepositoryProvider).getAllLeads();
+});
+
 /// Client-chunked lead lists for All / Converted / Completed screens.
 enum LeadListScope { all, converted, completed }
 
@@ -179,6 +185,8 @@ class LeadListNotifier extends Notifier<LeadListState> {
       state = state.copyWith(isLoading: false, error: cleanError(e));
     }
   }
+
+  List<LeadModel> exportItems() => _applyFilters(state.cached);
 
   Future<void> loadMore() async {
     if (state.isLoadingMore || !state.hasMore || state.isLoading) return;

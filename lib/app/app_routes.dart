@@ -34,6 +34,7 @@ import 'package:solar_sales/features/quotations/presentation/screens/quotation_a
 import 'package:solar_sales/features/quotations/presentation/screens/quotation_detail_screen.dart';
 import 'package:solar_sales/features/quotations/presentation/screens/quotation_form_screen.dart';
 import 'package:solar_sales/features/quotations/presentation/screens/quotations_screen.dart';
+import 'package:solar_sales/features/reports/presentation/screens/green_energy_reports_screen.dart';
 import 'package:solar_sales/features/reports/presentation/screens/reports_screen.dart';
 import 'package:solar_sales/features/settings/presentation/screens/settings_screen.dart';
 import 'package:solar_sales/features/shell/presentation/screens/app_shell.dart';
@@ -126,6 +127,7 @@ class AppRoutes {
     },
     '/invoices/approvals': (_) => const InvoiceApprovalsScreen(),
     '/reports': (_) => const ReportsScreen(),
+    '/solar/reports': (_) => const GreenEnergyReportsScreen(),
     '/inventory': (_) => const InventoryHubScreen(),
     '/inventory/stock': (_) => const StockScreen(),
     '/inventory/ledger': (_) => const StockLedgerScreen(),

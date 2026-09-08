@@ -7,8 +7,12 @@ import 'package:solar_sales/features/auth/presentation/providers/auth_provider.d
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
+import 'package:solar_sales/shared/utils/excel_download_action.dart';
+import 'package:solar_sales/shared/utils/excel_export.dart';
+import 'package:solar_sales/shared/utils/excel_rows.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
+import 'package:solar_sales/shared/widgets/excel_download_button.dart';
 import 'package:solar_sales/shared/widgets/paginated_list_view.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
@@ -35,6 +39,7 @@ class AllLeadsScreen extends ConsumerStatefulWidget {
 class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _openingLead = false;
+  bool _exporting = false;
 
   @override
   void dispose() {
@@ -65,6 +70,18 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
     setState(() => _openingLead = false);
   }
 
+  Future<void> _exportExcel() async {
+    if (_exporting) return;
+    final rows = leadListExcelRows(_notifier.exportItems());
+    setState(() => _exporting = true);
+    await runExcelDownload(
+      context: context,
+      sheets: [ExcelSheetData(name: 'Leads', rows: rows)],
+      filePrefix: 'Leads',
+    );
+    if (mounted) setState(() => _exporting = false);
+  }
+
   String get _title {
     if (widget.convertedOnly) return 'Converted Lead';
     if (widget.completedOnly) return 'Completed Leads';
@@ -84,6 +101,13 @@ class _AllLeadsScreenState extends ConsumerState<AllLeadsScreen> {
         title: _title,
         subtitle: 'Green Energy pipeline',
         actions: [
+          ExcelDownloadButton(
+            compact: true,
+            tooltip: 'Download filtered leads as Excel',
+            enabled: !state.isLoading && _notifier.exportItems().isNotEmpty,
+            busy: _exporting,
+            onPressed: _exportExcel,
+          ),
           Tooltip(
             message: 'Refresh leads',
             child: IconButton(

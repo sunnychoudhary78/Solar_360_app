@@ -154,6 +154,14 @@ void main() {
       expect(dest('ge_completed').visibleFor((p) => p == 'lead.read'), isFalse);
     });
 
+    test('reports match web anyOf permissions', () {
+      expect(dest('ge_reports').visibleFor((p) => p == 'report.read'), isTrue);
+      expect(dest('ge_reports').visibleFor((p) => p == 'leads.read'), isTrue);
+      expect(dest('ge_reports').visibleFor((p) => p == 'lead.read'), isTrue);
+      expect(dest('ge_reports').visibleFor((p) => p == 'dashboard.read'), isTrue);
+      expect(dest('ge_reports').visibleFor((p) => p == 'invoice.read'), isFalse);
+    });
+
     test('support is visible with either solar or ticket permission', () {
       expect(
         dest('ge_support').visibleFor((p) => p == 'solar.support.read'),

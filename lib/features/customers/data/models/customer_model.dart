@@ -37,6 +37,9 @@ class CustomerModel {
   final String? pincode;
   final String? gstNumber;
   final String? aadharNumber;
+  final String createdByName;
+  final String? createdAt;
+  final String? updatedAt;
 
   const CustomerModel({
     required this.id,
@@ -49,6 +52,9 @@ class CustomerModel {
     this.pincode,
     this.gstNumber,
     this.aadharNumber,
+    this.createdByName = '',
+    this.createdAt,
+    this.updatedAt,
   });
 
   static Map<String, dynamic> unwrap(dynamic json) {
@@ -76,7 +82,23 @@ class CustomerModel {
       pincode: source['pincode']?.toString(),
       gstNumber: source['gst_number']?.toString(),
       aadharNumber: source['aadhar_number']?.toString(),
+      createdByName: _createdByName(source),
+      createdAt: source['created_at']?.toString() ??
+          source['createdAt']?.toString(),
+      updatedAt: source['updated_at']?.toString() ??
+          source['updatedAt']?.toString(),
     );
+  }
+
+  static String _createdByName(Map<String, dynamic> source) {
+    final nested = source['createdBy'] ??
+        source['created_by_user'] ??
+        source['creator'] ??
+        source['created_by'];
+    if (nested is Map) {
+      return asString(nested['name']);
+    }
+    return asString(source['created_by_name'] ?? source['createdByName']);
   }
 
   Map<String, dynamic> toJson() {

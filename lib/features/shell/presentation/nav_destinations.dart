@@ -309,6 +309,18 @@ class NavDestinations {
       route: '/solar/completed-leads',
     ),
     AppDestination(
+      id: 'ge_reports',
+      label: 'Reports',
+      icon: Icons.analytics_outlined,
+      selectedIcon: Icons.analytics_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      anyOf: ['report.read', 'leads.read', 'lead.read', 'dashboard.read'],
+      route: '/solar/reports',
+      quickAction: true,
+      quickActionSubtitle: 'Pipeline summaries',
+    ),
+    AppDestination(
       id: 'ge_create',
       label: 'Create Lead',
       icon: Icons.add_circle_outline,
