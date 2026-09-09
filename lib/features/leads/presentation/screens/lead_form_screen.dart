@@ -2666,16 +2666,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     projectType = value;
                   },
                 ),
-                if (!widget.customerPortal)
-                  dropdown(
-                    label: 'Source',
-                    value: source,
-                    items: sourceOptions,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      source = value;
-                    },
-                  ),
+                dropdown(
+                  label: 'Main Source',
+                  value: source,
+                  items: sourceOptions,
+                  onChanged: (value) {
+                    if (value == null) return;
+                    source = value;
+                  },
+                ),
                 dropdown(
                   label: 'Priority',
                   value: priority,
