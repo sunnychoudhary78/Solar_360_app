@@ -17,12 +17,15 @@ import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.da
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
+import 'package:solar_sales/features/leads/data/india_cities.dart';
+import 'package:solar_sales/features/leads/data/india_states.dart';
 import 'package:solar_sales/features/leads/data/lead_files.dart';
 import 'package:solar_sales/features/leads/data/lead_repository.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/shared/utils/validators.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
+import 'package:solar_sales/shared/widgets/india_state_city_fields.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -70,42 +73,6 @@ class LeadFormScreen extends ConsumerStatefulWidget {
 }
 
 class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
-  static const List<String> indianStates = [
-    'Andhra Pradesh',
-    'Arunachal Pradesh',
-    'Assam',
-    'Bihar',
-    'Chhattisgarh',
-    'Delhi',
-    'Goa',
-    'Gujarat',
-    'Haryana',
-    'Himachal Pradesh',
-    'Jammu and Kashmir',
-    'Jharkhand',
-    'Karnataka',
-    'Kerala',
-    'Ladakh',
-    'Madhya Pradesh',
-    'Maharashtra',
-    'Manipur',
-    'Meghalaya',
-    'Mizoram',
-    'Nagaland',
-    'Odisha',
-    'Puducherry',
-    'Punjab',
-    'Rajasthan',
-    'Sikkim',
-    'Tamil Nadu',
-    'Telangana',
-    'Tripura',
-    'Uttar Pradesh',
-    'Uttarakhand',
-    'West Bengal',
-    'Other',
-  ];
-
   /// Matches backend `lead.source` ENUM / web SOURCES.
   static const List<String> sourceOptions = [
     'Website',
@@ -243,10 +210,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   bool _isClosing = false;
   bool _mediaSectionReady = false;
   String? _lastPickError;
-
-  late final List<DropdownMenuItem<String>> _stateMenuItems = indianStates
-      .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
-      .toList(growable: false);
 
   late final List<DropdownMenuItem<String>> _discomMenuItems = discomOptions
       .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
@@ -404,8 +367,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     mobile.text = lead.mobile;
     email.text = lead.email;
     address.text = lead.address;
-    city.text = lead.city;
-    state.text = lead.state;
+    _applyStateCity(lead.state, lead.city);
     pincode.text = lead.pincode;
     kw.text = lead.loadSectionKw;
 
@@ -454,6 +416,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     _applyCustomerSiteChecklistDefaults();
   }
 
+  void _applyStateCity(String? rawState, String? rawCity) {
+    final nextState = normalizeStateName(rawState);
+    state.text = nextState;
+    city.text = resolveIndiaCityName(rawCity, nextState);
+  }
+
   void _applyDraftToForm(Map<String, String> draft) {
     String read(String key) => draft[key]?.trim() ?? '';
 
@@ -461,8 +429,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     mobile.text = read('mobile');
     email.text = read('email');
     address.text = read('address');
-    city.text = read('city');
-    state.text = read('state');
+    _applyStateCity(read('state'), read('city'));
     pincode.text = read('pincode');
     kw.text = read('load_section_kw');
     source = 'Customer Portal';
@@ -2339,12 +2306,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       if ((customer.address ?? '').trim().isNotEmpty) {
         address.text = customer.address!.trim();
       }
-      if ((customer.city ?? '').trim().isNotEmpty) {
-        city.text = customer.city!.trim();
-      }
-      if ((customer.state ?? '').trim().isNotEmpty) {
-        state.text = customer.state!.trim();
-      }
+      _applyStateCity(customer.state, customer.city);
       if ((customer.pincode ?? '').trim().isNotEmpty) {
         pincode.text = customer.pincode!.trim();
       }
@@ -2370,12 +2332,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       if ((customer.address ?? '').trim().isNotEmpty) {
         address.text = customer.address!.trim();
       }
-      if ((customer.city ?? '').trim().isNotEmpty) {
-        city.text = customer.city!.trim();
-      }
-      if ((customer.state ?? '').trim().isNotEmpty) {
-        state.text = customer.state!.trim();
-      }
+      _applyStateCity(customer.state, customer.city);
       if ((customer.pincode ?? '').trim().isNotEmpty) {
         pincode.text = customer.pincode!.trim();
       }
@@ -2537,24 +2494,15 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       autofillHints: const [AutofillHints.streetAddressLine1],
                       textInputAction: TextInputAction.next,
                     ),
-                    input(
-                      'City',
-                      city,
-                      isRequired: _isCompleteDetails,
-                      textCapitalization: TextCapitalization.words,
-                      autofillHints: const [AutofillHints.addressCity],
-                      textInputAction: TextInputAction.next,
-                    ),
                   ],
                 ),
               ),
-              controllerDropdown(
-                label: 'State',
-                controller: state,
-                items: indianStates,
-                menuItems: _stateMenuItems,
-                hintText: 'Select state',
-                isRequired: _isCompleteDetails,
+              IndiaStateCityFields(
+                stateController: state,
+                cityController: city,
+                stateRequired: _isCompleteDetails,
+                cityRequired: _isCompleteDetails,
+                enabled: !isLoading,
               ),
               input(
                 'Pincode',
@@ -2752,11 +2700,6 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _singleImagePicker(
-                          title: 'Roof Photo',
-                          value: roofPhotoPath,
-                          onChanged: (v) => setState(() => roofPhotoPath = v),
-                        ),
                         _singleImagePicker(
                           title: 'Cheque/Passbook Copy',
                           value: chequePassbookPath,

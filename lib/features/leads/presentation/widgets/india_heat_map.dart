@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:solar_sales/features/leads/data/green_energy_dashboard_logic.dart';
@@ -17,6 +19,33 @@ int heatLevelFor(int leads, int maxLeads) {
   if (leads <= 0) return 0;
   final ratio = maxLeads <= 0 ? 0.0 : leads / maxLeads;
   return (ratio * 5).ceil().clamp(1, 5);
+}
+
+/// Matches web Green Energy map short labels for long / compact territories.
+String indiaMapShortName(String stateName) {
+  switch (stateName) {
+    case 'Andaman and Nicobar Islands':
+      return 'A & N Islands';
+    case 'Dadra and Nagar Haveli and Daman and Diu':
+      return 'DNH & DD';
+    case 'Jammu and Kashmir':
+      return 'J & K';
+    default:
+      return stateName;
+  }
+}
+
+/// Same wrapping rule as the web SVG labels: split long multi-word names.
+List<String> indiaMapLabelLines(String shortName) {
+  final words = shortName.split(' ');
+  if (shortName.length > 14 && words.length > 1) {
+    final midpoint = (words.length / 2).ceil();
+    return [
+      words.take(midpoint).join(' '),
+      words.skip(midpoint).join(' '),
+    ].where((line) => line.isNotEmpty).toList();
+  }
+  return [shortName];
 }
 
 class IndiaHeatMap extends StatelessWidget {
@@ -136,13 +165,110 @@ class _IndiaMapPainter extends CustomPainter {
       canvas.drawPath(location.path, stroke);
     }
     canvas.restore();
+    _paintStateNames(canvas);
+  }
+
+  double _mapScale() {
+    final storage = transform.storage;
+    return math.sqrt(storage[0] * storage[0] + storage[1] * storage[1]);
+  }
+
+  void _paintStateNames(Canvas canvas) {
+    final scale = _mapScale();
+    if (scale <= 0) return;
+
+    for (final location in map.locations) {
+      final bounds = location.path.getBounds();
+      if (bounds.isEmpty) continue;
+
+      final selected =
+          selectedState.isNotEmpty && selectedState == location.name;
+      final center = MatrixUtils.transformPoint(transform, bounds.center);
+      final shortName = indiaMapShortName(location.name);
+      final lines = indiaMapLabelLines(shortName);
+      if (lines.isEmpty) continue;
+
+      final availableWidth = math.max(14.0, bounds.width * 0.85);
+      var estimatedTextWidth = 1.0;
+      for (final line in lines) {
+        estimatedTextWidth = math.max(estimatedTextWidth, line.length * 3.1);
+      }
+      final svgFontSize = ((availableWidth / estimatedTextWidth) * 6.2)
+          .clamp(5.2, 8.5);
+      final fontSize = (svgFontSize * scale).clamp(6.0, 10.0);
+      final lineHeight = fontSize * 1.08;
+      final startY = center.dy - ((lines.length - 1) * lineHeight) / 2;
+
+      for (var i = 0; i < lines.length; i++) {
+        _paintLabelLine(
+          canvas: canvas,
+          text: lines[i],
+          center: Offset(center.dx, startY + i * lineHeight),
+          fontSize: fontSize,
+          selected: selected,
+        );
+      }
+    }
+  }
+
+  void _paintLabelLine({
+    required Canvas canvas,
+    required String text,
+    required Offset center,
+    required double fontSize,
+    required bool selected,
+  }) {
+    final base = TextStyle(
+      fontSize: fontSize,
+      fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+      height: 1.05,
+      letterSpacing: -0.1,
+    );
+    final fillColor =
+        selected ? Colors.white : const Color(0xFF0F172A);
+    final strokeColor = selected
+        ? const Color(0xB3022C22)
+        : const Color(0xF2FFFFFF);
+
+    final strokePainter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: base.copyWith(
+          foreground: Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = (fontSize * 0.32).clamp(2.0, 3.4)
+            ..strokeJoin = StrokeJoin.round
+            ..color = strokeColor,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    final fillPainter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: base.copyWith(color: fillColor),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+
+    final offset = Offset(
+      center.dx - fillPainter.width / 2,
+      center.dy - fillPainter.height / 2,
+    );
+    strokePainter.paint(canvas, offset);
+    fillPainter.paint(canvas, offset);
+    strokePainter.dispose();
+    fillPainter.dispose();
   }
 
   @override
   bool shouldRepaint(covariant _IndiaMapPainter oldDelegate) {
     return oldDelegate.analytics != analytics ||
         oldDelegate.selectedState != selectedState ||
-        oldDelegate.maxLeads != maxLeads;
+        oldDelegate.maxLeads != maxLeads ||
+        oldDelegate.map != map;
   }
 }
 

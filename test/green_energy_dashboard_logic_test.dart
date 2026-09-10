@@ -4,6 +4,7 @@ import 'package:solar_sales/features/leads/data/green_energy_dashboard_logic.dar
 import 'package:solar_sales/features/leads/data/india_states.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/data/models/territory_user_model.dart';
+import 'package:solar_sales/features/leads/presentation/widgets/india_heat_map.dart';
 
 LeadModel _lead({
   String id = '1',
@@ -55,6 +56,16 @@ void main() {
       expect(normalizeStateName('uk'), 'Uttarakhand');
       expect(normalizeStateName('Jammu & Kashmir'), 'Jammu and Kashmir');
       expect(normalizeStateName('orissa'), 'Odisha');
+    });
+
+    test('uses the same map label short names and wrapping as web', () {
+      expect(indiaMapShortName('Jammu and Kashmir'), 'J & K');
+      expect(indiaMapShortName('Andaman and Nicobar Islands'), 'A & N Islands');
+      expect(indiaMapShortName('Dadra and Nagar Haveli and Daman and Diu'), 'DNH & DD');
+      expect(indiaMapShortName('Uttar Pradesh'), 'Uttar Pradesh');
+      expect(indiaMapLabelLines('Himachal Pradesh'), ['Himachal', 'Pradesh']);
+      expect(indiaMapLabelLines('Uttar Pradesh'), ['Uttar Pradesh']);
+      expect(indiaMapLabelLines('Goa'), ['Goa']);
     });
   });
 

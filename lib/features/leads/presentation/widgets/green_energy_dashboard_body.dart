@@ -579,7 +579,7 @@ class _IndiaDistributionCard extends ConsumerWidget {
                             analytics: analytics,
                             maxLeads: maxLeads,
                             selectedState: snapshot.filters.state,
-                            height: 270,
+                            height: 320,
                             onStateTap: onStateTap,
                           );
                         },

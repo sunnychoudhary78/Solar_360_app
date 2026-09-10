@@ -5,10 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/features/leads/data/india_cities.dart';
+import 'package:solar_sales/features/leads/data/india_states.dart';
 import 'package:solar_sales/shared/utils/validators.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/dialogs.dart';
+import 'package:solar_sales/shared/widgets/india_state_city_fields.dart';
 
 import '../../data/models/customer_model.dart';
 import '../providers/customer_providers.dart';
@@ -59,8 +62,8 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
     _email.text = c.email ?? '';
     _phone.text = c.phone ?? '';
     _address.text = c.address ?? '';
-    _city.text = c.city ?? '';
-    _state.text = c.state ?? '';
+    _state.text = normalizeStateName(c.state);
+    _city.text = resolveIndiaCityName(c.city, _state.text);
     _pincode.text = c.pincode ?? '';
     _gst.text = (c.gstNumber == null || c.gstNumber!.trim().isEmpty)
         ? AppValidators.unregisteredGst
@@ -296,36 +299,11 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _city,
-                      decoration: const InputDecoration(labelText: 'City'),
-                      textCapitalization: TextCapitalization.words,
-                      inputFormatters: [LengthLimitingTextInputFormatter(50)],
-                      validator: (v) => AppValidators.maxLength(
-                        v,
-                        max: 50,
-                        field: 'City',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _state,
-                      decoration: const InputDecoration(labelText: 'State'),
-                      textCapitalization: TextCapitalization.words,
-                      inputFormatters: [LengthLimitingTextInputFormatter(50)],
-                      validator: (v) => AppValidators.maxLength(
-                        v,
-                        max: 50,
-                        field: 'State',
-                      ),
-                    ),
-                  ),
-                ],
+              IndiaStateCityFields(
+                stateController: _state,
+                cityController: _city,
+                enabled: !_loading,
+                padding: EdgeInsets.zero,
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(
