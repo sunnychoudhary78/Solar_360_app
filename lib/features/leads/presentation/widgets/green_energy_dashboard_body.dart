@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/core/workflow/lead_workflow.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/leads/data/green_energy_dashboard_logic.dart';
 import 'package:solar_sales/features/leads/data/india_map_data.dart';
 import 'package:solar_sales/features/leads/data/india_states.dart';
@@ -22,6 +24,7 @@ const _teal = Color(0xFF0F766E);
 const _pipeline = Color(0xFFF59E0B);
 const _converted = Color(0xFF10B981);
 const _completed = Color(0xFF0D7A5F);
+const _rejected = Color(0xFFF43F5E);
 
 class GreenEnergyDashboardBody extends ConsumerWidget {
   const GreenEnergyDashboardBody({
@@ -114,6 +117,9 @@ class _DashboardLoadedState extends ConsumerState<_DashboardLoaded> {
   @override
   Widget build(BuildContext context) {
     final stats = snapshot.kpis;
+    final canSeeRejected = LeadWorkflow.canViewRejectedLeads(
+      ref.watch(authProvider).effectiveRoleName,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -135,7 +141,7 @@ class _DashboardLoadedState extends ConsumerState<_DashboardLoaded> {
         const SizedBox(height: AppSpacing.lg),
         _PipelineCommandCenter(stats: stats),
         const SizedBox(height: AppSpacing.lg),
-        _LeadMixCard(stats: stats),
+        _LeadMixCard(stats: stats, canSeeRejected: canSeeRejected),
         const SizedBox(height: AppSpacing.lg),
         _AttentionCard(stats: stats),
       ],
@@ -925,6 +931,14 @@ class _PipelineCommandCenter extends StatelessWidget {
         const Color(0xFFB45309),
         () => Navigator.pushNamed(context, '/solar/converted-leads'),
       ),
+      _KpiSpec(
+        'Urgent + High',
+        '${stats.urgent + stats.high}',
+        Icons.warning_amber_rounded,
+        _rose,
+        () => Navigator.pushNamed(context, '/solar/leads'),
+        hint: '${stats.urgent} urgent · ${stats.high} high',
+      ),
     ];
 
     return Column(
@@ -962,7 +976,7 @@ class _PipelineCommandCenter extends StatelessWidget {
               crossAxisCount: 2,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
-              childAspectRatio: 1.55,
+              childAspectRatio: 1.42,
             ),
             itemBuilder: (context, index) {
               final card = cards[index];
@@ -976,12 +990,20 @@ class _PipelineCommandCenter extends StatelessWidget {
 }
 
 class _KpiSpec {
-  const _KpiSpec(this.label, this.value, this.icon, this.color, this.onTap);
+  const _KpiSpec(
+    this.label,
+    this.value,
+    this.icon,
+    this.color,
+    this.onTap, {
+    this.hint,
+  });
   final String label;
   final String value;
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
+  final String? hint;
 }
 
 class _KpiCard extends StatelessWidget {
@@ -1024,6 +1046,17 @@ class _KpiCard extends StatelessWidget {
                   fontSize: 11,
                 ),
               ),
+              if (spec.hint != null)
+                Text(
+                  spec.hint!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: spec.color.withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 9,
+                  ),
+                ),
             ],
           ),
         ),
@@ -1033,8 +1066,12 @@ class _KpiCard extends StatelessWidget {
 }
 
 class _LeadMixCard extends StatefulWidget {
-  const _LeadMixCard({required this.stats});
+  const _LeadMixCard({
+    required this.stats,
+    required this.canSeeRejected,
+  });
   final DashboardKpis stats;
+  final bool canSeeRejected;
 
   @override
   State<_LeadMixCard> createState() => _LeadMixCardState();
@@ -1050,6 +1087,8 @@ class _LeadMixCardState extends State<_LeadMixCard> {
       (key: 'pipeline', name: 'Pipeline', value: stats.inPipeline, color: _pipeline),
       (key: 'converted', name: 'Converted', value: stats.converted, color: _converted),
       (key: 'done', name: 'Done', value: stats.completed, color: _completed),
+      if (widget.canSeeRejected)
+        (key: 'rejected', name: 'Rejected', value: stats.rejected, color: _rejected),
     ];
     final total = slices.fold<int>(0, (sum, item) => sum + item.value);
 
@@ -1132,7 +1171,7 @@ class _LeadMixCardState extends State<_LeadMixCard> {
                       children: [
                         for (final slice in slices)
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.only(bottom: 6),
                             child: Row(
                               children: [
                                 Container(
