@@ -213,8 +213,8 @@ class _DashboardState extends State<_Dashboard> {
     }
   }
 
-  List<LeadModel> get _filteredLeads {
-    switch (_filter) {
+  List<LeadModel> _leadsFor(_PipelineFilter filter) {
+    switch (filter) {
       case _PipelineFilter.active:
         return widget.leads.where(_isActiveLead).toList();
       case _PipelineFilter.completed:
@@ -224,8 +224,8 @@ class _DashboardState extends State<_Dashboard> {
     }
   }
 
-  String get _emptyMessage {
-    switch (_filter) {
+  String _emptyFor(_PipelineFilter filter) {
+    switch (filter) {
       case _PipelineFilter.active:
         return 'No active leads in your queue';
       case _PipelineFilter.completed:
@@ -240,9 +240,10 @@ class _DashboardState extends State<_Dashboard> {
     required String value,
     required IconData icon,
     required _PipelineFilter filter,
+    required _PipelineFilter selectedFilter,
     required ColorScheme scheme,
   }) {
-    final selected = _filter == filter;
+    final selected = selectedFilter == filter;
     return Expanded(
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -269,6 +270,11 @@ class _DashboardState extends State<_Dashboard> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final roleKey = LeadWorkflow.resolveRoleKey(widget.roleName);
+    final showRejected =
+        roleKey == 'Sales' || roleKey == 'Sales Manager';
+    final filter = (!showRejected && _filter == _PipelineFilter.rejected)
+        ? _PipelineFilter.active
+        : _filter;
     final active = widget.leads.where(_isActiveLead).length;
     final completed = widget.leads.where(_isCompleted).length;
     final rejected = widget.leads.where(_isRejected).length;
@@ -295,6 +301,7 @@ class _DashboardState extends State<_Dashboard> {
                 value: '$active',
                 icon: Icons.groups_rounded,
                 filter: _PipelineFilter.active,
+                selectedFilter: filter,
                 scheme: scheme,
               ),
               const SizedBox(width: 8),
@@ -303,16 +310,20 @@ class _DashboardState extends State<_Dashboard> {
                 value: '$completed',
                 icon: Icons.check_circle_outline,
                 filter: _PipelineFilter.completed,
+                selectedFilter: filter,
                 scheme: scheme,
               ),
-              const SizedBox(width: 8),
-              _filterTile(
-                label: 'Rejected',
-                value: '$rejected',
-                icon: Icons.cancel_outlined,
-                filter: _PipelineFilter.rejected,
-                scheme: scheme,
-              ),
+              if (showRejected) ...[
+                const SizedBox(width: 8),
+                _filterTile(
+                  label: 'Rejected',
+                  value: '$rejected',
+                  icon: Icons.cancel_outlined,
+                  filter: _PipelineFilter.rejected,
+                  selectedFilter: filter,
+                  scheme: scheme,
+                ),
+              ],
             ],
           ),
         ).appFadeSlide(index: 1),
@@ -323,8 +334,8 @@ class _DashboardState extends State<_Dashboard> {
         ),
         Expanded(
           child: LeadsTable(
-            leads: _filteredLeads,
-            emptyMessage: _emptyMessage,
+            leads: _leadsFor(filter),
+            emptyMessage: _emptyFor(filter),
           ),
         ),
       ],

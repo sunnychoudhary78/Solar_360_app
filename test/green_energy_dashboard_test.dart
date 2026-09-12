@@ -130,6 +130,9 @@ void main() {
     expect(snapshot.kpis.completed, 1);
     expect(snapshot.kpis.rejected, 1);
     expect(snapshot.kpis.inPipeline, snapshot.kpis.open);
+    expect(snapshot.kpis.mixPipeline, 1);
+    expect(snapshot.kpis.mixConverted, 1);
+    expect(snapshot.kpis.leadMixTotal, snapshot.kpis.total);
     expect(snapshot.selectedState?.leads, 4);
     expect(snapshot.selectedState?.name, 'Uttar Pradesh');
   });

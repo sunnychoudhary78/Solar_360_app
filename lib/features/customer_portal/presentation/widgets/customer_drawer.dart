@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/theme/theme_mode_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/shell/presentation/widgets/drawer_chrome.dart';
 import 'package:solar_sales/shared/widgets/dialogs.dart';
 
@@ -60,6 +61,11 @@ class CustomerDrawer extends ConsumerWidget {
     final customer = ref.watch(authProvider).customer;
     final scheme = Theme.of(context).colorScheme;
     final themeMode = ref.watch(themeModeProvider);
+    final supportUnread = ref.watch(customerTicketsProvider).items.fold<int>(
+          0,
+          (sum, ticket) =>
+              sum + ticket.unreadIncomingCount(isCustomerView: true),
+        );
     final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
     final drawerRadius = Radius.circular(isIOS ? 16 : 28);
 
@@ -100,6 +106,7 @@ class CustomerDrawer extends ConsumerWidget {
                       selectedIcon: tabs[i].selectedIcon,
                       title: tabs[i].label,
                       isActive: selectedTabIndex == i,
+                      badgeCount: tabs[i].label == 'Support' ? supportUnread : 0,
                       onTap: () {
                         Navigator.pop(context);
                         onSelectTab(i);

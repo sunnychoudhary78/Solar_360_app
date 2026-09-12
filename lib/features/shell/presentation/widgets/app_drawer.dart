@@ -7,6 +7,7 @@ import 'package:solar_sales/core/theme/theme_mode_provider.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/module/presentation/widgets/module_toggle.dart';
 import 'package:solar_sales/features/notifications/presentation/providers/notification_providers.dart';
+import 'package:solar_sales/features/support/presentation/providers/support_providers.dart';
 import 'package:solar_sales/features/shell/presentation/nav_destinations.dart';
 import 'package:solar_sales/features/shell/presentation/widgets/drawer_chrome.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
@@ -46,16 +47,24 @@ class AppDrawer extends ConsumerWidget {
     final unreadCount = ref
         .watch(unreadNotificationCountProvider)
         .maybeWhen(data: (value) => value, orElse: () => 0);
+    bool hasPerm(String permission) {
+      return auth.hasPermission(permission);
+    }
+
+    final canReadSupport = hasPerm('solar.support.read') ||
+        hasPerm('support_ticket.read');
+    final supportUnread = canReadSupport
+        ? ref.watch(supportTicketListProvider).items.fold<int>(
+              0,
+              (sum, ticket) =>
+                  sum + ticket.unreadIncomingCount(isCustomerView: false),
+            )
+        : 0;
 
     final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
     final routeName =
         activeRoute ?? ModalRoute.of(context)?.settings.name;
-
     final drawerRadius = Radius.circular(isIOS ? 16 : 28);
-
-    bool hasPerm(String permission) {
-      return auth.hasPermission(permission);
-    }
 
     final sections = <NavSection>[
       NavSection.main,
@@ -106,7 +115,9 @@ class AppDrawer extends ConsumerWidget {
             badgeCount: dest.id == 'ge_alerts' ||
                     dest.id == 'bb_notifications'
                 ? unreadCount
-                : 0,
+                : dest.id == 'ge_support'
+                    ? supportUnread
+                    : 0,
             onTap: () {
               Navigator.pop(context);
               onSelectDestination(dest);

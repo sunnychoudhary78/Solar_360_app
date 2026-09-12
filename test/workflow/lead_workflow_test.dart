@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:solar_sales/core/workflow/lead_workflow.dart';
+import 'package:solar_sales/features/leads/presentation/widgets/workflow_stepper.dart';
 
 void main() {
   group('LeadWorkflow next statuses', () {
@@ -198,6 +199,23 @@ void main() {
       expect(
         LeadWorkflow.getVisibleStatusesForRole('Document Administrator'),
         isNot(contains('Documents Submitted')),
+      );
+    });
+  });
+
+  group('Workflow stage colours', () {
+    test('each pipeline stage has its own colour', () {
+      final colours = {
+        for (final step in LeadWorkflow.pipelineSteps) workflowStageColor(step),
+      };
+      expect(colours.length, LeadWorkflow.pipelineSteps.length);
+      expect(
+        workflowStageColor('Sales'),
+        isNot(workflowStageColor('Sales Manager')),
+      );
+      expect(
+        workflowStageColor('Sales Manager'),
+        isNot(workflowStageColor('Finance Manager')),
       );
     });
   });

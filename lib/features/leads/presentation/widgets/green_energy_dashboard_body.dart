@@ -13,6 +13,7 @@ import 'package:solar_sales/features/leads/presentation/providers/green_energy_d
 import 'package:solar_sales/features/leads/presentation/widgets/india_heat_map.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
+import 'package:solar_sales/shared/widgets/persistent_chart_touch.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 const _sky = Color(0xFF0284C7);
@@ -117,9 +118,10 @@ class _DashboardLoadedState extends ConsumerState<_DashboardLoaded> {
   @override
   Widget build(BuildContext context) {
     final stats = snapshot.kpis;
-    final canSeeRejected = LeadWorkflow.canViewRejectedLeads(
-      ref.watch(authProvider).effectiveRoleName,
-    );
+    final roleName = ref.watch(authProvider).effectiveRoleName;
+    final roleKey = LeadWorkflow.resolveRoleKey(roleName);
+    final showRejectedMetric =
+        roleKey == 'Sales' || roleKey == 'Sales Manager';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -136,14 +138,20 @@ class _DashboardLoadedState extends ConsumerState<_DashboardLoaded> {
         ),
         if (snapshot.selectedState != null) ...[
           const SizedBox(height: AppSpacing.md),
-          _SelectedStateSummary(data: snapshot.selectedState!),
+          _SelectedStateSummary(
+            data: snapshot.selectedState!,
+            canSeeRejected: showRejectedMetric,
+          ),
         ],
         const SizedBox(height: AppSpacing.lg),
-        _PipelineCommandCenter(stats: stats),
+        _PipelineCommandCenter(
+          stats: stats,
+          canSeeRejected: showRejectedMetric,
+        ),
         const SizedBox(height: AppSpacing.lg),
-        _LeadMixCard(stats: stats, canSeeRejected: canSeeRejected),
+        _LeadMixCard(stats: stats, canSeeRejected: showRejectedMetric),
         const SizedBox(height: AppSpacing.lg),
-        _AttentionCard(stats: stats),
+        _PriorityMixCard(stats: stats),
       ],
     );
   }
@@ -809,23 +817,18 @@ class _ActiveStateTile extends StatelessWidget {
 }
 
 class _SelectedStateSummary extends StatelessWidget {
-  const _SelectedStateSummary({required this.data});
+  const _SelectedStateSummary({
+    required this.data,
+    required this.canSeeRejected,
+  });
 
   final StateAnalytics data;
+  final bool canSeeRejected;
 
   @override
   Widget build(BuildContext context) {
-    final tiles = [
-      ('Selected State', data.name),
-      ('Total Leads', '${data.leads}'),
-      ('Open', '${data.open}'),
-      ('Converted', '${data.converted}'),
-      ('Completed', '${data.completed}'),
-      ('Active Leads', '${data.active}'),
-      ('Rejected', '${data.rejected}'),
-      ('Install Pending', '${data.installPending}'),
-      ('Users / agents', '${data.users}'),
-    ];
+    final scheme = Theme.of(context).colorScheme;
+    final shortCode = indiaMapShortName(data.name);
 
     return _SectionPad(
       child: AppCard(
@@ -833,22 +836,168 @@ class _SelectedStateSummary extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Selected State Summary',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final tile in tiles)
-                  SizedBox(
-                    width: (MediaQuery.sizeOf(context).width - 64) / 2,
-                    child: _SummaryMetric(label: tile.$1, value: tile.$2),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: _teal.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: const Icon(
+                    Icons.location_on_rounded,
+                    color: _teal,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SELECTED STATE',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: _teal,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                              fontSize: 10,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        data.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              height: 1.15,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (shortCode != data.name)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          shortCode,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        gradient: const LinearGradient(
+                          colors: [_emerald, _teal],
+                        ),
+                      ),
+                      child: Text(
+                        '${data.leads} leads',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _StateStatTile(
+                    label: 'Open',
+                    value: data.open,
+                    color: _amber,
+                    icon: Icons.timelapse_rounded,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _StateStatTile(
+                    label: 'Converted',
+                    value: data.converted,
+                    color: _emerald,
+                    icon: Icons.verified_outlined,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _StateStatTile(
+                    label: 'Completed',
+                    value: data.completed,
+                    color: _teal,
+                    icon: Icons.task_alt_outlined,
+                  ),
+                ),
+                if (canSeeRejected) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _StateStatTile(
+                      label: 'Rejected',
+                      value: data.rejected,
+                      color: _rose,
+                      icon: Icons.block_rounded,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _StateStatChip(
+                    label: 'Active',
+                    value: data.active,
+                    color: _violet,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _StateStatChip(
+                    label: 'Install pending',
+                    value: data.installPending,
+                    color: const Color(0xFFB45309),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _StateStatChip(
+                    label: 'Users',
+                    value: data.users,
+                    color: _sky,
+                  ),
+                ),
               ],
             ),
           ],
@@ -858,37 +1007,98 @@ class _SelectedStateSummary extends StatelessWidget {
   }
 }
 
-class _SummaryMetric extends StatelessWidget {
-  const _SummaryMetric({required this.label, required this.value});
+class _StateStatTile extends StatelessWidget {
+  const _StateStatTile({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+  });
+
   final String label;
-  final String value;
+  final int value;
+  final Color color;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(height: 8),
           Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
+            '$value',
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 22,
+              height: 1,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
-            value,
-            maxLines: 2,
+            label,
+            style: TextStyle(
+              color: color.withValues(alpha: 0.9),
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StateStatChip extends StatelessWidget {
+  const _StateStatChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$value',
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 9,
+            ),
           ),
         ],
       ),
@@ -899,9 +1109,11 @@ class _SummaryMetric extends StatelessWidget {
 class _PipelineCommandCenter extends StatelessWidget {
   const _PipelineCommandCenter({
     required this.stats,
+    required this.canSeeRejected,
   });
 
   final DashboardKpis stats;
+  final bool canSeeRejected;
 
   @override
   Widget build(BuildContext context) {
@@ -921,9 +1133,10 @@ class _PipelineCommandCenter extends StatelessWidget {
       _KpiSpec('Active Leads', '${stats.active}', Icons.bolt_rounded, _violet, () {
         Navigator.pushNamed(context, '/solar/leads');
       }),
-      _KpiSpec('Rejected', '${stats.rejected}', Icons.block_rounded, _rose, () {
-        Navigator.pushNamed(context, '/solar/leads');
-      }),
+      if (canSeeRejected)
+        _KpiSpec('Rejected', '${stats.rejected}', Icons.block_rounded, _rose, () {
+          Navigator.pushNamed(context, '/solar/leads');
+        }),
       _KpiSpec(
         'Install Pending',
         '${stats.installPending}',
@@ -1065,7 +1278,7 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _LeadMixCard extends StatefulWidget {
+class _LeadMixCard extends StatelessWidget {
   const _LeadMixCard({
     required this.stats,
     required this.canSeeRejected,
@@ -1074,23 +1287,75 @@ class _LeadMixCard extends StatefulWidget {
   final bool canSeeRejected;
 
   @override
-  State<_LeadMixCard> createState() => _LeadMixCardState();
+  Widget build(BuildContext context) {
+    return _DonutMixCard(
+      title: 'Lead mix',
+      subtitle: 'Pipeline vs converted vs done',
+      centerLabel: 'Total',
+      centerValue: stats.total,
+      emptyLabel: 'No leads yet',
+      slices: [
+        (name: 'Pipeline', value: stats.mixPipeline, color: _pipeline),
+        (name: 'Converted', value: stats.mixConverted, color: _converted),
+        (name: 'Done', value: stats.completed, color: _completed),
+        if (canSeeRejected)
+          (name: 'Rejected', value: stats.rejected, color: _rejected),
+      ],
+    );
+  }
 }
 
-class _LeadMixCardState extends State<_LeadMixCard> {
-  int? _touched;
+class _PriorityMixCard extends StatelessWidget {
+  const _PriorityMixCard({required this.stats});
+  final DashboardKpis stats;
 
   @override
   Widget build(BuildContext context) {
-    final stats = widget.stats;
-    final slices = [
-      (key: 'pipeline', name: 'Pipeline', value: stats.inPipeline, color: _pipeline),
-      (key: 'converted', name: 'Converted', value: stats.converted, color: _converted),
-      (key: 'done', name: 'Done', value: stats.completed, color: _completed),
-      if (widget.canSeeRejected)
-        (key: 'rejected', name: 'Rejected', value: stats.rejected, color: _rejected),
-    ];
-    final total = slices.fold<int>(0, (sum, item) => sum + item.value);
+    return _DonutMixCard(
+      title: 'Priority mix',
+      subtitle: 'Open leads by priority',
+      centerLabel: 'Open',
+      centerValue: stats.open,
+      emptyLabel: 'No open leads',
+      slices: [
+        (name: 'Urgent', value: stats.urgent, color: _rose),
+        (name: 'High', value: stats.high, color: _rejected),
+        (name: 'Medium', value: stats.medium, color: _pipeline),
+        (name: 'Low', value: stats.low, color: const Color(0xFF94A3B8)),
+      ],
+    );
+  }
+}
+
+class _DonutMixCard extends StatefulWidget {
+  const _DonutMixCard({
+    required this.title,
+    required this.subtitle,
+    required this.centerLabel,
+    required this.emptyLabel,
+    required this.slices,
+    this.centerValue,
+  });
+
+  final String title;
+  final String subtitle;
+  final String centerLabel;
+  final String emptyLabel;
+  final int? centerValue;
+  final List<({String name, int value, Color color})> slices;
+
+  @override
+  State<_DonutMixCard> createState() => _DonutMixCardState();
+}
+
+class _DonutMixCardState extends State<_DonutMixCard>
+    with TimedChartTooltip {
+
+  @override
+  Widget build(BuildContext context) {
+    final slices = widget.slices;
+    final sliceTotal = slices.fold<int>(0, (sum, item) => sum + item.value);
+    final centerValue = widget.centerValue ?? sliceTotal;
 
     return _SectionPad(
       child: AppCard(
@@ -1099,22 +1364,22 @@ class _LeadMixCardState extends State<_LeadMixCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Lead mix',
+              widget.title,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w900,
                   ),
             ),
             Text(
-              'Pipeline vs converted vs done',
+              widget.subtitle,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
             ),
             const SizedBox(height: 12),
-            if (total == 0)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 28),
-                child: Center(child: Text('No leads yet')),
+            if (centerValue == 0 && sliceTotal == 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 28),
+                child: Center(child: Text(widget.emptyLabel)),
               )
             else
               Row(
@@ -1131,10 +1396,16 @@ class _LeadMixCardState extends State<_LeadMixCard> {
                             centerSpaceRadius: 42,
                             pieTouchData: PieTouchData(
                               touchCallback: (event, response) {
-                                setState(() {
-                                  _touched = response
-                                      ?.touchedSection?.touchedSectionIndex;
-                                });
+                                if (!persistChartTap(event)) return;
+                                final sectionIndex =
+                                    selectedPieSectionIndex(response);
+                                if (sectionIndex == null) return;
+                                final visible = [
+                                  for (var i = 0; i < slices.length; i++)
+                                    if (slices[i].value > 0) i,
+                                ];
+                                if (sectionIndex >= visible.length) return;
+                                showChartTooltip(visible[sectionIndex]);
                               },
                             ),
                             sections: [
@@ -1144,7 +1415,7 @@ class _LeadMixCardState extends State<_LeadMixCard> {
                                     color: slices[i].color,
                                     value: slices[i].value.toDouble(),
                                     title: '',
-                                    radius: _touched == i ? 28 : 22,
+                                    radius: selectedTooltipIndex == i ? 28 : 22,
                                   ),
                             ],
                           ),
@@ -1152,9 +1423,12 @@ class _LeadMixCardState extends State<_LeadMixCard> {
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text('Total', style: TextStyle(fontSize: 10)),
                             Text(
-                              '$total',
+                              widget.centerLabel,
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                            Text(
+                              '$centerValue',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 18,
@@ -1185,7 +1459,7 @@ class _LeadMixCardState extends State<_LeadMixCard> {
                                 const SizedBox(width: 8),
                                 Expanded(child: Text(slice.name)),
                                 Text(
-                                  '${slice.value}  ${_pct(slice.value, total)}',
+                                  '${slice.value}  ${_pct(slice.value, centerValue)}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -1207,147 +1481,5 @@ class _LeadMixCardState extends State<_LeadMixCard> {
   String _pct(int value, int total) {
     if (total <= 0) return '0%';
     return '${((value / total) * 100).round()}%';
-  }
-}
-
-class _AttentionCard extends StatelessWidget {
-  const _AttentionCard({required this.stats});
-  final DashboardKpis stats;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      _AttentionItem(
-        label: '${stats.urgent} urgent leads need attention',
-        color: const Color(0xFFFEE2E2),
-        foreground: const Color(0xFF9F1239),
-        route: '/solar/leads',
-      ),
-      _AttentionItem(
-        label: '${stats.high} high-priority open leads',
-        color: const Color(0xFFFFEDD5),
-        foreground: const Color(0xFF9A3412),
-        route: '/solar/leads',
-      ),
-      _AttentionItem(
-        label: '${stats.installPending} leads waiting on installation details',
-        color: const Color(0xFFFEF9C3),
-        foreground: const Color(0xFF854D0E),
-        route: '/solar/converted-leads',
-      ),
-      _AttentionItem(
-        label: '${stats.newThisWeek} new open leads this week',
-        color: const Color(0xFFE0F2FE),
-        foreground: const Color(0xFF075985),
-        route: '/solar/leads',
-      ),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Attention',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
-              Text(
-                'Items that may need follow-up',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final twoCol = constraints.maxWidth >= 520;
-              if (!twoCol) {
-                return Column(
-                  children: [
-                    for (final item in items) ...[
-                      _AttentionPill(item: item),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                );
-              }
-              return Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final item in items)
-                    SizedBox(
-                      width: (constraints.maxWidth - 8) / 2,
-                      child: _AttentionPill(item: item),
-                    ),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AttentionItem {
-  const _AttentionItem({
-    required this.label,
-    required this.color,
-    required this.foreground,
-    required this.route,
-  });
-
-  final String label;
-  final Color color;
-  final Color foreground;
-  final String route;
-}
-
-class _AttentionPill extends StatelessWidget {
-  const _AttentionPill({required this.item});
-  final _AttentionItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: item.color,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: () => Navigator.pushNamed(context, item.route),
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          child: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: item.foreground, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  item.label,
-                  style: TextStyle(
-                    color: item.foreground,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12.5,
-                  ),
-                ),
-              ),
-              Icon(Icons.arrow_forward_rounded, size: 16, color: item.foreground),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

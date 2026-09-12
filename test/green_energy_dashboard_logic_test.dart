@@ -58,14 +58,26 @@ void main() {
       expect(normalizeStateName('orissa'), 'Odisha');
     });
 
-    test('uses the same map label short names and wrapping as web', () {
-      expect(indiaMapShortName('Jammu and Kashmir'), 'J & K');
-      expect(indiaMapShortName('Andaman and Nicobar Islands'), 'A & N Islands');
-      expect(indiaMapShortName('Dadra and Nagar Haveli and Daman and Diu'), 'DNH & DD');
-      expect(indiaMapShortName('Uttar Pradesh'), 'Uttar Pradesh');
-      expect(indiaMapLabelLines('Himachal Pradesh'), ['Himachal', 'Pradesh']);
-      expect(indiaMapLabelLines('Uttar Pradesh'), ['Uttar Pradesh']);
+    test('uses short state codes on the heat map to avoid overlap', () {
+      expect(indiaMapShortName('Jammu and Kashmir'), 'J&K');
+      expect(indiaMapShortName('Andaman and Nicobar Islands'), 'AN');
+      expect(indiaMapShortName('Dadra and Nagar Haveli and Daman and Diu'), 'DD');
+      expect(indiaMapShortName('Uttar Pradesh'), 'UP');
+      expect(indiaMapShortName('Himachal Pradesh'), 'HP');
+      expect(indiaMapShortName('Punjab'), 'PB');
+      expect(indiaMapShortName('Nagaland'), 'NL');
+      expect(indiaMapShortName('Meghalaya'), 'ML');
+      expect(indiaMapShortName('Mizoram'), 'MZ');
+      expect(indiaMapLabelLines('UP'), ['UP']);
       expect(indiaMapLabelLines('Goa'), ['Goa']);
+    });
+
+    test('covers every canonical state with a short map code', () {
+      for (final name in indiaStateNames) {
+        final code = indiaMapShortName(name);
+        expect(code, isNot(name), reason: '$name should not stay as a full map label');
+        expect(code.length, lessThanOrEqualTo(3), reason: '$name map code is too long: $code');
+      }
     });
   });
 
@@ -89,6 +101,59 @@ void main() {
       expect(kpis.inPipeline, 2);
       expect(kpis.urgent, 1);
       expect(kpis.installPending, 2);
+      expect(kpis.mixPipeline, 1);
+      expect(kpis.mixConverted, 1);
+      expect(kpis.leadMixTotal, 4);
+    });
+
+    test('Lead mix does not double-count a converted lead', () {
+      final kpis = buildDashboardKpis(
+        [_lead(id: '1', status: 'Converted')],
+        canSeeRejected: true,
+      );
+
+      expect(kpis.total, 1);
+      expect(kpis.inPipeline, 1);
+      expect(kpis.converted, 1);
+      expect(kpis.mixPipeline, 0);
+      expect(kpis.mixConverted, 1);
+      expect(kpis.leadMixTotal, 1);
+    });
+
+    test('counts open-lead priority mix the same way as web', () {
+      final kpis = buildDashboardKpis(
+        [
+          _lead(id: '1', status: 'New Lead', priority: 'Urgent'),
+          _lead(id: '2', status: 'New Lead', priority: 'High'),
+          _lead(id: '3', status: 'New Lead', priority: 'Medium'),
+          _lead(id: '4', status: 'New Lead', priority: 'Low'),
+          _lead(id: '5', status: 'Final Complete', priority: 'Urgent'),
+        ],
+        canSeeRejected: true,
+      );
+
+      expect(kpis.open, 4);
+      expect(kpis.urgent, 1);
+      expect(kpis.high, 1);
+      expect(kpis.medium, 1);
+      expect(kpis.low, 1);
+      expect(kpis.priorityMixTotal, kpis.open);
+    });
+
+    test('Priority mix counts blank priority as Medium so open leads match', () {
+      final kpis = buildDashboardKpis(
+        [
+          _lead(id: '1', status: 'New Lead', priority: ''),
+          _lead(id: '2', status: 'Converted', priority: 'Normal'),
+          _lead(id: '3', status: 'Final Complete', priority: 'Urgent'),
+        ],
+        canSeeRejected: true,
+      );
+
+      expect(kpis.open, 2);
+      expect(kpis.urgent, 0);
+      expect(kpis.medium, 2);
+      expect(kpis.priorityMixTotal, 2);
     });
 
     test('hides rejected counts when the role cannot see them', () {

@@ -27,6 +27,11 @@ class CustomerHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final customer = ref.watch(authProvider).customer;
     final leadsAsync = ref.watch(customerLeadsProvider);
+    final supportUnread = ref.watch(customerTicketsProvider).items.fold<int>(
+          0,
+          (sum, ticket) =>
+              sum + ticket.unreadIncomingCount(isCustomerView: true),
+        );
     final scheme = Theme.of(context).colorScheme;
     final today = DateFormat('EEEE, d MMM yyyy').format(DateTime.now());
 
@@ -71,21 +76,29 @@ class CustomerHomeScreen extends ConsumerWidget {
                           ),
                     ),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Chip(
                           label: const Text('Customer'),
                           visualDensity: VisualDensity.compact,
-                          backgroundColor: scheme.primary.withValues(alpha: 0.12),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          backgroundColor:
+                              scheme.primary.withValues(alpha: 0.12),
                           side: BorderSide.none,
                         ),
-                        Text(
-                          today,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            today,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                          ),
                         ),
                       ],
                     ),
@@ -145,6 +158,7 @@ class CustomerHomeScreen extends ConsumerWidget {
                       title: 'Support',
                       subtitle: 'Raise a request or contact the team.',
                       color: scheme.primary,
+                      badgeCount: supportUnread,
                       onTap: onOpenSupport,
                     ),
                   ),
@@ -194,6 +208,7 @@ class _WorkspaceTile extends StatelessWidget {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
+  final int badgeCount;
 
   const _WorkspaceTile({
     required this.icon,
@@ -201,6 +216,7 @@ class _WorkspaceTile extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   @override
@@ -211,14 +227,36 @@ class _WorkspaceTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-            ),
-            child: Icon(icon, color: color),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Icon(icon, color: color),
+              ),
+              const Spacer(),
+              if (badgeCount > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE11D48),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    badgeCount == 1 ? '1 NEW MSG' : '$badgeCount NEW',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           Text(

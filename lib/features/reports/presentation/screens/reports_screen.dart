@@ -12,6 +12,7 @@ import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/excel_download_button.dart';
+import 'package:solar_sales/shared/widgets/persistent_chart_touch.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 import '../providers/reports_providers.dart';
@@ -522,13 +523,21 @@ class _StockBadge extends StatelessWidget {
   }
 }
 
-class _SalesBarChart extends StatelessWidget {
+class _SalesBarChart extends StatefulWidget {
   final List<dynamic> salesData;
 
   const _SalesBarChart({required this.salesData});
 
   @override
+  State<_SalesBarChart> createState() => _SalesBarChartState();
+}
+
+class _SalesBarChartState extends State<_SalesBarChart>
+    with TimedChartTooltip {
+
+  @override
   Widget build(BuildContext context) {
+    final salesData = widget.salesData;
     final scheme = Theme.of(context).colorScheme;
 
     double maxSales = 1000;
@@ -541,7 +550,16 @@ class _SalesBarChart extends StatelessWidget {
         alignment: BarChartAlignment.spaceAround,
         maxY: maxSales * 1.15,
         barTouchData: BarTouchData(
+          handleBuiltInTouches: false,
+          touchCallback: (event, response) {
+            if (!persistChartTap(event)) return;
+            final index = selectedBarGroupIndex(response);
+            if (index == null) return;
+            showChartTooltip(index);
+          },
           touchTooltipData: BarTouchTooltipData(
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
             getTooltipColor: (_) => scheme.surfaceContainerHighest,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               final item = salesData[groupIndex];
@@ -609,6 +627,10 @@ class _SalesBarChart extends StatelessWidget {
           final row = entry.value;
           return BarChartGroupData(
             x: index,
+            showingTooltipIndicators: barRodTooltipIndexes(
+              1,
+              selected: selectedTooltipIndex == index,
+            ),
             barRods: [
               BarChartRodData(
                 toY: (row.totalSales as num).toDouble(),

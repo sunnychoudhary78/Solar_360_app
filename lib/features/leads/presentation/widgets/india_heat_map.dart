@@ -21,21 +21,53 @@ int heatLevelFor(int leads, int maxLeads) {
   return (ratio * 5).ceil().clamp(1, 5);
 }
 
-/// Matches web Green Energy map short labels for long / compact territories.
+/// Official Indian state / UT short codes shown on the heat map.
+const indiaMapShortCodes = <String, String>{
+  'Andhra Pradesh': 'AP',
+  'Arunachal Pradesh': 'AR',
+  'Assam': 'AS',
+  'Bihar': 'BR',
+  'Chhattisgarh': 'CG',
+  'Goa': 'GA',
+  'Gujarat': 'GJ',
+  'Haryana': 'HR',
+  'Himachal Pradesh': 'HP',
+  'Jharkhand': 'JH',
+  'Karnataka': 'KA',
+  'Kerala': 'KL',
+  'Madhya Pradesh': 'MP',
+  'Maharashtra': 'MH',
+  'Manipur': 'MN',
+  'Meghalaya': 'ML',
+  'Mizoram': 'MZ',
+  'Nagaland': 'NL',
+  'Odisha': 'OD',
+  'Punjab': 'PB',
+  'Rajasthan': 'RJ',
+  'Sikkim': 'SK',
+  'Tamil Nadu': 'TN',
+  'Telangana': 'TS',
+  'Tripura': 'TR',
+  'Uttar Pradesh': 'UP',
+  'Uttarakhand': 'UK',
+  'West Bengal': 'WB',
+  'Andaman and Nicobar Islands': 'AN',
+  'Chandigarh': 'CH',
+  'Dadra and Nagar Haveli and Daman and Diu': 'DD',
+  'Delhi': 'DL',
+  'Jammu and Kashmir': 'J&K',
+  'Ladakh': 'LA',
+  'Lakshadweep': 'LD',
+  'Puducherry': 'PY',
+};
+
+/// Map labels use short codes so neighboring states do not overlap.
 String indiaMapShortName(String stateName) {
-  switch (stateName) {
-    case 'Andaman and Nicobar Islands':
-      return 'A & N Islands';
-    case 'Dadra and Nagar Haveli and Daman and Diu':
-      return 'DNH & DD';
-    case 'Jammu and Kashmir':
-      return 'J & K';
-    default:
-      return stateName;
-  }
+  final canonical = normalizeStateName(stateName);
+  return indiaMapShortCodes[canonical] ?? canonical;
 }
 
-/// Same wrapping rule as the web SVG labels: split long multi-word names.
+/// Short codes stay on one line; unknown long names still wrap.
 List<String> indiaMapLabelLines(String shortName) {
   final words = shortName.split(' ');
   if (shortName.length > 14 && words.length > 1) {
@@ -194,8 +226,8 @@ class _IndiaMapPainter extends CustomPainter {
         estimatedTextWidth = math.max(estimatedTextWidth, line.length * 3.1);
       }
       final svgFontSize = ((availableWidth / estimatedTextWidth) * 6.2)
-          .clamp(5.2, 8.5);
-      final fontSize = (svgFontSize * scale).clamp(6.0, 10.0);
+          .clamp(5.6, 9.0);
+      final fontSize = (svgFontSize * scale).clamp(7.0, 11.0);
       final lineHeight = fontSize * 1.08;
       final startY = center.dy - ((lines.length - 1) * lineHeight) / 2;
 

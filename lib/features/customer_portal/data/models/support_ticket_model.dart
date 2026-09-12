@@ -53,6 +53,30 @@ class SupportTicketMessage {
 
   bool get isCustomer => senderType.toLowerCase() == 'customer';
 
+  SupportTicketMessage copyWith({
+    String? id,
+    String? message,
+    String? senderType,
+    String? senderId,
+    String? senderName,
+    bool? isInternal,
+    DateTime? createdAt,
+    DateTime? deliveredAt,
+    DateTime? readAt,
+  }) {
+    return SupportTicketMessage(
+      id: id ?? this.id,
+      message: message ?? this.message,
+      senderType: senderType ?? this.senderType,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      isInternal: isInternal ?? this.isInternal,
+      createdAt: createdAt ?? this.createdAt,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
+      readAt: readAt ?? this.readAt,
+    );
+  }
+
   factory SupportTicketMessage.fromJson(Map<String, dynamic> json) {
     final user = json['user'] is Map
         ? Map<String, dynamic>.from(json['user'] as Map)
@@ -181,6 +205,8 @@ class SupportTicketModel {
   final List<SupportTicketMessage> messages;
   final List<SupportTicketHistoryItem> history;
   final int unreadCountHint;
+  final bool hasUnreadMessages;
+  final SupportTicketMessage? lastMessage;
 
   const SupportTicketModel({
     required this.id,
@@ -205,6 +231,8 @@ class SupportTicketModel {
     this.messages = const [],
     this.history = const [],
     this.unreadCountHint = 0,
+    this.hasUnreadMessages = false,
+    this.lastMessage,
   });
 
   factory SupportTicketModel.fromJson(Map<String, dynamic> json) {
@@ -224,7 +252,13 @@ class SupportTicketModel {
     final unreadRaw =
         json['unread_count'] ??
         json['unread_messages'] ??
-        json['unreadMessageCount'];
+        json['unreadMessageCount'] ??
+        json['new_messages'] ??
+        json['new_message_count'];
+    final lastMessageRaw =
+        json['last_message'] ??
+        json['latest_message'] ??
+        json['lastMessage'];
     final resolved = _resolveRequestType(json);
     return SupportTicketModel(
       id: asString(json['id']),
@@ -255,7 +289,16 @@ class SupportTicketModel {
       updatedAt: parseDate(json['updated_at'] ?? json['updatedAt']),
       messages: _parseMessages(messagesRaw),
       history: _parseHistory(historyRaw),
-      unreadCountHint: unreadRaw is num ? unreadRaw.toInt() : 0,
+      unreadCountHint: asInt(unreadRaw),
+      hasUnreadMessages:
+          json['has_unread_messages'] == true ||
+          json['hasUnreadMessages'] == true ||
+          asInt(unreadRaw) > 0,
+      lastMessage: lastMessageRaw is Map
+          ? SupportTicketMessage.fromJson(
+              Map<String, dynamic>.from(lastMessageRaw),
+            )
+          : null,
     );
   }
 
@@ -301,6 +344,8 @@ class SupportTicketModel {
     List<SupportTicketMessage>? messages,
     List<SupportTicketHistoryItem>? history,
     int? unreadCountHint,
+    bool? hasUnreadMessages,
+    SupportTicketMessage? lastMessage,
   }) {
     return SupportTicketModel(
       id: id ?? this.id,
@@ -325,6 +370,8 @@ class SupportTicketModel {
       messages: messages ?? this.messages,
       history: history ?? this.history,
       unreadCountHint: unreadCountHint ?? this.unreadCountHint,
+      hasUnreadMessages: hasUnreadMessages ?? this.hasUnreadMessages,
+      lastMessage: lastMessage ?? this.lastMessage,
     );
   }
 
@@ -382,14 +429,47 @@ class SupportTicketModel {
 
   bool get isNewTag => status == 'complaint_raised' || status == 'open';
 
+  SupportTicketModel clearedUnread() {
+    final now = DateTime.now();
+    return copyWith(
+      unreadCountHint: 0,
+      hasUnreadMessages: false,
+      lastMessage: lastMessage?.copyWith(readAt: lastMessage?.readAt ?? now),
+      messages: [
+        for (final message in messages)
+          message.readAt == null
+              ? message.copyWith(readAt: now)
+              : message,
+      ],
+    );
+  }
+
   int unreadIncomingCount({required bool isCustomerView}) {
-    if (messages.isEmpty) return unreadCountHint;
-    return messages.where((message) {
-      if (message.isInternal) return false;
+    if (unreadCountHint > 0) return unreadCountHint;
+
+    if (messages.isNotEmpty) {
+      final fromMessages = messages.where((message) {
+        if (message.isInternal) return false;
+        final incoming = isCustomerView
+            ? !message.isCustomer
+            : message.isCustomer;
+        return incoming && message.readAt == null;
+      }).length;
+      if (fromMessages > 0) return fromMessages;
+    }
+
+    if (hasUnreadMessages) return 1;
+
+    final latest = lastMessage;
+    if (latest != null &&
+        !latest.isInternal &&
+        latest.readAt == null &&
+        latest.message.trim().isNotEmpty) {
       final incoming = isCustomerView
-          ? !message.isCustomer
-          : message.isCustomer;
-      return incoming && message.readAt == null;
-    }).length;
+          ? !latest.isCustomer
+          : latest.isCustomer;
+      if (incoming) return 1;
+    }
+    return 0;
   }
 }

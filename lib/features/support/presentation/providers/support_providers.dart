@@ -202,6 +202,16 @@ class SupportTicketListNotifier extends Notifier<SupportTicketListState> {
     }
   }
 
+  void markTicketRead(String id) {
+    if (id.trim().isEmpty) return;
+    state = state.copyWith(
+      items: [
+        for (final ticket in state.items)
+          if (ticket.id == id) ticket.clearedUnread() else ticket,
+      ],
+    );
+  }
+
   void setSearch(String value) {
     state = state.copyWith(search: value);
     _debounce?.cancel();

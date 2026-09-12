@@ -102,7 +102,11 @@ class DashboardKpis {
     this.inPipeline = 0,
     this.urgent = 0,
     this.high = 0,
+    this.medium = 0,
+    this.low = 0,
     this.newThisWeek = 0,
+    this.mixPipeline = 0,
+    this.mixConverted = 0,
   });
 
   final int total;
@@ -115,9 +119,17 @@ class DashboardKpis {
   final int inPipeline;
   final int urgent;
   final int high;
+  final int medium;
+  final int low;
   final int newThisWeek;
+  /// Early pipeline only (open and not yet converted). Used by Lead mix.
+  final int mixPipeline;
+  /// Converted and still open. Used by Lead mix so slices do not overlap.
+  final int mixConverted;
 
-  int get leadMixTotal => inPipeline + converted + completed;
+  int get leadMixTotal => mixPipeline + mixConverted + completed + rejected;
+
+  int get priorityMixTotal => urgent + high + medium + low;
 
   double pctOf(int value) => total == 0 ? 0 : (value / total) * 100;
 }
@@ -175,6 +187,21 @@ bool isOpenLead(LeadModel lead) {
         department: lead.currentDepartment,
       ) &&
       !LeadWorkflow.isRejectedStatus(lead.status);
+}
+
+/// Maps a lead priority onto the four Priority mix buckets.
+/// Blank or unknown values follow the form/web default: Medium.
+String normalizeLeadPriority(String? raw) {
+  switch ((raw ?? '').trim().toLowerCase()) {
+    case 'urgent':
+      return 'urgent';
+    case 'high':
+      return 'high';
+    case 'low':
+      return 'low';
+    default:
+      return 'medium';
+  }
 }
 
 bool hasFilledInstallationDetails(LeadModel lead) {
@@ -300,8 +327,12 @@ DashboardKpis buildDashboardKpis(
   var active = 0;
   var installPending = 0;
   var inPipeline = 0;
+  var mixPipeline = 0;
+  var mixConverted = 0;
   var urgent = 0;
   var high = 0;
+  var medium = 0;
+  var low = 0;
   var newThisWeek = 0;
 
   for (final lead in source) {
@@ -320,10 +351,22 @@ DashboardKpis buildDashboardKpis(
     } else {
       open += 1;
       inPipeline += 1;
+      if (isConverted) {
+        mixConverted += 1;
+      } else {
+        mixPipeline += 1;
+      }
       if (!hasFilledInstallationDetails(lead)) installPending += 1;
-      final priority = lead.priority.trim().toLowerCase();
-      if (priority == 'urgent') urgent += 1;
-      if (priority == 'high') high += 1;
+      switch (normalizeLeadPriority(lead.priority)) {
+        case 'urgent':
+          urgent += 1;
+        case 'high':
+          high += 1;
+        case 'low':
+          low += 1;
+        default:
+          medium += 1;
+      }
       final created = DateTime.tryParse(lead.createdAt);
       if (created != null && !created.isBefore(weekAgo)) newThisWeek += 1;
     }
@@ -341,7 +384,11 @@ DashboardKpis buildDashboardKpis(
     inPipeline: inPipeline,
     urgent: urgent,
     high: high,
+    medium: medium,
+    low: low,
     newThisWeek: newThisWeek,
+    mixPipeline: mixPipeline,
+    mixConverted: mixConverted,
   );
 }
 

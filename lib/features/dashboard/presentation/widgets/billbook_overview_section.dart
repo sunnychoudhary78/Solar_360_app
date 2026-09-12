@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'package:solar_sales/features/dashboard/data/models/dashboard_model.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
+import 'package:solar_sales/shared/widgets/persistent_chart_touch.dart';
 
 const _emerald = Color(0xFF0D7A5F);
 const _sky = Color(0xFF0EA5E9);
@@ -1609,17 +1610,37 @@ FlTitlesData _chartTitles({
   );
 }
 
-class _InvoiceVolumeChart extends StatelessWidget {
+class _InvoiceVolumeChart extends StatefulWidget {
   const _InvoiceVolumeChart({required this.points});
   final List<SalesPoint> points;
 
   @override
+  State<_InvoiceVolumeChart> createState() => _InvoiceVolumeChartState();
+}
+
+class _InvoiceVolumeChartState extends State<_InvoiceVolumeChart>
+    with TimedChartTooltip {
+
+  @override
   Widget build(BuildContext context) {
+    final points = widget.points;
     final scheme = Theme.of(context).colorScheme;
     final maxY = math.max(
       1.0,
       points.fold<int>(0, (m, p) => math.max(m, p.invoiceCount)).toDouble(),
     );
+    final bars = [
+      LineChartBarData(
+        spots: [
+          for (var i = 0; i < points.length; i++)
+            FlSpot(i.toDouble(), points[i].invoiceCount.toDouble()),
+        ],
+        isCurved: true,
+        color: _sky,
+        barWidth: 3,
+        dotData: const FlDotData(show: true),
+      ),
+    ];
     return LineChart(
       LineChartData(
         minY: 0,
@@ -1639,8 +1660,21 @@ class _InvoiceVolumeChart extends StatelessWidget {
           bottom: [for (final p in points) _monthLabel(p.month)],
           leftFormat: (v) => v.round().toString(),
         ),
+        showingTooltipIndicators: lineTooltipsAtIndex(
+          bars: bars,
+          index: selectedTooltipIndex,
+        ),
         lineTouchData: LineTouchData(
+          handleBuiltInTouches: false,
+          touchCallback: (event, response) {
+            if (!persistChartTap(event)) return;
+            final index = selectedLineSpotIndex(response);
+            if (index == null) return;
+            showChartTooltip(index);
+          },
           touchTooltipData: LineTouchTooltipData(
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
             getTooltipColor: (_) => scheme.inverseSurface,
             getTooltipItems: (spots) => spots.map((spot) {
               final i = spot.x.toInt();
@@ -1656,34 +1690,43 @@ class _InvoiceVolumeChart extends StatelessWidget {
             }).toList(),
           ),
         ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: [
-              for (var i = 0; i < points.length; i++)
-                FlSpot(i.toDouble(), points[i].invoiceCount.toDouble()),
-            ],
-            isCurved: true,
-            color: _sky,
-            barWidth: 3,
-            dotData: const FlDotData(show: true),
-          ),
-        ],
+        lineBarsData: bars,
       ),
     );
   }
 }
 
-class _MonthlyRevenueChart extends StatelessWidget {
+class _MonthlyRevenueChart extends StatefulWidget {
   const _MonthlyRevenueChart({required this.points});
   final List<SalesPoint> points;
 
   @override
+  State<_MonthlyRevenueChart> createState() => _MonthlyRevenueChartState();
+}
+
+class _MonthlyRevenueChartState extends State<_MonthlyRevenueChart>
+    with TimedChartTooltip {
+
+  @override
   Widget build(BuildContext context) {
+    final points = widget.points;
     final scheme = Theme.of(context).colorScheme;
     final maxY = math.max(
       1.0,
       points.fold<double>(0, (m, p) => math.max(m, p.totalSales)),
     );
+    final bars = [
+      LineChartBarData(
+        spots: [
+          for (var i = 0; i < points.length; i++)
+            FlSpot(i.toDouble(), points[i].totalSales),
+        ],
+        isCurved: true,
+        color: _emerald,
+        barWidth: 3,
+        dotData: const FlDotData(show: true),
+      ),
+    ];
     return LineChart(
       LineChartData(
         minY: 0,
@@ -1703,8 +1746,21 @@ class _MonthlyRevenueChart extends StatelessWidget {
           bottom: [for (final p in points) _monthLabel(p.month)],
           leftFormat: formatAxisInr,
         ),
+        showingTooltipIndicators: lineTooltipsAtIndex(
+          bars: bars,
+          index: selectedTooltipIndex,
+        ),
         lineTouchData: LineTouchData(
+          handleBuiltInTouches: false,
+          touchCallback: (event, response) {
+            if (!persistChartTap(event)) return;
+            final index = selectedLineSpotIndex(response);
+            if (index == null) return;
+            showChartTooltip(index);
+          },
           touchTooltipData: LineTouchTooltipData(
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
             getTooltipColor: (_) => scheme.inverseSurface,
             getTooltipItems: (spots) => spots.map((spot) {
               final i = spot.x.toInt();
@@ -1720,31 +1776,29 @@ class _MonthlyRevenueChart extends StatelessWidget {
             }).toList(),
           ),
         ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: [
-              for (var i = 0; i < points.length; i++)
-                FlSpot(i.toDouble(), points[i].totalSales),
-            ],
-            isCurved: true,
-            color: _emerald,
-            barWidth: 3,
-            dotData: const FlDotData(show: true),
-          ),
-        ],
+        lineBarsData: bars,
       ),
     );
   }
 }
 
-class _QuotesVsInvoicesChart extends StatelessWidget {
+class _QuotesVsInvoicesChart extends StatefulWidget {
   const _QuotesVsInvoicesChart({required this.quotes, required this.invoices});
 
   final DocumentStatusCounts quotes;
   final DocumentStatusCounts invoices;
 
   @override
+  State<_QuotesVsInvoicesChart> createState() => _QuotesVsInvoicesChartState();
+}
+
+class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
+    with TimedChartTooltip {
+
+  @override
   Widget build(BuildContext context) {
+    final quotes = widget.quotes;
+    final invoices = widget.invoices;
     final scheme = Theme.of(context).colorScheme;
     final maxY = math.max(
       1,
@@ -1775,11 +1829,44 @@ class _QuotesVsInvoicesChart extends StatelessWidget {
                 bottom: [for (final k in _statusKeys) _statusMeta[k]!.label],
                 leftFormat: (v) => v.round().toString(),
               ),
+              barTouchData: BarTouchData(
+                handleBuiltInTouches: false,
+                touchCallback: (event, response) {
+                  if (!persistChartTap(event)) return;
+                  final index = selectedBarGroupIndex(response);
+                  if (index == null) return;
+                  showChartTooltip(index);
+                },
+                touchTooltipData: BarTouchTooltipData(
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
+                  getTooltipColor: (_) => scheme.inverseSurface,
+                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                    if (groupIndex < 0 || groupIndex >= _statusKeys.length) {
+                      return null;
+                    }
+                    final key = _statusKeys[groupIndex];
+                    final isQuotes = rodIndex == 0;
+                    return BarTooltipItem(
+                      '${_statusMeta[key]!.label}\n${isQuotes ? 'Quotes' : 'Invoices'}  ${rod.toY.round()}',
+                      TextStyle(
+                        color: scheme.onInverseSurface,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    );
+                  },
+                ),
+              ),
               barGroups: [
                 for (var i = 0; i < _statusKeys.length; i++)
                   BarChartGroupData(
                     x: i,
                     barsSpace: 3,
+                    showingTooltipIndicators: barRodTooltipIndexes(
+                      2,
+                      selected: selectedTooltipIndex == i,
+                    ),
                     barRods: [
                       BarChartRodData(
                         toY: quotes.valueFor(_statusKeys[i]).toDouble(),
@@ -1817,7 +1904,7 @@ class _QuotesVsInvoicesChart extends StatelessWidget {
   }
 }
 
-class _MonthCompareChart extends StatelessWidget {
+class _MonthCompareChart extends StatefulWidget {
   const _MonthCompareChart({
     required this.lastSales,
     required this.thisSales,
@@ -1831,7 +1918,18 @@ class _MonthCompareChart extends StatelessWidget {
   final int thisInvoices;
 
   @override
+  State<_MonthCompareChart> createState() => _MonthCompareChartState();
+}
+
+class _MonthCompareChartState extends State<_MonthCompareChart>
+    with TimedChartTooltip {
+
+  @override
   Widget build(BuildContext context) {
+    final lastSales = widget.lastSales;
+    final thisSales = widget.thisSales;
+    final lastInvoices = widget.lastInvoices;
+    final thisInvoices = widget.thisInvoices;
     final scheme = Theme.of(context).colorScheme;
     final maxSales = math.max(1.0, math.max(lastSales, thisSales));
     final maxInv = math.max(1, math.max(lastInvoices, thisInvoices));
@@ -1840,6 +1938,24 @@ class _MonthCompareChart extends StatelessWidget {
     final labels = ['Last month', 'This month'];
 
     double scaledInv(int count) => (count / maxInv) * maxSales;
+    final bars = [
+      LineChartBarData(
+        spots: [FlSpot(0, lastSales), FlSpot(1, thisSales)],
+        color: _sky,
+        barWidth: 3,
+        dotData: const FlDotData(show: true),
+      ),
+      LineChartBarData(
+        spots: [
+          FlSpot(0, scaledInv(lastInvoices)),
+          FlSpot(1, scaledInv(thisInvoices)),
+        ],
+        color: _amber,
+        barWidth: 3,
+        dashArray: [5, 4],
+        dotData: const FlDotData(show: true),
+      ),
+    ];
 
     return Column(
       children: [
@@ -1867,8 +1983,21 @@ class _MonthCompareChart extends StatelessWidget {
                   return '$inv';
                 },
               ),
+              showingTooltipIndicators: lineTooltipsAtIndex(
+                bars: bars,
+                index: selectedTooltipIndex,
+              ),
               lineTouchData: LineTouchData(
+                handleBuiltInTouches: false,
+                touchCallback: (event, response) {
+                  if (!persistChartTap(event)) return;
+                  final index = selectedLineSpotIndex(response);
+                  if (index == null) return;
+                  showChartTooltip(index);
+                },
                 touchTooltipData: LineTouchTooltipData(
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
                   getTooltipColor: (_) => scheme.inverseSurface,
                   getTooltipItems: (spots) => spots.map((spot) {
                     final i = spot.x.toInt();
@@ -1888,24 +2017,7 @@ class _MonthCompareChart extends StatelessWidget {
                   }).toList(),
                 ),
               ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: [FlSpot(0, lastSales), FlSpot(1, thisSales)],
-                  color: _sky,
-                  barWidth: 3,
-                  dotData: const FlDotData(show: true),
-                ),
-                LineChartBarData(
-                  spots: [
-                    FlSpot(0, scaledInv(lastInvoices)),
-                    FlSpot(1, scaledInv(thisInvoices)),
-                  ],
-                  color: _amber,
-                  barWidth: 3,
-                  dashArray: [5, 4],
-                  dotData: const FlDotData(show: true),
-                ),
-              ],
+              lineBarsData: bars,
             ),
           ),
         ),
@@ -1923,12 +2035,20 @@ class _MonthCompareChart extends StatelessWidget {
   }
 }
 
-class _SalesBillingChart extends StatelessWidget {
+class _SalesBillingChart extends StatefulWidget {
   const _SalesBillingChart({required this.points});
   final List<SalesPoint> points;
 
   @override
+  State<_SalesBillingChart> createState() => _SalesBillingChartState();
+}
+
+class _SalesBillingChartState extends State<_SalesBillingChart>
+    with TimedChartTooltip {
+
+  @override
   Widget build(BuildContext context) {
+    final points = widget.points;
     final scheme = Theme.of(context).colorScheme;
     final maxSales = math.max(
       1.0,
@@ -1963,7 +2083,16 @@ class _SalesBillingChart extends StatelessWidget {
           },
         ),
         barTouchData: BarTouchData(
+          handleBuiltInTouches: false,
+          touchCallback: (event, response) {
+            if (!persistChartTap(event)) return;
+            final index = selectedBarGroupIndex(response);
+            if (index == null) return;
+            showChartTooltip(index);
+          },
           touchTooltipData: BarTouchTooltipData(
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
             getTooltipColor: (_) => scheme.inverseSurface,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               if (groupIndex < 0 || groupIndex >= points.length) return null;
@@ -1983,6 +2112,10 @@ class _SalesBillingChart extends StatelessWidget {
           for (var i = 0; i < points.length; i++)
             BarChartGroupData(
               x: i,
+              showingTooltipIndicators: barRodTooltipIndexes(
+                1,
+                selected: selectedTooltipIndex == i,
+              ),
               barRods: [
                 BarChartRodData(
                   toY: points[i].totalSales,

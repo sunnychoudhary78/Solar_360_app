@@ -83,6 +83,15 @@ class _CustomerSupportScreenState extends ConsumerState<CustomerSupportScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                SupportUnreadBanner(
+                  count: state.items.fold<int>(
+                    0,
+                    (sum, ticket) =>
+                        sum +
+                        ticket.unreadIncomingCount(isCustomerView: true),
+                  ),
+                  isCustomerView: true,
+                ),
                 const SizedBox(height: 10),
                 SupportTicketStatsRow(
                   counts: state.counts,
@@ -156,11 +165,15 @@ class _CustomerSupportScreenState extends ConsumerState<CustomerSupportScreen> {
                         ticket: ticket,
                         isCustomerView: true,
                         onOpen: () async {
+                          ref
+                              .read(customerTicketsProvider.notifier)
+                              .markTicketRead(ticket.id);
                           await Navigator.pushNamed(
                             context,
                             '/customer/support/detail',
                             arguments: ticket.id,
                           );
+                          if (!context.mounted) return;
                           ref.read(customerTicketsProvider.notifier).refresh();
                         },
                       );
