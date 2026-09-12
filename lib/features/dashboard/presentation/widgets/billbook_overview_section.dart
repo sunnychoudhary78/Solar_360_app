@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:solar_sales/features/dashboard/data/models/dashboard_model.dart';
+import 'package:solar_sales/features/dashboard/data/dashboard_chart_logic.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/persistent_chart_touch.dart';
 
@@ -239,7 +240,7 @@ class BillbookOverviewSection extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               SizedBox(
-                height: 200,
+                height: 220,
                 child: data.salesTrend.isEmpty
                     ? const _ChartEmpty(message: 'No sales trend yet')
                     : _SalesBillingChart(points: data.salesTrend),
@@ -1561,11 +1562,18 @@ FlTitlesData _chartTitles({
   String Function(double)? rightFormat,
   double? leftInterval,
   double? rightInterval,
+  double leftReservedSize = 42,
+  bool showLabelText = true,
 }) {
   final scheme = Theme.of(context).colorScheme;
   final style = Theme.of(
     context,
   ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant, fontSize: 9);
+  Widget tick(String text) {
+    if (!showLabelText || text.isEmpty) return const SizedBox.shrink();
+    return Text(text, style: style);
+  }
+
   return FlTitlesData(
     topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
     rightTitles: AxisTitles(
@@ -1575,19 +1583,19 @@ FlTitlesData _chartTitles({
         interval: rightInterval,
         getTitlesWidget: (value, meta) {
           if (rightFormat == null) return const SizedBox.shrink();
-          return Text(rightFormat(value), style: style);
+          return tick(rightFormat(value));
         },
       ),
     ),
     leftTitles: AxisTitles(
       sideTitles: SideTitles(
         showTitles: true,
-        reservedSize: 42,
+        reservedSize: leftReservedSize,
         interval: leftInterval,
         getTitlesWidget: (value, meta) {
           final text =
               leftFormat?.call(value) ?? NumberFormat.compact().format(value);
-          return Text(text, style: style);
+          return tick(text);
         },
       ),
     ),
@@ -1602,7 +1610,7 @@ FlTitlesData _chartTitles({
           }
           return Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text(bottom[i], style: style),
+            child: tick(bottom[i]),
           );
         },
       ),
@@ -1745,6 +1753,7 @@ class _MonthlyRevenueChartState extends State<_MonthlyRevenueChart>
           context: context,
           bottom: [for (final p in points) _monthLabel(p.month)],
           leftFormat: formatAxisInr,
+          leftReservedSize: 56,
         ),
         showingTooltipIndicators: lineTooltipsAtIndex(
           bars: bars,
@@ -1800,9 +1809,10 @@ class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
     final quotes = widget.quotes;
     final invoices = widget.invoices;
     final scheme = Theme.of(context).colorScheme;
+    final keys = quotesVsInvoiceStatusKeys;
     final maxY = math.max(
       1,
-      _statusKeys.fold<int>(
+      keys.fold<int>(
         0,
         (m, k) =>
             math.max(m, math.max(quotes.valueFor(k), invoices.valueFor(k))),
@@ -1826,7 +1836,7 @@ class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
               borderData: FlBorderData(show: false),
               titlesData: _chartTitles(
                 context: context,
-                bottom: [for (final k in _statusKeys) _statusMeta[k]!.label],
+                bottom: [for (final k in keys) _statusMeta[k]!.label],
                 leftFormat: (v) => v.round().toString(),
               ),
               barTouchData: BarTouchData(
@@ -1842,10 +1852,10 @@ class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
                   fitInsideVertically: true,
                   getTooltipColor: (_) => scheme.inverseSurface,
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    if (groupIndex < 0 || groupIndex >= _statusKeys.length) {
+                    if (groupIndex < 0 || groupIndex >= keys.length) {
                       return null;
                     }
-                    final key = _statusKeys[groupIndex];
+                    final key = keys[groupIndex];
                     final isQuotes = rodIndex == 0;
                     return BarTooltipItem(
                       '${_statusMeta[key]!.label}\n${isQuotes ? 'Quotes' : 'Invoices'}  ${rod.toY.round()}',
@@ -1859,7 +1869,7 @@ class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
                 ),
               ),
               barGroups: [
-                for (var i = 0; i < _statusKeys.length; i++)
+                for (var i = 0; i < keys.length; i++)
                   BarChartGroupData(
                     x: i,
                     barsSpace: 3,
@@ -1869,7 +1879,7 @@ class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
                     ),
                     barRods: [
                       BarChartRodData(
-                        toY: quotes.valueFor(_statusKeys[i]).toDouble(),
+                        toY: quotes.valueFor(keys[i]).toDouble(),
                         color: _amber,
                         width: 8,
                         borderRadius: const BorderRadius.vertical(
@@ -1877,7 +1887,7 @@ class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
                         ),
                       ),
                       BarChartRodData(
-                        toY: invoices.valueFor(_statusKeys[i]).toDouble(),
+                        toY: invoices.valueFor(keys[i]).toDouble(),
                         color: _emerald,
                         width: 8,
                         borderRadius: const BorderRadius.vertical(
@@ -1937,7 +1947,11 @@ class _MonthCompareChartState extends State<_MonthCompareChart>
     final invoices = [lastInvoices, thisInvoices];
     final labels = ['Last month', 'This month'];
 
-    double scaledInv(int count) => (count / maxInv) * maxSales;
+    double scaledInv(int count) => scaleCountOntoSalesAxis(
+          count,
+          maxCount: maxInv,
+          maxSales: maxSales,
+        );
     final bars = [
       LineChartBarData(
         spots: [FlSpot(0, lastSales), FlSpot(1, thisSales)],
@@ -1978,10 +1992,16 @@ class _MonthCompareChartState extends State<_MonthCompareChart>
                 context: context,
                 bottom: labels,
                 leftFormat: formatAxisInr,
-                rightFormat: (v) {
-                  final inv = ((v / maxSales) * maxInv).round();
-                  return '$inv';
-                },
+                leftReservedSize: 56,
+                rightInterval: salesAxisCountInterval(
+                  maxCount: maxInv,
+                  maxSales: maxSales,
+                ),
+                rightFormat: (v) => salesAxisCountLabel(
+                  v,
+                  maxCount: maxInv,
+                  maxSales: maxSales,
+                ),
               ),
               showingTooltipIndicators: lineTooltipsAtIndex(
                 bars: bars,
@@ -2058,77 +2078,177 @@ class _SalesBillingChartState extends State<_SalesBillingChart>
       1,
       points.fold<int>(0, (m, p) => math.max(m, p.invoiceCount)),
     );
+    final maxY = maxSales * 1.2;
+    const skyBar = Color(0xFF38BDF8);
 
-    return BarChart(
-      BarChartData(
-        maxY: maxSales * 1.2,
-        alignment: BarChartAlignment.spaceAround,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: const Color(0xFFD1FAE5),
-            strokeWidth: 1,
-            dashArray: [3, 3],
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        titlesData: _chartTitles(
-          context: context,
-          bottom: [for (final p in points) _monthLabel(p.month)],
-          leftFormat: formatAxisInr,
-          rightFormat: (v) {
-            final inv = ((v / maxSales) * maxInv).round();
-            return '$inv';
-          },
-        ),
-        barTouchData: BarTouchData(
-          handleBuiltInTouches: false,
-          touchCallback: (event, response) {
-            if (!persistChartTap(event)) return;
-            final index = selectedBarGroupIndex(response);
-            if (index == null) return;
-            showChartTooltip(index);
-          },
-          touchTooltipData: BarTouchTooltipData(
-            fitInsideHorizontally: true,
-            fitInsideVertically: true,
-            getTooltipColor: (_) => scheme.inverseSurface,
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              if (groupIndex < 0 || groupIndex >= points.length) return null;
-              final p = points[groupIndex];
-              return BarTooltipItem(
-                '${_monthLabel(p.month)}\n${formatInr(p.totalSales)}\n${p.invoiceCount} invoices',
-                TextStyle(
-                  color: scheme.onInverseSurface,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              );
-            },
-          ),
-        ),
-        barGroups: [
+    double scaledInv(int count) => scaleCountOntoSalesAxis(
+          count,
+          maxCount: maxInv,
+          maxSales: maxSales,
+        );
+
+    final lineBars = [
+      LineChartBarData(
+        spots: [
           for (var i = 0; i < points.length; i++)
-            BarChartGroupData(
-              x: i,
-              showingTooltipIndicators: barRodTooltipIndexes(
-                1,
-                selected: selectedTooltipIndex == i,
-              ),
-              barRods: [
-                BarChartRodData(
-                  toY: points[i].totalSales,
-                  color: _sky,
-                  width: 12,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(4),
+            FlSpot(i.toDouble(), points[i].totalSales),
+        ],
+        isCurved: true,
+        preventCurveOverShooting: true,
+        color: _emerald,
+        barWidth: 2.5,
+        belowBarData: BarAreaData(
+          show: true,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              _emerald.withValues(alpha: 0.16),
+              _emerald.withValues(alpha: 0),
+            ],
+          ),
+        ),
+        dotData: const FlDotData(show: true),
+      ),
+    ];
+
+    final titles = _chartTitles(
+      context: context,
+      bottom: [for (final p in points) _monthLabel(p.month)],
+      leftFormat: formatAxisInr,
+      leftReservedSize: 56,
+      rightInterval: salesAxisCountInterval(
+        maxCount: maxInv,
+        maxSales: maxSales,
+      ),
+      rightFormat: (v) => salesAxisCountLabel(
+        v,
+        maxCount: maxInv,
+        maxSales: maxSales,
+      ),
+    );
+
+    return Column(
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: LineChart(
+                  LineChartData(
+                    minY: 0,
+                    maxY: maxY,
+                    minX: -0.5,
+                    maxX: math.max(0, points.length - 1) + 0.5,
+                    clipData: const FlClipData.all(),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine: (_) => const FlLine(
+                        color: Color(0xFFD1FAE5),
+                        strokeWidth: 1,
+                        dashArray: [3, 3],
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    titlesData: titles,
+                    showingTooltipIndicators: lineTooltipsAtIndex(
+                      bars: lineBars,
+                      index: selectedTooltipIndex,
+                    ),
+                    lineTouchData: LineTouchData(
+                      handleBuiltInTouches: false,
+                      touchCallback: (event, response) {
+                        if (!persistChartTap(event)) return;
+                        final index = selectedLineSpotIndex(response);
+                        if (index == null) return;
+                        showChartTooltip(index);
+                      },
+                      touchTooltipData: LineTouchTooltipData(
+                        fitInsideHorizontally: true,
+                        fitInsideVertically: true,
+                        getTooltipColor: (_) => scheme.inverseSurface,
+                        getTooltipItems: (spots) => spots.map((spot) {
+                          final i = spot.x.round();
+                          if (i < 0 || i >= points.length) return null;
+                          final p = points[i];
+                          return LineTooltipItem(
+                            '${_monthLabel(p.month)}\n'
+                            'Sales  ${formatInr(p.totalSales)}\n'
+                            'Invoices  ${p.invoiceCount}',
+                            TextStyle(
+                              color: scheme.onInverseSurface,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    lineBarsData: lineBars,
                   ),
                 ),
-              ],
-            ),
-        ],
-      ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: BarChart(
+                    BarChartData(
+                      minY: 0,
+                      maxY: maxY,
+                      alignment: BarChartAlignment.spaceAround,
+                      backgroundColor: Colors.transparent,
+                      gridData: const FlGridData(show: false),
+                      borderData: FlBorderData(show: false),
+                      titlesData: _chartTitles(
+                        context: context,
+                        bottom: [for (final p in points) _monthLabel(p.month)],
+                        leftFormat: formatAxisInr,
+                        leftReservedSize: 56,
+                        rightInterval: salesAxisCountInterval(
+                          maxCount: maxInv,
+                          maxSales: maxSales,
+                        ),
+                        rightFormat: (v) => salesAxisCountLabel(
+                          v,
+                          maxCount: maxInv,
+                          maxSales: maxSales,
+                        ),
+                        showLabelText: false,
+                      ),
+                      barTouchData: const BarTouchData(enabled: false),
+                      barGroups: [
+                        for (var i = 0; i < points.length; i++)
+                          BarChartGroupData(
+                            x: i,
+                            barRods: [
+                              BarChartRodData(
+                                toY: scaledInv(points[i].invoiceCount),
+                                color: skyBar.withValues(alpha: 0.85),
+                                width: 10,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(4),
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _LegendDot(color: _emerald, label: 'Sales'),
+            SizedBox(width: 14),
+            _LegendDot(color: Color(0xFF38BDF8), label: 'Invoices'),
+          ],
+        ),
+      ],
     );
   }
 }

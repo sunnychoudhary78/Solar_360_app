@@ -10,9 +10,19 @@ class SalesPoint {
 
   factory SalesPoint.fromJson(Map<String, dynamic> json) {
     return SalesPoint(
-      month: parseDate(json['month']),
-      invoiceCount: asInt(json['invoice_count'] ?? json['invoiceCount']),
-      totalSales: asDouble(json['total_sales'] ?? json['totalSales']),
+      month: parseDate(json['month'] ?? json['label']),
+      invoiceCount: asInt(
+        json['invoice_count'] ??
+            json['invoiceCount'] ??
+            json['invoices'] ??
+            json['count'],
+      ),
+      totalSales: asDouble(
+        json['total_sales'] ??
+            json['totalSales'] ??
+            json['sales'] ??
+            json['amount'],
+      ),
     );
   }
 }

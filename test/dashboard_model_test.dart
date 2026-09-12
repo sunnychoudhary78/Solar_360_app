@@ -104,6 +104,25 @@ void main() {
       expect(model.salesTrend, hasLength(1));
       expect(model.salesTrend.first.invoiceCount, 4);
     });
+
+    test('SalesPoint reads web sales-report aliases and string totals', () {
+      final fromBackend = SalesPoint.fromJson({
+        'month': '2026-09-01',
+        'invoice_count': '2',
+        'total_sales': '15750.00',
+      });
+      expect(fromBackend.invoiceCount, 2);
+      expect(fromBackend.totalSales, 15750);
+      expect(fromBackend.month, DateTime(2026, 9, 1));
+
+      final fromMapped = SalesPoint.fromJson({
+        'month': '2026-08-01T00:00:00.000Z',
+        'invoices': 3,
+        'sales': 2600,
+      });
+      expect(fromMapped.invoiceCount, 3);
+      expect(fromMapped.totalSales, 2600);
+    });
   });
 
   group('formatCompactInr', () {
