@@ -2,6 +2,7 @@ import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/items/data/models/item_model.dart';
 import 'package:solar_sales/shared/models/party_address_model.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
+import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
 
 class InvoiceItemModel {
   final String? id;
@@ -91,6 +92,7 @@ class InvoiceModel {
   final PartyAddressModel? fromParty;
   final String? fromBranchId;
   final String? marketingTemplateId;
+  final MarketingTemplate? marketingTemplate;
 
   const InvoiceModel({
     required this.id,
@@ -117,6 +119,7 @@ class InvoiceModel {
     this.fromParty,
     this.fromBranchId,
     this.marketingTemplateId,
+    this.marketingTemplate,
   });
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -125,6 +128,7 @@ class InvoiceModel {
     final itemsRaw = json['items'];
     final fromPartyRaw = json['from_party'];
     final warehouseRaw = json['warehouse'];
+    final nestedTemplate = marketingTemplateFromDocJson(json);
 
     return InvoiceModel(
       id: asString(json['id']),
@@ -181,11 +185,8 @@ class InvoiceModel {
           ? fromPartyRaw['branch_id']?.toString() ??
                 fromPartyRaw['branchId']?.toString()
           : null,
-      marketingTemplateId: json['marketing_template_id']?.toString() ??
-          json['marketingTemplateId']?.toString() ??
-          (json['marketingTemplate'] is Map
-              ? (json['marketingTemplate'] as Map)['id']?.toString()
-              : null),
+      marketingTemplateId: marketingTemplateIdFromJson(json),
+      marketingTemplate: nestedTemplate,
     );
   }
 

@@ -42,12 +42,26 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
     final inShell = ShellScope.hasDrawer(context);
 
     Widget? resolvedLeading = leading;
-    if (resolvedLeading == null && inShell) {
-      resolvedLeading = IconButton(
-        tooltip: 'Menu',
-        icon: Icon(isIOS ? Icons.menu_rounded : Icons.menu),
-        onPressed: () => ShellScope.openDrawer(context),
-      );
+    final canPop = Navigator.of(context).canPop();
+    if (resolvedLeading == null && inShell && !canPop) {
+      final scope = ShellScope.maybeOf(context);
+      if (scope != null &&
+          scope.selectedTabIndex > 0 &&
+          scope.selectTab != null) {
+        resolvedLeading = IconButton(
+          tooltip: 'Back',
+          icon: Icon(
+            isIOS ? Icons.arrow_back_ios_new_rounded : Icons.arrow_back,
+          ),
+          onPressed: () => scope.selectTab!(0),
+        );
+      } else {
+        resolvedLeading = IconButton(
+          tooltip: 'Menu',
+          icon: Icon(isIOS ? Icons.menu_rounded : Icons.menu),
+          onPressed: () => ShellScope.openDrawer(context),
+        );
+      }
     }
 
     final titleWidget = largeTitle

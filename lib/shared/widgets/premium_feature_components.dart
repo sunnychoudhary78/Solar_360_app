@@ -670,13 +670,6 @@ class QuickActionGrid extends StatelessWidget {
     BuildContext context,
     AppDestination destination,
   ) {
-    if (destination.kind == NavKind.shellTab) {
-      if (destination.route != null) {
-        Navigator.pushNamed(context, destination.route!);
-      }
-      return;
-    }
-
     if (destination.route != null) {
       Navigator.pushNamed(context, destination.route!);
     }
@@ -840,6 +833,11 @@ void navigateDestination(
   AppDestination dest,
   List<AppDestination> shellTabs,
 ) {
+  if (dest.route != null) {
+    Navigator.pushNamed(context, dest.route!);
+    return;
+  }
+
   if (dest.kind == NavKind.shellTab) {
     final index = shellTabs.indexWhere(
       (tab) => tab.id == dest.id,
@@ -847,12 +845,7 @@ void navigateDestination(
 
     if (index >= 0) {
       ShellScope.goToTab(context, index);
-      return;
     }
-  }
-
-  if (dest.route != null) {
-    Navigator.pushNamed(context, dest.route!);
   }
 }
 

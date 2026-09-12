@@ -4,11 +4,9 @@ import 'package:solar_sales/features/customers/presentation/screens/customers_sc
 import 'package:solar_sales/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/inventory_hub_screen.dart';
 import 'package:solar_sales/features/invoices/presentation/screens/invoices_screen.dart';
-import 'package:solar_sales/features/leads/presentation/screens/all_leads_screen.dart';
 import 'package:solar_sales/features/leads/presentation/screens/solar_home_screen.dart';
 import 'package:solar_sales/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:solar_sales/features/quotations/presentation/screens/quotations_screen.dart';
-import 'package:solar_sales/features/support/presentation/screens/support_tickets_screen.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
 
 /// Where a destination lives in the navigation chrome.
@@ -231,6 +229,18 @@ class NavDestinations {
       quickActionSubtitle: 'KPIs & analytics',
     ),
     AppDestination(
+      id: 'bb_templates',
+      label: 'Templates',
+      icon: Icons.layers_outlined,
+      selectedIcon: Icons.layers_rounded,
+      section: NavSection.app,
+      kind: NavKind.route,
+      permission: 'companySettings.read',
+      route: '/settings/templates',
+      quickAction: true,
+      quickActionSubtitle: 'Marketing PDFs & images',
+    ),
+    AppDestination(
       id: 'bb_settings',
       label: 'Settings',
       icon: Icons.settings_outlined,
@@ -259,9 +269,9 @@ class NavDestinations {
       icon: Icons.handshake_outlined,
       selectedIcon: Icons.handshake_rounded,
       section: NavSection.main,
-      kind: NavKind.shellTab,
+      kind: NavKind.route,
       anyOf: ['leads.read', 'lead.read'],
-      screen: AllLeadsScreen(),
+      route: '/solar/leads',
       quickAction: true,
       quickActionSubtitle: 'Pipeline overview',
     ),
@@ -271,8 +281,8 @@ class NavDestinations {
       icon: Icons.notifications_outlined,
       selectedIcon: Icons.notifications_rounded,
       section: NavSection.main,
-      kind: NavKind.shellTab,
-      screen: NotificationsScreen(),
+      kind: NavKind.route,
+      route: '/solar/notifications',
       quickAction: true,
       quickActionSubtitle: 'Notifications',
     ),
@@ -338,9 +348,9 @@ class NavDestinations {
       icon: Icons.headset_mic_outlined,
       selectedIcon: Icons.headset_mic_rounded,
       section: NavSection.solarCrm,
-      kind: NavKind.shellTab,
+      kind: NavKind.route,
       anyOf: ['solar.support.read', 'support_ticket.read'],
-      screen: SupportTicketsScreen(),
+      route: '/solar/support',
       quickAction: true,
       quickActionSubtitle: 'Customer requests',
     ),

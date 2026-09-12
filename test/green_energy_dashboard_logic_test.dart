@@ -99,11 +99,30 @@ void main() {
       expect(kpis.completed, 1);
       expect(kpis.rejected, 1);
       expect(kpis.inPipeline, 2);
+      expect(kpis.active, 2);
       expect(kpis.urgent, 1);
       expect(kpis.installPending, 2);
       expect(kpis.mixPipeline, 1);
       expect(kpis.mixConverted, 1);
       expect(kpis.leadMixTotal, 4);
+    });
+
+    test('Active Leads excludes completed and rejected even if is_active is true', () {
+      final kpis = buildDashboardKpis(
+        [
+          _lead(id: '1', status: 'New Lead', isActive: true),
+          _lead(id: '2', status: 'Converted', isActive: false),
+          _lead(id: '3', status: 'Final Complete', isActive: true),
+          _lead(id: '4', status: 'Lead Closed', isActive: true),
+          _lead(id: '5', status: 'Rejected', isActive: true),
+        ],
+        canSeeRejected: true,
+      );
+
+      expect(kpis.completed, 2);
+      expect(kpis.rejected, 1);
+      expect(kpis.active, 1);
+      expect(kpis.open, 2);
     });
 
     test('Lead mix does not double-count a converted lead', () {

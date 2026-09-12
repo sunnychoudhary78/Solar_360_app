@@ -12,6 +12,7 @@ import 'package:solar_sales/features/installation/presentation/providers/install
 import 'package:solar_sales/features/installation/presentation/screens/installation_form_screen.dart';
 import 'package:solar_sales/features/leads/data/lead_files.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
+import 'package:solar_sales/features/leads/presentation/providers/green_energy_dashboard_providers.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/features/leads/presentation/screens/image_viewer_screen.dart';
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
@@ -706,6 +707,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       // Refresh list/detail after success; never surface refresh failures as a
       // status-update error (that caused a brief red flash after Follow Up).
       ref.invalidate(allLeadsProvider);
+      ref.invalidate(greenEnergyDashboardLeadsProvider);
       try {
         await _reloadSilently();
       } catch (_) {}
@@ -765,6 +767,7 @@ class _LeadDetailScreenState extends ConsumerState<LeadDetailScreen> {
       });
 
       ref.invalidate(allLeadsProvider);
+      ref.invalidate(greenEnergyDashboardLeadsProvider);
       await _reloadSilently();
 
       if (!mounted) return;

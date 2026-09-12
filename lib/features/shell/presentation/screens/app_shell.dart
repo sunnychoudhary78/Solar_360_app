@@ -101,30 +101,37 @@ class _AppShellState extends ConsumerState<AppShell> {
       scaffoldKey: _scaffoldKey,
       selectTab: (i) => _selectTab(i, tabs),
       selectedTabIndex: _index,
-      child: Scaffold(
-        key: _scaffoldKey,
-        onDrawerChanged: (isOpen) {
-          if (isOpen) {
-            ref.invalidate(unreadNotificationCountProvider);
-          }
+      child: PopScope(
+        canPop: _index == 0,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _selectTab(0, tabs);
         },
-        drawer: AppDrawer(
-          activeModule: module.activeModule,
-          showModuleToggle: module.showToggle,
-          onModuleChanged: _onModuleChanged,
-          tabs: tabs,
-          selectedTabIndex: _index,
-          activeRoute: _activePushedRoute,
-          onSelectDestination: (dest) => _onDestinationSelected(dest, tabs),
+        child: Scaffold(
+          key: _scaffoldKey,
+          onDrawerChanged: (isOpen) {
+            if (isOpen) {
+              ref.invalidate(unreadNotificationCountProvider);
+            }
+          },
+          drawer: AppDrawer(
+            activeModule: module.activeModule,
+            showModuleToggle: module.showToggle,
+            onModuleChanged: _onModuleChanged,
+            tabs: tabs,
+            selectedTabIndex: _index,
+            activeRoute: _activePushedRoute,
+            onSelectDestination: (dest) => _onDestinationSelected(dest, tabs),
+          ),
+          body: IndexedStack(
+            index: _index,
+            children: [
+              for (final tab in tabs) tab.screen ?? const SizedBox.shrink(),
+            ],
+          ),
+          // Bottom nav removed — drawer + home quick actions are the nav surface.
+          backgroundColor: scheme.surfaceContainerLowest,
         ),
-        body: IndexedStack(
-          index: _index,
-          children: [
-            for (final tab in tabs) tab.screen ?? const SizedBox.shrink(),
-          ],
-        ),
-        // Bottom nav removed — drawer + home quick actions are the nav surface.
-        backgroundColor: scheme.surfaceContainerLowest,
       ),
     );
   }

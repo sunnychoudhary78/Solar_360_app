@@ -99,6 +99,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         subtitle: '${_timeGreeting()}, $firstName',
         largeTitle: true,
         actions: [
+          if (auth.hasPermission('companySettings.read'))
+            IconButton(
+              tooltip: 'Templates',
+              icon: const Icon(Icons.layers_outlined),
+              onPressed: () =>
+                  Navigator.pushNamed(context, '/settings/templates'),
+            ),
           UnreadBadge(
             child: IconButton(
               tooltip: 'Notifications',

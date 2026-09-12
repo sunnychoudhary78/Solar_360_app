@@ -61,6 +61,42 @@ void main() {
       expect((body['items'] as List).first['item_id'], 'i1');
       expect((body['items'] as List).first['warehouse_id'], 'w1');
       expect((body['items'] as List).first['quantity'], 2);
+      expect(body['marketingTemplateId'], isNull);
+    });
+
+    test('create sends marketingTemplateId like the web form', () async {
+      pair.adapter.on('POST', 'quotations', (req) {
+        return {
+          'id': 'q1',
+          'quotation_number': 'QT-1',
+          'customer_id': 'c1',
+          'status': 'draft',
+          'marketing_template_id': 'tpl-1',
+          'marketingTemplate': {
+            'id': 'tpl-1',
+            'name': 'Brochure',
+            'applies_to': 'quotation',
+          },
+          'items': [],
+        };
+      });
+
+      await repo.create(
+        customerId: 'c1',
+        items: const [
+          QuotationItemModel(
+            itemId: 'i1',
+            quantity: 1,
+            unitPrice: 100,
+            gstPercent: 18,
+          ),
+        ],
+        marketingTemplateId: 'tpl-1',
+      );
+
+      final body = pair.adapter.of('POST', 'quotations').single.data as Map;
+      expect(body['marketingTemplateId'], 'tpl-1');
+      expect(body.containsKey('marketing_template_id'), isFalse);
     });
 
     test('submit → pending_approval path', () async {
@@ -265,6 +301,28 @@ void main() {
         ],
       );
       expect(inv.id, 'inv2');
+    });
+
+    test('create from quotation sends marketingTemplateId like web', () async {
+      pair.adapter.on('POST', 'from-quotation', (req) {
+        final body = Map<String, dynamic>.from(req.data as Map);
+        expect(body['marketingTemplateId'], 'tpl-inv');
+        expect(body.containsKey('marketing_template_id'), isFalse);
+        return {
+          'id': 'inv3',
+          'invoice_number': 'INV-3',
+          'quotation_id': 'q1',
+          'customer_id': 'c1',
+          'status': 'draft',
+          'stock_deducted': false,
+          'items': [],
+        };
+      });
+
+      await repo.createFromQuotation(
+        quotationId: 'q1',
+        marketingTemplateId: 'tpl-inv',
+      );
     });
 
     test('update clears notes with empty string', () async {

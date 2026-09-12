@@ -4,6 +4,7 @@ import 'package:solar_sales/core/network/api_endpoints.dart';
 import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/shared/models/paginated_result.dart';
 import 'package:solar_sales/shared/models/party_address_model.dart';
+import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
 
 import 'models/invoice_model.dart';
 
@@ -77,8 +78,7 @@ class InvoiceApiService {
       if (fromParty != null && fromParty.isNotEmpty) 'fromParty': fromParty,
       if (items != null && items.isNotEmpty)
         'items': items.map((e) => e.toUpdateJson()).toList(),
-      'marketing_template_id':
-          (marketingTemplateId ?? '').trim().isEmpty ? null : marketingTemplateId,
+      'marketingTemplateId': marketingTemplateIdBody(marketingTemplateId),
     });
     return InvoiceModel.fromJson(Map<String, dynamic>.from(res as Map));
   }

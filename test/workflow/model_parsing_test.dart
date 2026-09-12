@@ -84,6 +84,7 @@ void main() {
       });
       expect(q.marketingTemplateId, 'tpl-q');
       expect(inv.marketingTemplateId, 'tpl-i');
+      expect(inv.marketingTemplate?.name, 'Invoice wrap');
     });
 
     test('ItemModel parses pending → approved', () {

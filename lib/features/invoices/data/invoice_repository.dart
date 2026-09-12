@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:solar_sales/shared/models/paginated_result.dart';
 import 'package:solar_sales/shared/models/party_address_model.dart';
+import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
 
 import 'invoice_api_service.dart';
 import 'models/invoice_model.dart';
@@ -82,8 +83,7 @@ class InvoiceRepository {
       if (resolvedShip != null) 'shipTo': resolvedShip.toJson(),
       'shipSameAsBill': shipSameAsBill,
       if (fromParty != null && fromParty.isNotEmpty) 'fromParty': fromParty,
-      'marketing_template_id':
-          (marketingTemplateId ?? '').trim().isEmpty ? null : marketingTemplateId,
+      'marketingTemplateId': marketingTemplateIdBody(marketingTemplateId),
     });
   }
 
@@ -114,8 +114,7 @@ class InvoiceRepository {
       if (resolvedShip != null) 'shipTo': resolvedShip.toJson(),
       'shipSameAsBill': shipSameAsBill,
       if (fromParty != null && fromParty.isNotEmpty) 'fromParty': fromParty,
-      'marketing_template_id':
-          (marketingTemplateId ?? '').trim().isEmpty ? null : marketingTemplateId,
+      'marketingTemplateId': marketingTemplateIdBody(marketingTemplateId),
     });
   }
 

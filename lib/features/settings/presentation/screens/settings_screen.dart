@@ -139,6 +139,34 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
+          if (auth.hasPermission('companySettings.read')) ...[
+            const PremiumSectionTitle(title: 'Billbook'),
+            const SizedBox(height: AppSpacing.sm),
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
+                leading: Icon(Icons.layers_outlined, color: scheme.primary),
+                title: const Text(
+                  'Templates',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text(
+                  'Upload and manage marketing templates for quotations & invoices',
+                ),
+                trailing: Icon(
+                  Icons.chevron_right_rounded,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+                onTap: () =>
+                    Navigator.pushNamed(context, '/settings/templates'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+          ],
           const PremiumSectionTitle(title: 'Security'),
           const SizedBox(height: AppSpacing.sm),
           AppCard(

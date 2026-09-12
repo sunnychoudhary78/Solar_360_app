@@ -343,7 +343,6 @@ DashboardKpis buildDashboardKpis(
     );
     final isConverted = LeadWorkflow.isConvertedPipelineStatus(lead.status);
 
-    if (lead.isActive) active += 1;
     if (isRejected) {
       rejected += 1;
     } else if (isCompleted) {
@@ -351,6 +350,7 @@ DashboardKpis buildDashboardKpis(
     } else {
       open += 1;
       inPipeline += 1;
+      if (lead.isActive) active += 1;
       if (isConverted) {
         mixConverted += 1;
       } else {

@@ -44,26 +44,33 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
       scaffoldKey: _scaffoldKey,
       selectTab: _selectTab,
       selectedTabIndex: _index,
-      child: Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: scheme.surfaceContainerLowest,
-        drawer: CustomerDrawer(
-          tabs: customerPortalTabs,
-          selectedTabIndex: _index,
-          onSelectTab: _selectTab,
-        ),
-        body: IndexedStack(
-          index: _index,
-          sizing: StackFit.expand,
-          children: [
-            CustomerHomeScreen(
-              onOpenLeads: () => _selectTab(1),
-              onOpenSupport: () => _selectTab(2),
-            ),
-            const CustomerLeadsScreen(),
-            const CustomerSupportScreen(),
-            const CustomerAccountScreen(),
-          ],
+      child: PopScope(
+        canPop: _index == 0,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _selectTab(0);
+        },
+        child: Scaffold(
+          key: _scaffoldKey,
+          backgroundColor: scheme.surfaceContainerLowest,
+          drawer: CustomerDrawer(
+            tabs: customerPortalTabs,
+            selectedTabIndex: _index,
+            onSelectTab: _selectTab,
+          ),
+          body: IndexedStack(
+            index: _index,
+            sizing: StackFit.expand,
+            children: [
+              CustomerHomeScreen(
+                onOpenLeads: () => _selectTab(1),
+                onOpenSupport: () => _selectTab(2),
+              ),
+              const CustomerLeadsScreen(),
+              const CustomerSupportScreen(),
+              const CustomerAccountScreen(),
+            ],
+          ),
         ),
       ),
     );

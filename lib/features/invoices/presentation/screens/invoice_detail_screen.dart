@@ -16,6 +16,7 @@ import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/company_letterhead_card.dart';
 import 'package:solar_sales/shared/widgets/dialogs.dart';
 import 'package:solar_sales/shared/widgets/document_totals_summary.dart';
+import 'package:solar_sales/shared/widgets/marketing_template_panel.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:solar_sales/shared/widgets/premium_ui.dart';
 import 'package:solar_sales/shared/widgets/rejection_banner.dart';
@@ -150,6 +151,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
                           fromParty: inv.fromParty,
                         ),
                       ),
+                      MarketingTemplatePanel(template: inv.marketingTemplate),
                       if (inv.rejectionReason != null &&
                           inv.rejectionReason!.isNotEmpty)
                         RejectionBanner(reason: inv.rejectionReason!),

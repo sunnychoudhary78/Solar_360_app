@@ -75,11 +75,23 @@ class ApiService {
     }
   }
 
+  Future<dynamic> postFormData(String endpoint, FormData data) async {
+    try {
+      final response = await _dio.post(_path(endpoint), data: data);
+      return _handle(response);
+    } on DioException catch (e) {
+      throw _extractException(e);
+    }
+  }
+
   Future<Uint8List> getBytes(String endpoint) async {
     try {
       final response = await _dio.get(
         _path(endpoint),
-        options: Options(responseType: ResponseType.bytes),
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 90),
+        ),
       );
       final data = response.data;
       if (data is Uint8List) return data;

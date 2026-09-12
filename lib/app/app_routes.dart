@@ -36,9 +36,11 @@ import 'package:solar_sales/features/quotations/presentation/screens/quotation_f
 import 'package:solar_sales/features/quotations/presentation/screens/quotations_screen.dart';
 import 'package:solar_sales/features/reports/presentation/screens/green_energy_reports_screen.dart';
 import 'package:solar_sales/features/reports/presentation/screens/reports_screen.dart';
+import 'package:solar_sales/features/settings/presentation/screens/marketing_templates_screen.dart';
 import 'package:solar_sales/features/settings/presentation/screens/settings_screen.dart';
 import 'package:solar_sales/features/shell/presentation/screens/app_shell.dart';
 import 'package:solar_sales/features/support/presentation/screens/support_ticket_detail_screen.dart';
+import 'package:solar_sales/features/support/presentation/screens/support_tickets_screen.dart';
 
 class AppRoutes {
   static Map<String, WidgetBuilder> get routes => {
@@ -54,8 +56,10 @@ class AppRoutes {
     '/solar/leads/form': (_) => const LeadFormScreen(),
     '/solar/home': (_) => const SolarHomeScreen(),
     '/solar/notifications': (_) => const NotificationsScreen(),
+    '/solar/support': (_) => const SupportTicketsScreen(),
     '/dashboard': (_) => const DashboardScreen(),
     '/settings': (_) => const SettingsScreen(),
+    '/settings/templates': (_) => const MarketingTemplatesScreen(),
     '/change-password': (_) => const ChangePasswordScreen(),
     '/solar/converted-leads': (_) =>
         const AllLeadsScreen(convertedOnly: true),

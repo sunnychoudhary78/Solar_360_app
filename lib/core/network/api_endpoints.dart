@@ -130,6 +130,9 @@ class ApiEndpoints {
   static const markAllNotificationsRead = 'notifications/mark-all-as-read';
 
   static const marketingTemplates = 'marketing-templates';
+  static String marketingTemplate(String id) => 'marketing-templates/$id';
+  static String marketingTemplateDownload(String id) =>
+      'marketing-templates/$id/download';
   static const employeePhoto = 'employee-photo';
   static const employeePhotoUpload = 'employee-photo/photo';
 }

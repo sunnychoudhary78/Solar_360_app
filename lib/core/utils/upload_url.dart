@@ -40,6 +40,31 @@ bool isPdfPath(String? path) {
   return path.toLowerCase().endsWith('.pdf');
 }
 
+/// Resolves a stored upload path the same way the web `resolveStoredUploadUrl` does.
+String resolveStoredUploadUrl(String? storedPath) {
+  if (storedPath == null) return '';
+
+  final raw = storedPath.toString().trim();
+  if (raw.isEmpty) return '';
+
+  if (raw.startsWith('http://') ||
+      raw.startsWith('https://') ||
+      raw.startsWith('data:') ||
+      raw.startsWith('blob:')) {
+    return raw;
+  }
+
+  final cleaned = raw
+      .replaceAll('\\', '/')
+      .replaceFirst(RegExp(r'^/+'), '')
+      .replaceFirst(RegExp(r'^api/'), '')
+      .replaceFirst(RegExp(r'^uploads/'), '');
+  if (cleaned.isEmpty) return '';
+
+  final base = ApiConstants.baseUrl.replaceAll(RegExp(r'/api$'), '');
+  return '$base/api/uploads/$cleaned';
+}
+
 String fileDisplayName(String? path) {
   if (path == null || path.isEmpty) return 'File';
 

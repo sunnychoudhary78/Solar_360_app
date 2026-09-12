@@ -53,6 +53,14 @@ void main() {
 
     test('marketing templates endpoint matches backend', () {
       expect(ApiEndpoints.marketingTemplates, 'marketing-templates');
+      expect(
+        ApiEndpoints.marketingTemplate('tpl-1'),
+        'marketing-templates/tpl-1',
+      );
+      expect(
+        ApiEndpoints.marketingTemplateDownload('tpl-1'),
+        'marketing-templates/tpl-1/download',
+      );
     });
 
     test('API host follows the selected environment', () {
@@ -74,6 +82,10 @@ void main() {
       expect(
         resolveUploadUrl('https://example.com/api/uploads/leads/example.jpg'),
         'https://example.com/api/uploads/leads/example.jpg',
+      );
+      expect(
+        resolveStoredUploadUrl('marketing-templates/template.pdf'),
+        '$host/api/uploads/marketing-templates/template.pdf',
       );
     });
 
