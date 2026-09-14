@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -108,7 +109,7 @@ class MyApp extends ConsumerWidget {
           ? AppPalette.darkScaffold
           : AppPalette.lightScaffold,
       splashFactory: InkSparkle.splashFactory,
-      pageTransitionsTheme: const PageTransitionsTheme(
+      pageTransitionsTheme: PageTransitionsTheme(
         builders: {
           TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
