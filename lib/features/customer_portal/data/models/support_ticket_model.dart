@@ -429,17 +429,21 @@ class SupportTicketModel {
 
   bool get isNewTag => status == 'complaint_raised' || status == 'open';
 
-  SupportTicketModel clearedUnread() {
+  /// Clears the unread badge for the current viewer only.
+  ///
+  /// Incoming messages are marked locally as read (the other party's
+  /// replies that this user just opened). Outgoing messages keep their
+  /// real [SupportTicketMessage.readAt] so "Seen" is shown only after
+  /// the other person actually opens the thread.
+  SupportTicketModel clearedUnread({required bool isCustomerView}) {
     final now = DateTime.now();
     return copyWith(
       unreadCountHint: 0,
       hasUnreadMessages: false,
-      lastMessage: lastMessage?.copyWith(readAt: lastMessage?.readAt ?? now),
+      lastMessage: _markIncomingRead(lastMessage, now, isCustomerView),
       messages: [
         for (final message in messages)
-          message.readAt == null
-              ? message.copyWith(readAt: now)
-              : message,
+          _markIncomingRead(message, now, isCustomerView) ?? message,
       ],
     );
   }
@@ -448,13 +452,9 @@ class SupportTicketModel {
     if (unreadCountHint > 0) return unreadCountHint;
 
     if (messages.isNotEmpty) {
-      final fromMessages = messages.where((message) {
-        if (message.isInternal) return false;
-        final incoming = isCustomerView
-            ? !message.isCustomer
-            : message.isCustomer;
-        return incoming && message.readAt == null;
-      }).length;
+      final fromMessages = messages
+          .where((message) => _isUnreadIncoming(message, isCustomerView))
+          .length;
       if (fromMessages > 0) return fromMessages;
     }
 
@@ -462,14 +462,36 @@ class SupportTicketModel {
 
     final latest = lastMessage;
     if (latest != null &&
-        !latest.isInternal &&
-        latest.readAt == null &&
-        latest.message.trim().isNotEmpty) {
-      final incoming = isCustomerView
-          ? !latest.isCustomer
-          : latest.isCustomer;
-      if (incoming) return 1;
+        latest.message.trim().isNotEmpty &&
+        _isUnreadIncoming(latest, isCustomerView)) {
+      return 1;
     }
     return 0;
+  }
+
+  static bool _isIncoming(
+    SupportTicketMessage message, {
+    required bool isCustomerView,
+  }) {
+    if (message.isInternal) return false;
+    return isCustomerView ? !message.isCustomer : message.isCustomer;
+  }
+
+  static bool _isUnreadIncoming(
+    SupportTicketMessage message,
+    bool isCustomerView,
+  ) {
+    return _isIncoming(message, isCustomerView: isCustomerView) &&
+        message.readAt == null;
+  }
+
+  static SupportTicketMessage? _markIncomingRead(
+    SupportTicketMessage? message,
+    DateTime now,
+    bool isCustomerView,
+  ) {
+    if (message == null) return null;
+    if (!_isUnreadIncoming(message, isCustomerView)) return message;
+    return message.copyWith(readAt: now);
   }
 }

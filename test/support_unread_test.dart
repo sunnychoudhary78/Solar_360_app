@@ -34,10 +34,46 @@ void main() {
         'subject': 'Issue',
         'unread_count': 2,
         'has_unread_messages': true,
-      }).clearedUnread();
+      }).clearedUnread(isCustomerView: true);
 
       expect(ticket.unreadCountHint, 0);
       expect(ticket.hasUnreadMessages, isFalse);
+      expect(ticket.unreadIncomingCount(isCustomerView: true), 0);
+    });
+
+    test('opening a thread does not mark own outgoing messages as seen', () {
+      final ticket = SupportTicketModel.fromJson({
+        'id': '1',
+        'subject': 'Issue',
+        'unread_count': 1,
+        'has_unread_messages': true,
+        'messages': [
+          {
+            'id': 'm1',
+            'message': 'hello from customer',
+            'sender_type': 'customer',
+            'read_at': null,
+          },
+          {
+            'id': 'm2',
+            'message': 'reply from admin',
+            'sender_type': 'admin',
+            'read_at': null,
+          },
+        ],
+        'last_message': {
+          'id': 'm1',
+          'message': 'hello from customer',
+          'sender_type': 'customer',
+          'read_at': null,
+        },
+      }).clearedUnread(isCustomerView: true);
+
+      expect(ticket.unreadCountHint, 0);
+      expect(ticket.hasUnreadMessages, isFalse);
+      expect(ticket.messages.first.readAt, isNull);
+      expect(ticket.messages.last.readAt, isNotNull);
+      expect(ticket.lastMessage?.readAt, isNull);
       expect(ticket.unreadIncomingCount(isCustomerView: true), 0);
     });
 

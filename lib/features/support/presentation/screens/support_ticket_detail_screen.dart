@@ -68,7 +68,10 @@ class _SupportTicketDetailScreenState
       }
       if (!mounted) return;
       setState(() {
-        _ticket = _mergeTicket(ticket, history).clearedUnread();
+        _ticket = _mergeTicket(
+          ticket,
+          history,
+        ).clearedUnread(isCustomerView: false);
         _status = ticket.status.isEmpty ? 'open' : ticket.status;
         if (!silent) {
           _resolution.text = ticket.resolutionSummary ?? '';

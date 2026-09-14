@@ -207,7 +207,10 @@ class SupportTicketListNotifier extends Notifier<SupportTicketListState> {
     state = state.copyWith(
       items: [
         for (final ticket in state.items)
-          if (ticket.id == id) ticket.clearedUnread() else ticket,
+          if (ticket.id == id)
+            ticket.clearedUnread(isCustomerView: false)
+          else
+            ticket,
       ],
     );
   }

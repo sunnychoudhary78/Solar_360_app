@@ -63,7 +63,10 @@ class _CustomerSupportDetailScreenState
       }
       if (!mounted) return;
       setState(() {
-        _ticket = _mergeTicket(ticket, history).clearedUnread();
+        _ticket = _mergeTicket(
+          ticket,
+          history,
+        ).clearedUnread(isCustomerView: true);
         _loading = false;
       });
     } catch (e) {

@@ -166,6 +166,8 @@ class TicketConversation extends StatelessWidget {
 
   String? _deliveryStatus(SupportTicketMessage message) {
     if (!_isMine(message)) return null;
+    // Only the other person's actual read_at means Seen. Do not infer
+    // Seen from delivery or from locally clearing our own unread badge.
     if (message.readAt != null) return 'Seen';
     if (message.deliveredAt != null || message.id.isNotEmpty) {
       return 'Delivered';
