@@ -100,7 +100,7 @@ void main() {
     expect(snapshot.availableUsers.map((u) => u.id), ['1']);
   });
 
-  test('KPIs and lead mix follow the same filtered leads', () {
+  test('selecting a state only updates the state card, not pipeline KPIs', () {
     final users = [
       const TerritoryUser(
         id: 'u1',
@@ -117,6 +117,12 @@ void main() {
       _lead(id: '5', state: 'Karnataka', status: 'New Lead', createdBy: 'u2'),
     ];
 
+    final all = buildDashboardSnapshot(
+      allLeads: leads,
+      users: users,
+      filters: const TerritoryFilters(),
+      canSeeRejected: true,
+    );
     final snapshot = buildDashboardSnapshot(
       allLeads: leads,
       users: users,
@@ -124,20 +130,20 @@ void main() {
       canSeeRejected: true,
     );
 
-    expect(snapshot.kpis.total, 4);
-    expect(snapshot.kpis.open, 2);
-    expect(snapshot.kpis.converted, 1);
-    expect(snapshot.kpis.completed, 1);
-    expect(snapshot.kpis.rejected, 1);
-    expect(snapshot.kpis.inPipeline, snapshot.kpis.open);
-    expect(snapshot.kpis.mixPipeline, 1);
-    expect(snapshot.kpis.mixConverted, 1);
-    expect(snapshot.kpis.leadMixTotal, snapshot.kpis.total);
-    expect(snapshot.selectedState?.leads, 4);
+    expect(snapshot.kpis.total, all.kpis.total);
+    expect(snapshot.kpis.total, 5);
+    expect(snapshot.kpis.open, all.kpis.open);
+    expect(snapshot.kpis.converted, all.kpis.converted);
+    expect(snapshot.insights.topStates.length, all.insights.topStates.length);
+    expect(snapshot.leads, hasLength(4));
     expect(snapshot.selectedState?.name, 'Uttar Pradesh');
+    expect(snapshot.selectedState?.leads, 4);
+    expect(snapshot.selectedState?.open, 2);
+    expect(snapshot.selectedState?.completed, 1);
+    expect(snapshot.selectedState?.rejected, 1);
   });
 
-  test('clear filters restores the full dashboard snapshot', () {
+  test('clearing a state filter only hides the selected-state card', () {
     final leads = [
       _lead(id: '1'),
       _lead(id: '2', state: 'Karnataka'),
@@ -154,8 +160,10 @@ void main() {
       filters: const TerritoryFilters(),
       canSeeRejected: true,
     );
-    expect(filtered.kpis.total, 1);
+    expect(filtered.kpis.total, 2);
     expect(cleared.kpis.total, 2);
+    expect(filtered.selectedState?.name, 'Karnataka');
+    expect(cleared.selectedState, isNull);
   });
 
   test('states with zero leads still exist in analytics', () {

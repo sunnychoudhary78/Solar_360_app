@@ -15,6 +15,8 @@ LeadModel _lead({
   String createdBy = 'u1',
   String priority = 'Medium',
   bool isActive = true,
+  String? createdAt,
+  String? updatedAt,
   Map<String, dynamic>? installation,
 }) {
   return LeadModel.fromJson({
@@ -28,7 +30,8 @@ LeadModel _lead({
     'created_by': createdBy,
     'priority': priority,
     'is_active': isActive,
-    'created_at': DateTime.now().toIso8601String(),
+    'created_at': createdAt ?? DateTime.now().toIso8601String(),
+    if (updatedAt != null) 'updated_at': updatedAt,
     if (installation != null) 'installation_details': installation,
   });
 }
@@ -226,6 +229,123 @@ void main() {
       );
       expect(analytics['Delhi']?.leads, 0);
       expect(analytics['Uttar Pradesh']?.leads, 1);
+    });
+
+    test('Rejected By Sales Manager counts as converted like web stats', () {
+      final kpis = buildDashboardKpis(
+        [
+          _lead(id: '1', status: 'Converted'),
+          _lead(id: '2', status: 'Rejected By Sales Manager'),
+          _lead(id: '3', status: 'New Lead'),
+        ],
+        canSeeRejected: true,
+      );
+
+      expect(kpis.total, 3);
+      expect(kpis.open, 2);
+      expect(kpis.converted, 2);
+      expect(kpis.rejected, 1);
+      expect(kpis.inPipeline, 2);
+      expect(kpis.conversionPercent, 67);
+      expect(kpis.openPercent, 67);
+    });
+
+    test('lead mix pie uses overlapping web slices, including Company Admin rejected', () {
+      final kpis = buildDashboardKpis(
+        [
+          _lead(id: '1', status: 'Converted'),
+          _lead(id: '2', status: 'Rejected By Sales Manager'),
+          _lead(id: '3', status: 'Final Complete'),
+        ],
+        canSeeRejected: true,
+      );
+      final slices = buildLeadMixSlices(kpis, canSeeRejected: true);
+
+      expect(
+        slices.map((s) => '${s.key}:${s.value}').toList(),
+        ['pipeline:1', 'converted:2', 'completed:1', 'rejected:1'],
+      );
+      expect(pieSlicePercent(2, 5), 40);
+    });
+
+    test('MySQL created_at strings count toward New this week and this month', () {
+      final now = DateTime.now();
+      final mysql =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} 10:15:00';
+      final kpis = buildDashboardKpis(
+        [_lead(id: '1', status: 'New Lead', createdAt: mysql)],
+        canSeeRejected: true,
+      );
+      final insights = buildDashboardInsights([
+        _lead(id: '1', status: 'New Lead', createdAt: mysql),
+      ]);
+
+      expect(kpis.newThisWeek, 1);
+      expect(insights.createdThisMonth, 1);
+      expect(insights.createdToday, 1);
+    });
+
+    test('snapshot exposes canSeeRejected so Company Admin pie can show Rejected', () {
+      final snapshot = buildDashboardSnapshot(
+        allLeads: [
+          _lead(id: '1', status: 'New Lead'),
+          _lead(id: '2', status: 'Rejected'),
+        ],
+        users: [_user()],
+        filters: const TerritoryFilters(),
+        canSeeRejected: true,
+      );
+
+      expect(snapshot.canSeeRejected, isTrue);
+      expect(snapshot.kpis.rejected, 1);
+      expect(snapshot.insights.createdThisMonth, greaterThanOrEqualTo(0));
+    });
+
+    test('pipeline KPIs and charts stay the same for every role', () {
+      final leads = [
+        _lead(id: '1', status: 'New Lead'),
+        _lead(id: '2', status: 'Rejected'),
+        _lead(id: '3', status: 'Converted'),
+      ];
+      final admin = buildDashboardSnapshot(
+        allLeads: leads,
+        users: [_user()],
+        filters: const TerritoryFilters(),
+        canSeeRejected: true,
+      );
+      final otherRole = buildDashboardSnapshot(
+        allLeads: leads,
+        users: [_user()],
+        filters: const TerritoryFilters(),
+        canSeeRejected: false,
+      );
+
+      expect(otherRole.kpis.total, admin.kpis.total);
+      expect(otherRole.kpis.open, admin.kpis.open);
+      expect(otherRole.kpis.converted, admin.kpis.converted);
+      expect(otherRole.kpis.rejected, admin.kpis.rejected);
+      expect(otherRole.kpis.conversionPercent, admin.kpis.conversionPercent);
+      expect(
+        buildLeadMixSlices(otherRole.kpis, canSeeRejected: true)
+            .map((s) => '${s.key}:${s.value}')
+            .toList(),
+        buildLeadMixSlices(admin.kpis, canSeeRejected: true)
+            .map((s) => '${s.key}:${s.value}')
+            .toList(),
+      );
+    });
+
+    test('stage volume buckets match web stage names', () {
+      final bars = buildStageBars([
+        _lead(id: '1', status: 'New Lead'),
+        _lead(id: '2', status: 'Follow Up'),
+        _lead(id: '3', status: 'Converted'),
+        _lead(id: '4', status: 'Final Complete'),
+      ]);
+      expect(
+        bars.map((b) => '${b.key}:${b.value}').toList(),
+        ['early:2', 'sales:1', 'done:1'],
+      );
     });
   });
 

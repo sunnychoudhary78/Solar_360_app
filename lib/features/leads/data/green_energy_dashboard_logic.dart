@@ -1,7 +1,10 @@
+import 'package:intl/intl.dart';
+
 import 'package:solar_sales/core/workflow/lead_workflow.dart';
 import 'package:solar_sales/features/leads/data/india_states.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/leads/data/models/territory_user_model.dart';
+import 'package:solar_sales/shared/utils/formatters.dart';
 
 class TerritoryFilters {
   const TerritoryFilters({
@@ -90,6 +93,78 @@ class StateAnalytics {
   }
 }
 
+class NamedCount {
+  const NamedCount({
+    required this.name,
+    required this.value,
+    this.display = '',
+    this.key = '',
+  });
+
+  final String name;
+  final int value;
+  final String display;
+  final String key;
+}
+
+class AgingCounts {
+  const AgingCounts({
+    this.fresh = 0,
+    this.warming = 0,
+    this.aging = 0,
+    this.stale = 0,
+  });
+
+  final int fresh;
+  final int warming;
+  final int aging;
+  final int stale;
+
+  int get total => fresh + warming + aging + stale;
+}
+
+class MonthlyTrendPoint {
+  const MonthlyTrendPoint({
+    required this.key,
+    required this.month,
+    this.created = 0,
+    this.converted = 0,
+    this.completed = 0,
+  });
+
+  final String key;
+  final String month;
+  final int created;
+  final int converted;
+  final int completed;
+
+  MonthlyTrendPoint copyWith({int? created, int? converted, int? completed}) {
+    return MonthlyTrendPoint(
+      key: key,
+      month: month,
+      created: created ?? this.created,
+      converted: converted ?? this.converted,
+      completed: completed ?? this.completed,
+    );
+  }
+}
+
+class RecentLeadRow {
+  const RecentLeadRow({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.state,
+    required this.status,
+  });
+
+  final String id;
+  final String name;
+  final String code;
+  final String state;
+  final String status;
+}
+
 class DashboardKpis {
   const DashboardKpis({
     this.total = 0,
@@ -100,6 +175,7 @@ class DashboardKpis {
     this.rejected = 0,
     this.installPending = 0,
     this.inPipeline = 0,
+    this.approved = 0,
     this.urgent = 0,
     this.high = 0,
     this.medium = 0,
@@ -117,21 +193,61 @@ class DashboardKpis {
   final int rejected;
   final int installPending;
   final int inPipeline;
+  final int approved;
   final int urgent;
   final int high;
   final int medium;
   final int low;
   final int newThisWeek;
-  /// Early pipeline only (open and not yet converted). Used by Lead mix.
   final int mixPipeline;
-  /// Converted and still open. Used by Lead mix so slices do not overlap.
   final int mixConverted;
 
   int get leadMixTotal => mixPipeline + mixConverted + completed + rejected;
 
   int get priorityMixTotal => urgent + high + medium + low;
 
+  /// Web `conversionPct = round(converted / total * 100)`.
+  int get conversionPercent =>
+      total == 0 ? 0 : ((converted / total) * 100).round();
+
+  /// Web `completionPct = round(completed / total * 100)`.
+  int get completionPercent =>
+      total == 0 ? 0 : ((completed / total) * 100).round();
+
+  /// Web `openPct = round(open / total * 100)`.
+  int get openPercent => total == 0 ? 0 : ((open / total) * 100).round();
+
   double pctOf(int value) => total == 0 ? 0 : (value / total) * 100;
+}
+
+class DashboardInsights {
+  const DashboardInsights({
+    this.aging = const AgingCounts(),
+    this.createdToday = 0,
+    this.createdYesterday = 0,
+    this.createdThisMonth = 0,
+    this.createdLastMonth = 0,
+    this.momCreatedPercent = 0,
+    this.topStates = const [],
+    this.topAssignees = const [],
+    this.byDepartment = const [],
+    this.monthly = const [],
+    this.stageBars = const [],
+    this.recent = const [],
+  });
+
+  final AgingCounts aging;
+  final int createdToday;
+  final int createdYesterday;
+  final int createdThisMonth;
+  final int createdLastMonth;
+  final int momCreatedPercent;
+  final List<NamedCount> topStates;
+  final List<NamedCount> topAssignees;
+  final List<NamedCount> byDepartment;
+  final List<MonthlyTrendPoint> monthly;
+  final List<NamedCount> stageBars;
+  final List<RecentLeadRow> recent;
 }
 
 class GreenEnergyDashboardSnapshot {
@@ -140,22 +256,26 @@ class GreenEnergyDashboardSnapshot {
     required this.users,
     required this.leads,
     required this.kpis,
+    required this.insights,
     required this.stateAnalytics,
     required this.availableStates,
     required this.availableDistricts,
     required this.availableRoles,
     required this.availableUsers,
+    required this.canSeeRejected,
   });
 
   final TerritoryFilters filters;
   final List<TerritoryUser> users;
   final List<LeadModel> leads;
   final DashboardKpis kpis;
+  final DashboardInsights insights;
   final Map<String, StateAnalytics> stateAnalytics;
   final List<String> availableStates;
   final List<String> availableDistricts;
   final List<String> availableRoles;
   final List<TerritoryUser> availableUsers;
+  final bool canSeeRejected;
 
   int get maxStateLeads {
     var max = 1;
@@ -329,6 +449,7 @@ DashboardKpis buildDashboardKpis(
   var inPipeline = 0;
   var mixPipeline = 0;
   var mixConverted = 0;
+  var approved = 0;
   var urgent = 0;
   var high = 0;
   var medium = 0;
@@ -343,6 +464,7 @@ DashboardKpis buildDashboardKpis(
     );
     final isConverted = LeadWorkflow.isConvertedPipelineStatus(lead.status);
 
+    // Same independent filters as web `stats` useMemo.
     if (isRejected) {
       rejected += 1;
     } else if (isCompleted) {
@@ -356,6 +478,7 @@ DashboardKpis buildDashboardKpis(
       } else {
         mixPipeline += 1;
       }
+      if (LeadWorkflow.isApprovedStatus(lead.status)) approved += 1;
       if (!hasFilledInstallationDetails(lead)) installPending += 1;
       switch (normalizeLeadPriority(lead.priority)) {
         case 'urgent':
@@ -367,9 +490,11 @@ DashboardKpis buildDashboardKpis(
         default:
           medium += 1;
       }
-      final created = DateTime.tryParse(lead.createdAt);
+      final created = parseDate(lead.createdAt);
       if (created != null && !created.isBefore(weekAgo)) newThisWeek += 1;
     }
+    // Web `stats.converted = source.filter(isConvertedLead)` — independent of
+    // open/rejected, so "Rejected By Sales Manager" still counts as converted.
     if (isConverted) converted += 1;
   }
 
@@ -382,6 +507,7 @@ DashboardKpis buildDashboardKpis(
     rejected: canSeeRejected ? rejected : 0,
     installPending: installPending,
     inPipeline: inPipeline,
+    approved: approved,
     urgent: urgent,
     high: high,
     medium: medium,
@@ -389,6 +515,308 @@ DashboardKpis buildDashboardKpis(
     newThisWeek: newThisWeek,
     mixPipeline: mixPipeline,
     mixConverted: mixConverted,
+  );
+}
+
+const leadDepartmentBuckets = <({String value, String label})>[
+  (value: 'Sales', label: 'Sales'),
+  (value: 'Support', label: 'Documents'),
+  (value: 'Bank Process', label: 'Bank Process'),
+  (value: 'Finance', label: 'Finance'),
+  (value: 'Installation', label: 'Installation'),
+];
+
+const leadStageBuckets = <({String key, String name, List<String> match})>[
+  (key: 'early', name: 'New / Follow-up', match: ['New Lead', 'Follow Up']),
+  (
+    key: 'sales',
+    name: 'KYC / Sales',
+    match: [
+      'Converted',
+      'KYC Collected',
+      'Sent To Sales Manager',
+      'Approved By Sales Manager',
+    ],
+  ),
+  (
+    key: 'docs',
+    name: 'Documents / Bank',
+    match: [
+      'Assigned To Document Administrator',
+      'Documents Verification Started',
+      'Portal Processing Started',
+      'Loan Application Initiated',
+      'Documents Submitted',
+      'Banking Process Start',
+      'Bank Coordination In Progress',
+      'Bank Process Complete',
+    ],
+  ),
+  (
+    key: 'finance',
+    name: 'Finance / Install',
+    match: [
+      'Finance Verification Started',
+      'Amount Received',
+      'Assigned To Material Engineer',
+      'Material Verification Started',
+      'Material Completed',
+      'Assigned To Electrical Engineer',
+      'Installation Started',
+      'Installation Completed',
+      'Installation Done',
+      'DCR Reports Completed',
+      'Discom Status',
+    ],
+  ),
+  (
+    key: 'done',
+    name: 'Completed',
+    match: ['Final Complete', 'Lead Completed', 'Lead Closed'],
+  ),
+];
+
+String _monthKey(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}';
+
+String _monthLabel(String key) {
+  final parts = key.split('-');
+  if (parts.length < 2) return key;
+  final year = int.tryParse(parts[0]) ?? 0;
+  final month = int.tryParse(parts[1]) ?? 1;
+  return DateFormat('MMM').format(DateTime(year, month, 1));
+}
+
+List<NamedCount> buildLeadMixSlices(
+  DashboardKpis kpis, {
+  required bool canSeeRejected,
+}) {
+  return [
+    NamedCount(key: 'pipeline', name: 'In pipeline', value: kpis.inPipeline),
+    NamedCount(key: 'converted', name: 'Converted', value: kpis.converted),
+    NamedCount(key: 'completed', name: 'Completed', value: kpis.completed),
+    if (canSeeRejected)
+      NamedCount(key: 'rejected', name: 'Rejected', value: kpis.rejected),
+  ];
+}
+
+int pieSlicePercent(int value, int sliceTotal) {
+  if (sliceTotal <= 0) return 0;
+  return ((value / sliceTotal) * 100).round();
+}
+
+List<MonthlyTrendPoint> buildMonthlyTrend(List<LeadModel> leads) {
+  final now = DateTime.now();
+  final keys = <String>[
+    for (var i = 5; i >= 0; i--) _monthKey(DateTime(now.year, now.month - i, 1)),
+  ];
+  final counts = <String, MonthlyTrendPoint>{
+    for (final key in keys)
+      key: MonthlyTrendPoint(key: key, month: _monthLabel(key)),
+  };
+
+  for (final lead in leads) {
+    final created = parseDate(lead.createdAt);
+    if (created != null) {
+      final createdKey = _monthKey(created);
+      final bucket = counts[createdKey];
+      if (bucket != null) {
+        counts[createdKey] = bucket.copyWith(created: bucket.created + 1);
+      }
+    }
+
+    final done = LeadWorkflow.isCompletedStatus(
+      lead.status,
+      department: lead.currentDepartment,
+    );
+    // Web monthly "In converted flow" omits Rejected By Sales Manager.
+    final convertedLike = done ||
+        (LeadWorkflow.isConvertedPipelineStatus(lead.status) &&
+            !LeadWorkflow.isRejectedStatus(lead.status));
+    final touch = parseDate(
+          lead.updatedAt.isNotEmpty ? lead.updatedAt : lead.createdAt,
+        ) ??
+        created;
+    if (touch == null) continue;
+    final touchKey = _monthKey(touch);
+    final bucket = counts[touchKey];
+    if (bucket == null) continue;
+    counts[touchKey] = bucket.copyWith(
+      converted: bucket.converted + (convertedLike ? 1 : 0),
+      completed: bucket.completed + (done ? 1 : 0),
+    );
+  }
+
+  return [for (final key in keys) counts[key]!];
+}
+
+List<NamedCount> buildStageBars(List<LeadModel> leads) {
+  return [
+    for (final bucket in leadStageBuckets)
+      NamedCount(
+        key: bucket.key,
+        name: bucket.name,
+        value: leads
+            .where((lead) => bucket.match.contains(lead.status.trim()))
+            .length,
+      ),
+  ].where((item) => item.value > 0).toList();
+}
+
+DashboardInsights buildDashboardInsights(List<LeadModel> leads) {
+  final open = leads.where(isOpenLead).toList();
+  final now = DateTime.now();
+  final todayStart = DateTime(now.year, now.month, now.day);
+  final yesterdayStart = todayStart.subtract(const Duration(days: 1));
+  final thisMonthKey = _monthKey(todayStart);
+  final lastMonthKey = _monthKey(DateTime(now.year, now.month - 1, 1));
+
+  var createdToday = 0;
+  var createdYesterday = 0;
+  var createdThisMonth = 0;
+  var createdLastMonth = 0;
+  var fresh = 0;
+  var warming = 0;
+  var aging = 0;
+  var stale = 0;
+
+  for (final lead in leads) {
+    final created = parseDate(lead.createdAt);
+    if (created != null) {
+      if (!created.isBefore(todayStart)) {
+        createdToday += 1;
+      } else if (!created.isBefore(yesterdayStart) &&
+          created.isBefore(todayStart)) {
+        createdYesterday += 1;
+      }
+      final key = _monthKey(created);
+      if (key == thisMonthKey) createdThisMonth += 1;
+      if (key == lastMonthKey) createdLastMonth += 1;
+    }
+  }
+
+  for (final lead in open) {
+    final touch = parseDate(
+      lead.updatedAt.isNotEmpty ? lead.updatedAt : lead.createdAt,
+    );
+    if (touch == null) {
+      warming += 1;
+      continue;
+    }
+    final days = now.difference(touch).inMilliseconds / 86400000;
+    if (days <= 7) {
+      fresh += 1;
+    } else if (days <= 21) {
+      warming += 1;
+    } else if (days <= 45) {
+      aging += 1;
+    } else {
+      stale += 1;
+    }
+  }
+
+  final stateCounts = <String, ({int total, int openCount, int completed})>{};
+  for (final lead in leads) {
+    final state = normalizeStateName(lead.state);
+    final name = state.isEmpty ? 'Unknown' : state;
+    final current =
+        stateCounts[name] ?? (total: 0, openCount: 0, completed: 0);
+    final isCompleted = LeadWorkflow.isCompletedStatus(
+      lead.status,
+      department: lead.currentDepartment,
+    );
+    final isRejected = LeadWorkflow.isRejectedStatus(lead.status);
+    stateCounts[name] = (
+      total: current.total + 1,
+      openCount: current.openCount + ((!isCompleted && !isRejected) ? 1 : 0),
+      completed: current.completed + (isCompleted ? 1 : 0),
+    );
+  }
+  final topStates = stateCounts.entries
+      .map(
+        (e) => NamedCount(
+          name: e.key,
+          value: e.value.total,
+          display: '${e.value.total} · ${e.value.openCount} open',
+        ),
+      )
+      .toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+
+  final assigneeCounts = <String, int>{};
+  for (final lead in open) {
+    final name = lead.assignedToName.trim().isEmpty
+        ? 'Unassigned'
+        : lead.assignedToName.trim();
+    assigneeCounts[name] = (assigneeCounts[name] ?? 0) + 1;
+  }
+  final topAssignees = assigneeCounts.entries
+      .map((e) => NamedCount(name: e.key, value: e.value, display: '${e.value}'))
+      .toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+
+  final byDepartment = [
+    for (final dept in leadDepartmentBuckets)
+      NamedCount(
+        name: dept.label,
+        value: open
+            .where(
+              (lead) =>
+                  LeadWorkflow.normalizeDepartmentValue(
+                    lead.currentDepartment,
+                  ) ==
+                  dept.value,
+            )
+            .length,
+      ),
+  ].where((item) => item.value > 0).toList();
+
+  final recent = [...leads]..sort((a, b) {
+      final ta =
+          parseDate(a.updatedAt.isNotEmpty ? a.updatedAt : a.createdAt) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final tb =
+          parseDate(b.updatedAt.isNotEmpty ? b.updatedAt : b.createdAt) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return tb.compareTo(ta);
+    });
+
+  final momCreatedPercent = createdLastMonth > 0
+      ? (((createdThisMonth - createdLastMonth) / createdLastMonth) * 100)
+            .round()
+      : createdThisMonth > 0
+      ? 100
+      : 0;
+
+  return DashboardInsights(
+    aging: AgingCounts(
+      fresh: fresh,
+      warming: warming,
+      aging: aging,
+      stale: stale,
+    ),
+    createdToday: createdToday,
+    createdYesterday: createdYesterday,
+    createdThisMonth: createdThisMonth,
+    createdLastMonth: createdLastMonth,
+    momCreatedPercent: momCreatedPercent,
+    topStates: topStates.take(6).toList(),
+    topAssignees: topAssignees.take(6).toList(),
+    byDepartment: byDepartment,
+    monthly: buildMonthlyTrend(leads),
+    stageBars: buildStageBars(leads),
+    recent: recent
+        .take(8)
+        .map(
+          (lead) => RecentLeadRow(
+            id: lead.id,
+            name: lead.fullName.trim().isEmpty ? '—' : lead.fullName,
+            code: lead.leadCode,
+            state: lead.state,
+            status: LeadWorkflow.getStatusDisplayLabel(lead.status),
+          ),
+        )
+        .toList(),
   );
 }
 
@@ -448,14 +876,12 @@ GreenEnergyDashboardSnapshot buildDashboardSnapshot({
   required TerritoryFilters filters,
   required bool canSeeRejected,
 }) {
-  final visibleLeads = canSeeRejected
-      ? allLeads
-      : allLeads
-          .where((lead) => !LeadWorkflow.isRejectedStatus(lead.status))
-          .toList();
+  // Pipeline + charts are identical for every role (including Company Admin).
+  // Rejected leads stay in the totals so Convert/Done % and pies do not shift.
+  final pipelineLeads = allLeads;
 
   final filtered = applyTerritoryFilters(
-    leads: visibleLeads,
+    leads: pipelineLeads,
     users: users,
     filters: filters,
   );
@@ -466,7 +892,7 @@ GreenEnergyDashboardSnapshot buildDashboardSnapshot({
     ...indiaStateNames,
     for (final user in users)
       if (user.state.trim().isNotEmpty) normalizeStateName(user.state),
-    for (final lead in visibleLeads)
+    for (final lead in pipelineLeads)
       if (lead.state.trim().isNotEmpty) normalizeStateName(lead.state),
   }.where((item) => item.trim().isNotEmpty).toList()
     ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
@@ -478,7 +904,7 @@ GreenEnergyDashboardSnapshot buildDashboardSnapshot({
     }
     if (user.district.trim().isNotEmpty) districts.add(user.district.trim());
   }
-  for (final lead in visibleLeads) {
+  for (final lead in pipelineLeads) {
     if (filters.state.isNotEmpty && !sameState(lead.state, filters.state)) {
       continue;
     }
@@ -494,19 +920,22 @@ GreenEnergyDashboardSnapshot buildDashboardSnapshot({
   final roleList = roles.toList()
     ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
+  // Territory filters only drive the map highlight + selected-state card.
   return GreenEnergyDashboardSnapshot(
     filters: filters,
     users: users,
     leads: filtered,
-    kpis: buildDashboardKpis(filtered, canSeeRejected: canSeeRejected),
+    kpis: buildDashboardKpis(pipelineLeads, canSeeRejected: true),
+    insights: buildDashboardInsights(pipelineLeads),
     stateAnalytics: buildStateAnalytics(
-      leads: filtered,
+      leads: pipelineLeads,
       users: users,
-      canSeeRejected: canSeeRejected,
+      canSeeRejected: true,
     ),
     availableStates: states,
     availableDistricts: districtList,
     availableRoles: roleList,
     availableUsers: matchingUsers,
+    canSeeRejected: canSeeRejected,
   );
 }

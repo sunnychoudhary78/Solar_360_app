@@ -1,10 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
-import 'package:solar_sales/core/workflow/lead_workflow.dart';
-import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/leads/data/green_energy_dashboard_logic.dart';
 import 'package:solar_sales/features/leads/data/india_map_data.dart';
 import 'package:solar_sales/features/leads/data/india_states.dart';
@@ -118,10 +118,7 @@ class _DashboardLoadedState extends ConsumerState<_DashboardLoaded> {
   @override
   Widget build(BuildContext context) {
     final stats = snapshot.kpis;
-    final roleName = ref.watch(authProvider).effectiveRoleName;
-    final roleKey = LeadWorkflow.resolveRoleKey(roleName);
-    final showRejectedMetric =
-        roleKey == 'Sales' || roleKey == 'Sales Manager';
+    final insights = snapshot.insights;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -136,22 +133,56 @@ class _DashboardLoadedState extends ConsumerState<_DashboardLoaded> {
           onStateTap: _showStateTooltip,
           onDismissTooltip: () => setState(() => _tooltip = null),
         ),
-        if (snapshot.selectedState != null) ...[
+        if (_canUseTerritoryFilters && snapshot.selectedState != null) ...[
           const SizedBox(height: AppSpacing.md),
           _SelectedStateSummary(
             data: snapshot.selectedState!,
-            canSeeRejected: showRejectedMetric,
+            canSeeRejected: true,
           ),
         ],
         const SizedBox(height: AppSpacing.lg),
         _PipelineCommandCenter(
           stats: stats,
-          canSeeRejected: showRejectedMetric,
+          insights: insights,
+          canSeeRejected: true,
         ),
         const SizedBox(height: AppSpacing.lg),
-        _LeadMixCard(stats: stats, canSeeRejected: showRejectedMetric),
+        _LeadMixCard(stats: stats, canSeeRejected: true),
         const SizedBox(height: AppSpacing.lg),
         _PriorityMixCard(stats: stats),
+        const SizedBox(height: AppSpacing.lg),
+        _AgingMixCard(insights: insights, openCount: stats.open),
+        const SizedBox(height: AppSpacing.lg),
+        _DeliveryHealthCard(stats: stats),
+        const SizedBox(height: AppSpacing.lg),
+        _NamedBarsCard(
+          title: 'Top states',
+          subtitle: 'Lead volume by territory',
+          rows: insights.topStates,
+          emptyLabel: 'No state data yet',
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        _NamedBarsCard(
+          title: 'Workload',
+          subtitle: 'Open leads by assignee',
+          rows: insights.topAssignees,
+          emptyLabel: 'No assignee data yet',
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        _MonthlyActivityCard(points: insights.monthly),
+        const SizedBox(height: AppSpacing.lg),
+        _StageVolumeCard(rows: insights.stageBars),
+        const SizedBox(height: AppSpacing.lg),
+        _NamedBarsCard(
+          title: 'By department',
+          subtitle: 'Open work distribution',
+          rows: insights.byDepartment,
+          emptyLabel: 'No open departments',
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        _QuickLinksCard(stats: stats),
+        const SizedBox(height: AppSpacing.lg),
+        _RecentUpdatesCard(rows: insights.recent),
       ],
     );
   }
@@ -1109,40 +1140,67 @@ class _StateStatChip extends StatelessWidget {
 class _PipelineCommandCenter extends StatelessWidget {
   const _PipelineCommandCenter({
     required this.stats,
+    required this.insights,
     required this.canSeeRejected,
   });
 
   final DashboardKpis stats;
+  final DashboardInsights insights;
   final bool canSeeRejected;
 
   @override
   Widget build(BuildContext context) {
+    final mom = insights.momCreatedPercent;
     final cards = [
-      _KpiSpec('Total Lead', '${stats.total}', Icons.groups_rounded, const Color(0xFF334155), () {
-        Navigator.pushNamed(context, '/solar/leads');
-      }),
-      _KpiSpec('Open', '${stats.open}', Icons.timelapse_rounded, _amber, () {
-        Navigator.pushNamed(context, '/solar/leads');
-      }),
-      _KpiSpec('Converted', '${stats.converted}', Icons.verified_outlined, _emerald, () {
-        Navigator.pushNamed(context, '/solar/converted-leads');
-      }),
-      _KpiSpec('Completed', '${stats.completed}', Icons.task_alt_outlined, _teal, () {
-        Navigator.pushNamed(context, '/solar/completed-leads');
-      }),
-      _KpiSpec('Active Leads', '${stats.active}', Icons.bolt_rounded, _violet, () {
-        Navigator.pushNamed(context, '/solar/leads');
-      }),
-      if (canSeeRejected)
-        _KpiSpec('Rejected', '${stats.rejected}', Icons.block_rounded, _rose, () {
-          Navigator.pushNamed(context, '/solar/leads');
-        }),
       _KpiSpec(
-        'Install Pending',
-        '${stats.installPending}',
-        Icons.build_circle_outlined,
-        const Color(0xFFB45309),
+        'Total',
+        '${stats.total}',
+        Icons.groups_rounded,
+        const Color(0xFF334155),
+        () => Navigator.pushNamed(context, '/solar/leads'),
+        hint: '${insights.createdThisMonth} this month',
+      ),
+      _KpiSpec(
+        'Open',
+        '${stats.open}',
+        Icons.timelapse_rounded,
+        _amber,
+        () => Navigator.pushNamed(context, '/solar/leads'),
+        hint: '${stats.openPercent}% of all',
+      ),
+      _KpiSpec(
+        'Converted',
+        '${stats.converted}',
+        Icons.verified_outlined,
+        _emerald,
         () => Navigator.pushNamed(context, '/solar/converted-leads'),
+        hint: '${stats.conversionPercent}% convert rate',
+      ),
+      _KpiSpec(
+        'Completed',
+        '${stats.completed}',
+        Icons.task_alt_outlined,
+        _teal,
+        () => Navigator.pushNamed(context, '/solar/completed-leads'),
+        hint: '${stats.completionPercent}% closed',
+      ),
+      _KpiSpec(
+        'New this week',
+        '${stats.newThisWeek}',
+        Icons.bolt_rounded,
+        _sky,
+        () => Navigator.pushNamed(context, '/solar/leads'),
+        hint:
+            '${insights.createdToday} today · ${insights.createdYesterday} yesterday',
+      ),
+      _KpiSpec(
+        'MoM created',
+        '${mom >= 0 ? '+' : ''}$mom%',
+        Icons.trending_up_rounded,
+        mom >= 0 ? _emerald : _rose,
+        () => Navigator.pushNamed(context, '/solar/leads'),
+        hint:
+            '${insights.createdThisMonth} vs ${insights.createdLastMonth} last month',
       ),
       _KpiSpec(
         'Urgent + High',
@@ -1152,30 +1210,142 @@ class _PipelineCommandCenter extends StatelessWidget {
         () => Navigator.pushNamed(context, '/solar/leads'),
         hint: '${stats.urgent} urgent · ${stats.high} high',
       ),
+      _KpiSpec(
+        'Install pending',
+        '${stats.installPending}',
+        Icons.build_circle_outlined,
+        const Color(0xFFB45309),
+        () => Navigator.pushNamed(context, '/solar/converted-leads'),
+        hint: 'Missing installation details',
+      ),
+      _KpiSpec(
+        'Approved',
+        '${stats.approved}',
+        Icons.verified_user_outlined,
+        _emerald,
+        () => Navigator.pushNamed(context, '/solar/leads'),
+        hint: 'Sales manager approved',
+      ),
+      _KpiSpec(
+        'In pipeline',
+        '${stats.inPipeline}',
+        Icons.assignment_outlined,
+        _amber,
+        () => Navigator.pushNamed(context, '/solar/leads'),
+        hint: 'Not completed / rejected',
+      ),
+      _KpiSpec(
+        'Active leads',
+        '${stats.active}',
+        Icons.groups_2_outlined,
+        _violet,
+        () => Navigator.pushNamed(context, '/solar/leads'),
+        hint: 'Open & active (excl. rejected)',
+      ),
+      if (canSeeRejected)
+        _KpiSpec(
+          'Rejected',
+          '${stats.rejected}',
+          Icons.block_rounded,
+          _rose,
+          () => Navigator.pushNamed(context, '/solar/leads'),
+          hint: 'Visible to your role',
+        )
+      else
+        _KpiSpec(
+          'Stale open',
+          '${insights.aging.stale}',
+          Icons.schedule_rounded,
+          _rose,
+          () => Navigator.pushNamed(context, '/solar/leads'),
+          hint: 'No update in 45+ days',
+        ),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Pipeline command center',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+        _SectionPad(
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF059669),
+                  Color(0xFF0D9488),
+                  Color(0xFF0369A1),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                'Live view of lead volume, conversion and delivery bottlenecks.',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.22),
                     ),
-              ),
-            ],
+                  ),
+                  child: const Text(
+                    'GREEN ENERGY',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Pipeline command center',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Live view of lead volume, conversion, territory strength and delivery bottlenecks.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.82),
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _HeroStat(label: 'Open', value: '${stats.open}'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _HeroStat(
+                        label: 'Convert',
+                        value: '${stats.conversionPercent}%',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _HeroStat(
+                        label: 'Done',
+                        value: '${stats.completionPercent}%',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -1189,15 +1359,56 @@ class _PipelineCommandCenter extends StatelessWidget {
               crossAxisCount: 2,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
-              childAspectRatio: 1.42,
+              childAspectRatio: 1.28,
             ),
             itemBuilder: (context, index) {
-              final card = cards[index];
-              return _KpiCard(spec: card);
+              return _KpiCard(spec: cards[index]);
             },
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HeroStat extends StatelessWidget {
+  const _HeroStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1295,11 +1506,20 @@ class _LeadMixCard extends StatelessWidget {
       centerValue: stats.total,
       emptyLabel: 'No leads yet',
       slices: [
-        (name: 'Pipeline', value: stats.mixPipeline, color: _pipeline),
-        (name: 'Converted', value: stats.mixConverted, color: _converted),
-        (name: 'Done', value: stats.completed, color: _completed),
-        if (canSeeRejected)
-          (name: 'Rejected', value: stats.rejected, color: _rejected),
+        for (final slice in buildLeadMixSlices(
+          stats,
+          canSeeRejected: canSeeRejected,
+        ))
+          (
+            name: slice.name,
+            value: slice.value,
+            color: switch (slice.key) {
+              'pipeline' => _pipeline,
+              'converted' => _converted,
+              'completed' => _completed,
+              _ => _rejected,
+            },
+          ),
       ],
     );
   }
@@ -1376,7 +1596,7 @@ class _DonutMixCardState extends State<_DonutMixCard>
                   ),
             ),
             const SizedBox(height: 12),
-            if (centerValue == 0 && sliceTotal == 0)
+            if (sliceTotal == 0)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 28),
                 child: Center(child: Text(widget.emptyLabel)),
@@ -1457,11 +1677,42 @@ class _DonutMixCardState extends State<_DonutMixCard>
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Expanded(child: Text(slice.name)),
-                                Text(
-                                  '${slice.value}  ${_pct(slice.value, centerValue)}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
+                                Expanded(
+                                  child: Text(
+                                    slice.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: '${slice.value}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                          color: Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text:
+                                            ' ${_pct(slice.value, sliceTotal)}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 12,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -1480,6 +1731,867 @@ class _DonutMixCardState extends State<_DonutMixCard>
 
   String _pct(int value, int total) {
     if (total <= 0) return '0%';
-    return '${((value / total) * 100).round()}%';
+    return '${pieSlicePercent(value, total)}%';
+  }
+}
+
+class _AgingMixCard extends StatelessWidget {
+  const _AgingMixCard({
+    required this.insights,
+    required this.openCount,
+  });
+
+  final DashboardInsights insights;
+  final int openCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final aging = insights.aging;
+    return _DonutMixCard(
+      title: 'Open-lead aging',
+      subtitle: 'Days since last update',
+      centerLabel: 'Open',
+      centerValue: openCount,
+      emptyLabel: 'No open leads',
+      slices: [
+        (name: '≤ 7 days', value: aging.fresh, color: _converted),
+        (name: '8–21 days', value: aging.warming, color: _sky),
+        (name: '22–45 days', value: aging.aging, color: _pipeline),
+        (name: '45+ days', value: aging.stale, color: _rejected),
+      ],
+    );
+  }
+}
+
+class _DeliveryHealthCard extends StatelessWidget {
+  const _DeliveryHealthCard({required this.stats});
+
+  final DashboardKpis stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionPad(
+      child: AppCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Delivery health',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            Text(
+              'Conversion & completion scorecards',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _RadialScore(
+                    label: 'Convert',
+                    percent: stats.conversionPercent,
+                    color: _converted,
+                  ),
+                ),
+                Expanded(
+                  child: _RadialScore(
+                    label: 'Complete',
+                    percent: stats.completionPercent,
+                    color: _completed,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _ProgressRow(
+              label: 'Open share',
+              percent: stats.openPercent,
+              hint: '${stats.open} leads',
+              color: _pipeline,
+            ),
+            const SizedBox(height: 10),
+            _ProgressRow(
+              label: 'Conversion',
+              percent: stats.conversionPercent,
+              hint: '${stats.converted}',
+              color: _converted,
+            ),
+            const SizedBox(height: 10),
+            _ProgressRow(
+              label: 'Completion',
+              percent: stats.completionPercent,
+              hint: '${stats.completed}',
+              color: _completed,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RadialScore extends StatelessWidget {
+  const _RadialScore({
+    required this.label,
+    required this.percent,
+    required this.color,
+  });
+
+  final String label;
+  final int percent;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = percent.clamp(0, 100) / 100;
+    return SizedBox(
+      height: 132,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          PieChart(
+            PieChartData(
+              startDegreeOffset: -90,
+              sectionsSpace: 0,
+              centerSpaceRadius: 36,
+              sections: [
+                if (clamped > 0)
+                  PieChartSectionData(
+                    value: clamped.toDouble(),
+                    color: color,
+                    radius: 12,
+                    showTitle: false,
+                  ),
+                if (clamped < 1)
+                  PieChartSectionData(
+                    value: (1 - clamped).toDouble().clamp(0.0001, 1),
+                    color: const Color(0xFFF1F5F9),
+                    radius: 12,
+                    showTitle: false,
+                  ),
+              ],
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 10)),
+              Text(
+                '$percent%',
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgressRow extends StatelessWidget {
+  const _ProgressRow({
+    required this.label,
+    required this.percent,
+    required this.hint,
+    required this.color,
+  });
+
+  final String label;
+  final int percent;
+  final String hint;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = percent.clamp(0, 100);
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Text(
+              '$pct% · $hint',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            value: pct / 100,
+            minHeight: 8,
+            color: color,
+            backgroundColor: const Color(0xFFF1F5F9),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+const _barColors = [
+  Color(0xFF0D7A5F),
+  Color(0xFF0EA5E9),
+  Color(0xFFF59E0B),
+  Color(0xFF8B5CF6),
+  Color(0xFFF43F5E),
+  Color(0xFF06B6D4),
+  Color(0xFF84CC16),
+];
+
+class _NamedBarsCard extends StatelessWidget {
+  const _NamedBarsCard({
+    required this.title,
+    required this.subtitle,
+    required this.rows,
+    required this.emptyLabel,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<NamedCount> rows;
+  final String emptyLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxValue = rows.fold<int>(1, (sum, row) => math.max(sum, row.value));
+    return _SectionPad(
+      child: AppCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            Text(
+              subtitle,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 28),
+                child: Center(child: Text(emptyLabel)),
+              )
+            else
+              for (var i = 0; i < rows.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                _NamedBarRow(
+                  name: rows[i].name,
+                  display: rows[i].display.isEmpty
+                      ? '${rows[i].value}'
+                      : rows[i].display,
+                  value: rows[i].value,
+                  maxValue: maxValue,
+                  color: _barColors[i % _barColors.length],
+                ),
+              ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NamedBarRow extends StatelessWidget {
+  const _NamedBarRow({
+    required this.name,
+    required this.display,
+    required this.value,
+    required this.maxValue,
+    required this.color,
+  });
+
+  final String name;
+  final String display;
+  final int value;
+  final int maxValue;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = math.max(6, (value / math.max(maxValue, 1)) * 100);
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+            Text(
+              display,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            value: width / 100,
+            minHeight: 8,
+            color: color,
+            backgroundColor: const Color(0xFFF1F5F9),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MonthlyActivityCard extends StatelessWidget {
+  const _MonthlyActivityCard({required this.points});
+
+  final List<MonthlyTrendPoint> points;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxY = points.fold<int>(
+          0,
+          (sum, p) => math.max(sum, math.max(p.created, math.max(p.converted, p.completed))),
+        )
+        .toDouble()
+        .clamp(1, double.infinity);
+    return _SectionPad(
+      child: AppCard(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Monthly activity',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            Text(
+              'Created · converted flow · completed (6 months)',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 220,
+              child: LineChart(
+                LineChartData(
+                  minY: 0,
+                  maxY: maxY + 1,
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (_) => const FlLine(
+                      color: Color(0xFFE2E8F0),
+                      strokeWidth: 1,
+                      dashArray: [3, 3],
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 28,
+                        interval: 1,
+                        getTitlesWidget: (value, _) => Text(
+                          value.toInt().toString(),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        interval: 1,
+                        getTitlesWidget: (value, _) {
+                          final index = value.toInt();
+                          if (index < 0 || index >= points.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              points[index].month,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: [
+                        for (var i = 0; i < points.length; i++)
+                          FlSpot(i.toDouble(), points[i].created.toDouble()),
+                      ],
+                      isCurved: true,
+                      color: _sky,
+                      barWidth: 2.5,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: _sky.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    LineChartBarData(
+                      spots: [
+                        for (var i = 0; i < points.length; i++)
+                          FlSpot(i.toDouble(), points[i].converted.toDouble()),
+                      ],
+                      isCurved: true,
+                      color: _converted,
+                      barWidth: 2.5,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: _converted.withValues(alpha: 0.12),
+                      ),
+                    ),
+                    LineChartBarData(
+                      spots: [
+                        for (var i = 0; i < points.length; i++)
+                          FlSpot(i.toDouble(), points[i].completed.toDouble()),
+                      ],
+                      isCurved: true,
+                      color: _completed,
+                      barWidth: 2.5,
+                      dotData: const FlDotData(show: true),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Wrap(
+              spacing: 12,
+              children: [
+                _LegendDot(color: _sky, label: 'Created'),
+                _LegendDot(color: _converted, label: 'In converted flow'),
+                _LegendDot(color: _completed, label: 'Completed'),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
+    );
+  }
+}
+
+class _StageVolumeCard extends StatelessWidget {
+  const _StageVolumeCard({required this.rows});
+
+  final List<NamedCount> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    const colors = {
+      'early': Color(0xFF94A3B8),
+      'sales': Color(0xFF0EA5E9),
+      'docs': Color(0xFFF59E0B),
+      'finance': Color(0xFF8B5CF6),
+      'done': Color(0xFF0D7A5F),
+    };
+    final maxY = rows
+        .fold<int>(0, (sum, row) => math.max(sum, row.value))
+        .toDouble()
+        .clamp(1, double.infinity);
+    return _SectionPad(
+      child: AppCard(
+        padding: const EdgeInsets.fromLTRB(14, 14, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Stage volume',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            Text(
+              'Where leads sit today',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 220,
+              child: rows.isEmpty
+                  ? const Center(child: Text('No stage data yet'))
+                  : BarChart(
+                      BarChartData(
+                        maxY: maxY + 1,
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          getDrawingHorizontalLine: (_) => const FlLine(
+                            color: Color(0xFFE2E8F0),
+                            strokeWidth: 1,
+                            dashArray: [3, 3],
+                          ),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        titlesData: FlTitlesData(
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 28,
+                              interval: 1,
+                              getTitlesWidget: (value, _) => Text(
+                                value.toInt().toString(),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, _) {
+                                final index = value.toInt();
+                                if (index < 0 || index >= rows.length) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: SizedBox(
+                                    width: 52,
+                                    child: Text(
+                                      rows[index].name,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        barGroups: [
+                          for (var i = 0; i < rows.length; i++)
+                            BarChartGroupData(
+                              x: i,
+                              barRods: [
+                                BarChartRodData(
+                                  toY: rows[i].value.toDouble(),
+                                  width: 18,
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(6),
+                                  ),
+                                  color: colors[rows[i].key] ??
+                                      _barColors[i % _barColors.length],
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickLinksCard extends StatelessWidget {
+  const _QuickLinksCard({required this.stats});
+
+  final DashboardKpis stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final links = [
+      (
+        label: 'Leads',
+        hint: 'Create & manage pipeline',
+        icon: Icons.assignment_outlined,
+        color: _sky,
+        route: '/solar/leads',
+      ),
+      (
+        label: 'Converted Lead',
+        hint: '${stats.converted} in converted flow',
+        icon: Icons.verified_outlined,
+        color: _emerald,
+        route: '/solar/converted-leads',
+      ),
+      (
+        label: 'Completed Leads',
+        hint: '${stats.completed} closed',
+        icon: Icons.task_alt_outlined,
+        color: _teal,
+        route: '/solar/completed-leads',
+      ),
+      (
+        label: 'Territory focus',
+        hint: 'Use map & state filters above',
+        icon: Icons.place_outlined,
+        color: _violet,
+        route: '/solar/leads',
+      ),
+      (
+        label: 'Install pending',
+        hint: '${stats.installPending} need details',
+        icon: Icons.build_circle_outlined,
+        color: const Color(0xFFB45309),
+        route: '/solar/converted-leads',
+      ),
+    ];
+    return _SectionPad(
+      child: AppCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Quick links',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            Text(
+              'Jump into Green Energy work',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            for (final link in links) ...[
+              Material(
+                color: link.color.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  onTap: () => Navigator.pushNamed(context, link.route),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(link.icon, color: link.color, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                link.label,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                link.hint,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 16,
+                          color: link.color,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentUpdatesCard extends StatelessWidget {
+  const _RecentUpdatesCard({required this.rows});
+
+  final List<RecentLeadRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionPad(
+      child: AppCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Recent updates',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            Text(
+              'Latest lead activity',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            if (rows.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('No recent leads')),
+              )
+            else
+              for (final row in rows)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              row.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              [
+                                row.code,
+                                if (row.state.trim().isNotEmpty) row.state,
+                              ].join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        constraints: const BoxConstraints(maxWidth: 120),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          row.status,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
   }
 }

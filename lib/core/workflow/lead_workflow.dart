@@ -221,6 +221,11 @@ class LeadWorkflow {
     return convertedPipelineStatuses.contains((status ?? '').trim());
   }
 
+  /// Web `isApprovedLead` — Sales Manager approved, still in pipeline.
+  static bool isApprovedStatus(String? status) {
+    return (status ?? '').trim() == 'Approved By Sales Manager';
+  }
+
   static bool isRejectedStatus(String? status) {
     return rejectedStatuses.contains((status ?? '').trim());
   }
