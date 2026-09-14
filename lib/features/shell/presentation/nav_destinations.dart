@@ -289,6 +289,18 @@ class NavDestinations {
       quickActionSubtitle: 'Post-conversion pipeline',
     ),
     AppDestination(
+      id: 'ge_solar_ar',
+      label: 'Solar AR',
+      icon: Icons.view_in_ar_outlined,
+      selectedIcon: Icons.view_in_ar_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      permission: 'solar_panel.read',
+      route: '/solar/ar',
+      quickAction: true,
+      quickActionSubtitle: 'Design rooftop in AR',
+    ),
+    AppDestination(
       id: 'ge_customers',
       label: 'Customers',
       icon: Icons.people_outline,

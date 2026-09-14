@@ -132,4 +132,10 @@ class ApiEndpoints {
   static const marketingTemplates = 'marketing-templates';
   static const employeePhoto = 'employee-photo';
   static const employeePhotoUpload = 'employee-photo/photo';
+
+  // AR solar panel catalog
+  static const solarPanels = 'solar-panels';
+  static const solarPanelsEnabled = 'solar-panels/enabled';
+  static String solarPanel(String id) => 'solar-panels/$id';
+  static const arModels = 'ar-models';
 }

@@ -12,12 +12,69 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import com.imt.greenenergy.ar.SolarConfigActivity
+import com.imt.greenenergy.ar.SolarPanelExtras
 
 class MainActivity : FlutterActivity() {
     private val channelName = "com.imt.greenenergy/downloads"
+    private val arChannelName = "com.imt.greenenergy/ar_solar"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            arChannelName,
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "openConfigurator") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            try {
+                val intent = Intent(this, SolarConfigActivity::class.java)
+                intent.putExtra(SolarPanelExtras.EXTRA_ID, call.argument<String>("id") ?: "panel")
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_COMPANY_NAME,
+                    call.argument<String>("companyName") ?: "Solar panel",
+                )
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_WIDTH_M,
+                    call.argument<Number>("widthM")?.toDouble() ?: 1.2192,
+                )
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_LENGTH_M,
+                    call.argument<Number>("lengthM")?.toDouble() ?: 2.286,
+                )
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_MIN_WATTS,
+                    call.argument<Number>("minWatts")?.toInt() ?: 500,
+                )
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_MAX_WATTS,
+                    call.argument<Number>("maxWatts")?.toInt() ?: 630,
+                )
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_DEFAULT_WATTS,
+                    call.argument<Number>("defaultWatts")?.toInt() ?: 500,
+                )
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_WATT_STEP,
+                    call.argument<Number>("wattStep")?.toInt() ?: 10,
+                )
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_AUTH_TOKEN,
+                    call.argument<String>("authToken").orEmpty(),
+                )
+                intent.putExtra(
+                    SolarPanelExtras.EXTRA_API_BASE_URL,
+                    call.argument<String>("apiBaseUrl").orEmpty(),
+                )
+                startActivity(intent)
+                result.success(null)
+            } catch (e: Exception) {
+                result.error("AR_OPEN_FAILED", e.message ?: "Could not open the rooftop designer.", null)
+            }
+        }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
