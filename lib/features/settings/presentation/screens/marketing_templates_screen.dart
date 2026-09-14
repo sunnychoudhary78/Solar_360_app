@@ -452,6 +452,8 @@ class _UploadMarketingTemplateDialogState
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
+          padding: const EdgeInsets.only(top: 12),
+          clipBehavior: Clip.none,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -462,6 +464,7 @@ class _UploadMarketingTemplateDialogState
                 decoration: const InputDecoration(
                   labelText: 'Name *',
                   hintText: 'e.g. Residential solar brochure',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
                 ),
               ),
               const SizedBox(height: 12),

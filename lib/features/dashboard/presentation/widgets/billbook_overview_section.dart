@@ -1850,20 +1850,47 @@ class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
                 touchTooltipData: BarTouchTooltipData(
                   fitInsideHorizontally: true,
                   fitInsideVertically: true,
-                  getTooltipColor: (_) => scheme.inverseSurface,
+                  tooltipBorderRadius: BorderRadius.circular(12),
+                  tooltipPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  getTooltipColor: (_) => Colors.white,
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
                     if (groupIndex < 0 || groupIndex >= keys.length) {
                       return null;
                     }
                     final key = keys[groupIndex];
-                    final isQuotes = rodIndex == 0;
+                    final quoteCount = quotes.valueFor(key);
+                    final invoiceCount = invoices.valueFor(key);
                     return BarTooltipItem(
-                      '${_statusMeta[key]!.label}\n${isQuotes ? 'Quotes' : 'Invoices'}  ${rod.toY.round()}',
-                      TextStyle(
-                        color: scheme.onInverseSurface,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                      '${_statusMeta[key]!.label}\n',
+                      const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                       ),
+                      textAlign: TextAlign.left,
+                      children: [
+                        TextSpan(
+                          text: 'Quotes : $quoteCount\n',
+                          style: const TextStyle(
+                            color: _amber,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            height: 1.6,
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'Invoices : $invoiceCount',
+                          style: const TextStyle(
+                            color: _emerald,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            height: 1.6,
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -1873,10 +1900,14 @@ class _QuotesVsInvoicesChartState extends State<_QuotesVsInvoicesChart>
                   BarChartGroupData(
                     x: i,
                     barsSpace: 3,
-                    showingTooltipIndicators: barRodTooltipIndexes(
-                      2,
-                      selected: selectedTooltipIndex == i,
-                    ),
+                    showingTooltipIndicators: selectedTooltipIndex == i
+                        ? [
+                            quotes.valueFor(keys[i]) >=
+                                    invoices.valueFor(keys[i])
+                                ? 0
+                                : 1,
+                          ]
+                        : const [],
                     barRods: [
                       BarChartRodData(
                         toY: quotes.valueFor(keys[i]).toDouble(),

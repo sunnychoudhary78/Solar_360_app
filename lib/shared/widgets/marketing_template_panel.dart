@@ -187,19 +187,29 @@ class _MarketingTemplatePanelState
             ],
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _preview,
-                icon: const Icon(Icons.visibility_outlined, size: 18),
-                label: const Text('Preview'),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _preview,
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      label: const Text('Preview'),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _download(open: false),
+                      icon: const Icon(Icons.download_outlined, size: 18),
+                      label: const Text('Download'),
+                    ),
+                  ),
+                ],
               ),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : () => _download(open: false),
-                icon: const Icon(Icons.download_outlined, size: 18),
-                label: const Text('Download'),
-              ),
+              const SizedBox(height: AppSpacing.sm),
               OutlinedButton.icon(
                 onPressed: _busy ? null : _share,
                 icon: const Icon(Icons.share_outlined, size: 18),
