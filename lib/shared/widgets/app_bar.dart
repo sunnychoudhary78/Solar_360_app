@@ -42,8 +42,9 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
     final inShell = ShellScope.hasDrawer(context);
 
     Widget? resolvedLeading = leading;
-    final canPop = Navigator.of(context).canPop();
-    if (resolvedLeading == null && inShell && !canPop) {
+    // Skip Navigator.canPop(): an open drawer adds local history, so canPop()
+    // is true and a theme rebuild drops the hamburger until the next refresh.
+    if (resolvedLeading == null && inShell) {
       final scope = ShellScope.maybeOf(context);
       if (scope != null &&
           scope.selectedTabIndex > 0 &&
@@ -52,13 +53,18 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'Back',
           icon: Icon(
             isIOS ? Icons.arrow_back_ios_new_rounded : Icons.arrow_back,
+            color: scheme.onSurface,
           ),
           onPressed: () => scope.selectTab!(0),
         );
       } else {
         resolvedLeading = IconButton(
+          key: ValueKey('shell-menu-${scheme.brightness}'),
           tooltip: 'Menu',
-          icon: Icon(isIOS ? Icons.menu_rounded : Icons.menu),
+          icon: Icon(
+            isIOS ? Icons.menu_rounded : Icons.menu,
+            color: scheme.onSurface,
+          ),
           onPressed: () => ShellScope.openDrawer(context),
         );
       }
@@ -188,8 +194,9 @@ class AppSliverHeader extends StatelessWidget {
       surfaceTintColor: Colors.transparent,
       leading: inShell
           ? IconButton(
+              key: ValueKey('shell-menu-${scheme.brightness}'),
               tooltip: 'Menu',
-              icon: const Icon(Icons.menu_rounded),
+              icon: Icon(Icons.menu_rounded, color: scheme.onSurface),
               onPressed: () => ShellScope.openDrawer(context),
             )
           : null,
