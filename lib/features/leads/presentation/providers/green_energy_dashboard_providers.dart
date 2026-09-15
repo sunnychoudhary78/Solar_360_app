@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/workflow/lead_workflow.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
 import 'package:solar_sales/features/leads/data/green_energy_dashboard_logic.dart';
 import 'package:solar_sales/features/leads/data/india_states.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
@@ -30,7 +31,16 @@ final territoryFiltersProvider =
 
 class TerritoryFiltersNotifier extends Notifier<TerritoryFilters> {
   @override
-  TerritoryFilters build() => const TerritoryFilters();
+  TerritoryFilters build() {
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      final hadAccess =
+          previous?.hasPermission(territoryFiltersPermission) ?? false;
+      if (hadAccess && !next.hasPermission(territoryFiltersPermission)) {
+        state = const TerritoryFilters();
+      }
+    });
+    return const TerritoryFilters();
+  }
 
   void setState(String value) {
     final canonical = normalizeStateName(value);

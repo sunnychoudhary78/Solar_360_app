@@ -319,6 +319,34 @@ class AuthNotifier extends Notifier<AuthState> {
     return true;
   }
 
+  /// Reloads the signed-in staff role's permissions from the API.
+  ///
+  /// Role edits (e.g. removing `territoryFilters`) are stored in the DB, not
+  /// the JWT, so pull-to-refresh must call this instead of waiting for logout
+  /// or a role switch.
+  Future<void> refreshPermissions() async {
+    if (!state.isStaffSession) return;
+    try {
+      final permissions = await _repo.getPermissions();
+      if (!ref.mounted) return;
+      state = state.copyWith(permissions: permissions);
+
+      final profile = state.profile;
+      if (profile != null) {
+        await ref.read(moduleProvider.notifier).syncFromAuth(
+              permissions: permissions,
+              role: profile.effectiveRoleName,
+              companyBillbook: profile.companyModules.billbook,
+              companySolar: profile.companyModules.solar,
+              companyAdmin: profile.isCompanyAdmin,
+              platformAdmin: profile.isPlatformSuperAdmin,
+            );
+      }
+    } catch (_) {
+      // Keep the in-memory permissions if the refresh fails.
+    }
+  }
+
   Future<void> switchRole(String role) async {
     ref.read(globalLoadingProvider.notifier).showLoading('Switching role...');
     try {

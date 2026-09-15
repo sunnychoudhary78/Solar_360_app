@@ -41,6 +41,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     setState(() => _isRefreshing = true);
     try {
+      await ref.read(authProvider.notifier).refreshPermissions();
       await Future.wait([
         ref.refresh(dashboardProvider.future),
         ref.refresh(unreadNotificationCountProvider.future),

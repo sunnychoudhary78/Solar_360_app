@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:solar_sales/features/auth/data/models/auth_models.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_state.dart';
 
 void main() {
   group('AuthUser / LoginResult', () {
@@ -96,6 +97,21 @@ void main() {
       expect(result.token, 'new-jwt');
       expect(result.user.activeRole, 'FinanceHead');
       expect(result.permissions, contains('invoice.approve'));
+    });
+  });
+
+  group('AuthState permissions', () {
+    test('copyWith replaces permissions so revoked access is visible', () {
+      const withTerritory = AuthState(
+        permissions: ['lead.read', 'territoryFilters'],
+      );
+      expect(withTerritory.hasPermission('territoryFilters'), isTrue);
+
+      final withoutTerritory = withTerritory.copyWith(
+        permissions: const ['lead.read'],
+      );
+      expect(withoutTerritory.hasPermission('territoryFilters'), isFalse);
+      expect(withoutTerritory.hasPermission('lead.read'), isTrue);
     });
   });
 

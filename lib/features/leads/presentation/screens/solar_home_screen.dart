@@ -67,10 +67,17 @@ class _SalesAdminHomeState extends ConsumerState<_SalesAdminHome> {
 
     setState(() => _isRefreshing = true);
     try {
+      await ref.read(authProvider.notifier).refreshPermissions();
+      if (!mounted) return;
+      final canUseTerritoryFilters =
+          ref.read(authProvider).hasPermission(territoryFiltersPermission);
+      if (!canUseTerritoryFilters) {
+        ref.invalidate(territoryUsersProvider);
+      }
       await Future.wait([
         ref.refresh(allLeadsProvider.future),
         ref.refresh(greenEnergyDashboardLeadsProvider.future),
-        if (widget.auth.hasPermission(territoryFiltersPermission))
+        if (canUseTerritoryFilters)
           ref.refresh(territoryUsersProvider.future),
         ref.refresh(unreadNotificationCountProvider.future),
       ]);
@@ -141,24 +148,22 @@ class _SalesAdminHomeState extends ConsumerState<_SalesAdminHome> {
         header: header,
         greeting: _timeGreeting(),
         onRefresh: _refreshDashboard,
-        child: _SolarHomeContent(auth: auth),
+        child: const _SolarHomeContent(),
       ),
     );
   }
 }
 
 class _SolarHomeContent extends ConsumerWidget {
-  const _SolarHomeContent({required this.auth});
-
-  final AuthState auth;
-
-  bool get _canReadLeads => auth.hasPermission('lead.read');
-  bool get _canCreateLead => auth.hasPermission('lead.create');
-  bool get _canUseTerritoryFilters =>
-      auth.hasPermission(territoryFiltersPermission);
+  const _SolarHomeContent();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final canReadLeads = auth.hasPermission('lead.read');
+    final canCreateLead = auth.hasPermission('lead.create');
+    final canUseTerritoryFilters =
+        auth.hasPermission(territoryFiltersPermission);
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -175,28 +180,31 @@ class _SolarHomeContent extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GreenEnergyDashboardBody(
-          canReadLeads: _canReadLeads,
-          canUseTerritoryFilters: _canUseTerritoryFilters,
+          canReadLeads: canReadLeads,
+          canUseTerritoryFilters: canUseTerritoryFilters,
           onRetry: () async {
+            await ref.read(authProvider.notifier).refreshPermissions();
+            final allowed = ref
+                .read(authProvider)
+                .hasPermission(territoryFiltersPermission);
             ref.invalidate(greenEnergyDashboardLeadsProvider);
-            if (_canUseTerritoryFilters) {
+            if (!allowed) {
               ref.invalidate(territoryUsersProvider);
             }
             await Future.wait([
               ref.refresh(greenEnergyDashboardLeadsProvider.future),
-              if (_canUseTerritoryFilters)
-                ref.refresh(territoryUsersProvider.future),
+              if (allowed) ref.refresh(territoryUsersProvider.future),
             ]);
           },
         ),
 
-        if (_canCreateLead || _canReadLeads) ...[
+        if (canCreateLead || canReadLeads) ...[
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
             child: PremiumSectionTitle(title: 'Lead actions'),
           ),
           const SizedBox(height: AppSpacing.sm),
-          if (_canCreateLead)
+          if (canCreateLead)
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
@@ -258,7 +266,7 @@ class _SolarHomeContent extends ConsumerWidget {
                 ),
               ),
             ).appFadeSlide(index: 1),
-          if (auth.isCompanyAdmin && _canReadLeads)
+          if (auth.isCompanyAdmin && canReadLeads)
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
