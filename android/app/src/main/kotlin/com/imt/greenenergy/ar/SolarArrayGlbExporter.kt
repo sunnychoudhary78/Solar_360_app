@@ -10,32 +10,42 @@ object SolarArrayGlbExporter {
     private const val RafterY = -SolarArrayDims.RafterH * 0.5f - 0.002f
     private const val RailY = -SolarArrayDims.RafterH - SolarArrayDims.RailH * 0.5f - 0.004f
 
-    private val PANEL = floatArrayOf(0.12f, 0.18f, 0.28f)
-    private val STEEL = floatArrayOf(0.68f, 0.70f, 0.66f)
-    private val ALUMINUM = floatArrayOf(0.78f, 0.79f, 0.81f)
-    private val GROUND = floatArrayOf(0.82f, 0.84f, 0.86f)
-
     fun export(spec: SolarArraySpec): ByteArray {
         val layout = SolarArrayLayoutEngine.compute(spec)
         val builder = GlbBuilder()
-        val panelMat = builder.material(PANEL, metallic = 0.15f, roughness = 0.35f)
-        val steelMat = builder.material(STEEL, metallic = 0.85f, roughness = 0.42f)
-        val aluMat = builder.material(ALUMINUM, metallic = 0.92f, roughness = 0.28f)
-        val groundMat = builder.material(GROUND, metallic = 0f, roughness = 0.7f)
+        val glassMat = builder.material(SolarArrayLook.GlassRgb, metallic = 0.35f, roughness = 0.12f)
+        val frameMat = builder.material(SolarArrayLook.FrameRgb, metallic = 0.88f, roughness = 0.28f)
+        val busMat = builder.material(SolarArrayLook.BusbarRgb, metallic = 0.82f, roughness = 0.32f)
+        val steelMat = builder.material(SolarArrayLook.SteelRgb, metallic = 0.90f, roughness = 0.34f)
+        val aluMat = builder.material(SolarArrayLook.AluminumRgb, metallic = 0.94f, roughness = 0.22f)
+        val grassMat = builder.material(SolarArrayLook.GrassRgb, metallic = 0f, roughness = 0.92f)
+        val concreteMat = builder.material(SolarArrayLook.ConcreteRgb, metallic = 0.08f, roughness = 0.78f)
 
         builder.box(
-            cx = 0f, cy = 0.01f, cz = 0f,
-            sx = layout.footprintW, sy = 0.02f, sz = layout.footprintL,
-            rotXDeg = 0f, material = groundMat,
+            cx = 0f, cy = -0.02f, cz = 0f,
+            sx = layout.footprintW * SolarArrayDims.SitePadScale,
+            sy = 0.03f,
+            sz = layout.footprintL * SolarArrayDims.SitePadScale,
+            rotXDeg = 0f,
+            material = grassMat,
+        )
+        builder.box(
+            cx = 0f, cy = 0.018f, cz = 0f,
+            sx = layout.footprintW, sy = 0.036f, sz = layout.footprintL,
+            rotXDeg = 0f, material = concreteMat,
         )
 
         val tilt = spec.tiltDeg
         layout.panelCenters.forEach { (x, s) ->
             val world = layout.slopeToWorld(x, 0f, s)
-            builder.box(
+            addFramedPanel(
+                builder = builder,
                 cx = world.x, cy = world.y, cz = world.z,
-                sx = spec.panelW, sy = SolarArrayDims.PanelThickness, sz = spec.panelL,
-                rotXDeg = tilt, material = panelMat,
+                panelW = spec.panelW, panelL = spec.panelL,
+                rotXDeg = tilt,
+                glassMat = glassMat,
+                frameMat = frameMat,
+                busMat = busMat,
             )
         }
 
@@ -70,10 +80,59 @@ object SolarArrayGlbExporter {
                     sx = SolarArrayDims.Plate, sy = SolarArrayDims.PlateT, sz = SolarArrayDims.Plate,
                     rotXDeg = 0f, material = steelMat,
                 )
+                builder.box(
+                    cx = top.x, cy = top.y + 0.012f, cz = top.z,
+                    sx = SolarArrayDims.Plate * 0.72f, sy = 0.016f, sz = SolarArrayDims.Plate * 0.72f,
+                    rotXDeg = 0f, material = steelMat,
+                )
             }
         }
 
         return builder.toGlb("rooftop_array")
+    }
+
+    private fun addFramedPanel(
+        builder: GlbBuilder,
+        cx: Float,
+        cy: Float,
+        cz: Float,
+        panelW: Float,
+        panelL: Float,
+        rotXDeg: Float,
+        glassMat: Int,
+        frameMat: Int,
+        busMat: Int,
+    ) {
+        val frame = SolarArrayDims.FrameW
+        val glassW = (panelW - frame * 2f).coerceAtLeast(panelW * 0.82f)
+        val glassL = (panelL - frame * 2f).coerceAtLeast(panelL * 0.82f)
+        val frameH = SolarArrayDims.PanelThickness + SolarArrayDims.FrameLift
+        fun place(lx: Float, ly: Float, lz: Float, sx: Float, sy: Float, sz: Float, mat: Int) {
+            val o = tiltedOffset(lx, ly, lz, rotXDeg)
+            builder.box(
+                cx = cx + o[0], cy = cy + o[1], cz = cz + o[2],
+                sx = sx, sy = sy, sz = sz,
+                rotXDeg = rotXDeg, material = mat,
+            )
+        }
+        place(0f, SolarArrayDims.FrameLift, 0f, glassW, SolarArrayDims.PanelThickness, glassL, glassMat)
+        place(0f, 0f, (panelL - frame) * 0.5f, panelW, frameH, frame, frameMat)
+        place(0f, 0f, -(panelL - frame) * 0.5f, panelW, frameH, frame, frameMat)
+        place((panelW - frame) * 0.5f, 0f, 0f, frame, frameH, glassL, frameMat)
+        place(-(panelW - frame) * 0.5f, 0f, 0f, frame, frameH, glassL, frameMat)
+        val bus = SolarArrayDims.BusbarW
+        val busL = glassL * 0.72f
+        val busY = SolarArrayDims.FrameLift + 0.004f
+        place(panelW * 0.16f, busY, 0f, bus, 0.004f, busL, busMat)
+        place(-panelW * 0.16f, busY, 0f, bus, 0.004f, busL, busMat)
+    }
+
+    private fun tiltedOffset(lx: Float, ly: Float, lz: Float, rotXDeg: Float): FloatArray {
+        if (rotXDeg == 0f) return floatArrayOf(lx, ly, lz)
+        val rx = Math.toRadians(rotXDeg.toDouble())
+        val cr = cos(rx).toFloat()
+        val sr = sin(rx).toFloat()
+        return floatArrayOf(lx, ly * cr - lz * sr, ly * sr + lz * cr)
     }
 
     private fun addSlopeBox(

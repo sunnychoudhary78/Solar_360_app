@@ -128,6 +128,10 @@ object SolarArrayDims {
     const val MaxPanels = 10
     const val PanelAsset = "models/solar_panel.glb"
     const val PanelThickness = 0.035f
+    const val FrameW = 0.038f
+    const val FrameLift = 0.006f
+    const val BusbarW = 0.012f
+    const val SitePadScale = 1.55f
     const val SetupBufferFt = 1f
     val SetupBufferM = SetupBufferFt * SolarHeightLimits.FtToM
 }

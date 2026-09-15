@@ -11,18 +11,25 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,19 +37,24 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,10 +66,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -83,7 +97,10 @@ class SolarConfigActivity : ComponentActivity() {
         val apiBaseUrl = intent.getStringExtra(SolarPanelExtras.EXTRA_API_BASE_URL).orEmpty()
         enableEdgeToEdge()
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            MaterialTheme(
+                colorScheme = Solar360Theme.darkColorScheme(),
+                typography = Typography(),
+            ) {
                 SolarConfigScreen(
                     product = product,
                     authToken = authToken,
@@ -142,8 +159,10 @@ private fun SolarConfigScreen(
     var debugUrl by remember { mutableStateOf<String?>(null) }
     var debugHead by remember { mutableStateOf<String?>(null) }
     var copied by remember { mutableStateOf(false) }
+    var showTech by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val scheme = MaterialTheme.colorScheme
 
     val spec = SolarArraySpec(
         kw = kw,
@@ -184,18 +203,43 @@ private fun SolarConfigScreen(
         targetPosition = cameraTarget,
     )
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(scheme.surfaceContainerLowest)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Design rooftop array", style = MaterialTheme.typography.titleMedium)
             IconButton(onClick = onClose) {
                 Icon(Icons.Filled.Close, contentDescription = "Close")
             }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Design rooftop",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    product.companyName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+            }
         }
-        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(0.58f)
+                .padding(horizontal = 10.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF101820)),
+        ) {
             SceneView(
                 modifier = Modifier.fillMaxSize(),
                 engine = engine,
@@ -213,11 +257,21 @@ private fun SolarConfigScreen(
                     )
                 }
             }
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                OverlayPill("${spec.kw} kW")
+                OverlayPill("${spec.panelCount} panels")
+                OverlayPill(formatTilt(spec.tiltDeg))
+            }
             SpecReadout(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .padding(10.dp),
                 spec = spec,
                 layout = layout,
             )
@@ -225,147 +279,195 @@ private fun SolarConfigScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .weight(0.42f)
+                .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                .background(scheme.surfaceContainer)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
-            Text(
-                SolarInsights.formatCompanyWatts(spec),
-                style = MaterialTheme.typography.titleSmall,
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 10.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(scheme.outlineVariant),
             )
-            Text(
-                "Panel ${SolarInsights.formatProductSize(product)}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text("Panel power", style = MaterialTheme.typography.titleSmall)
-            Text("${spec.panelWatts} W", style = MaterialTheme.typography.bodyMedium)
-            Slider(
-                value = panelWatts.toFloat(),
-                onValueChange = { value ->
-                    panelWatts = product.clampWatts(value.toInt())
-                },
-                valueRange = product.minWatts.toFloat()..product.maxWatts.toFloat(),
-                steps = product.sliderSteps.coerceAtLeast(0),
-            )
-            Text("System size", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (option in listOf(2, 3, 4, 5)) {
-                    FilterChip(
-                        selected = kw == option,
-                        onClick = { kw = option },
-                        label = { Text("$option kW") },
-                    )
-                }
-            }
-            Text("Alignment", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = rows == 2,
-                    onClick = { rows = 2 },
-                    label = { Text("${spec.panelCount / 2}×2 · Two rows") },
-                )
-                FilterChip(
-                    selected = rows == 1,
-                    onClick = { rows = 1 },
-                    label = { Text("${spec.panelCount}×1 · Single row") },
-                )
-            }
-            HeightControl(
-                title = "North (front) height",
-                heightM = northM,
-                onHeightMChange = { value ->
-                    northM = SolarHeightLimits.clampNorthM(value, southM, spec.arrayL)
-                },
-            )
-            HeightControl(
-                title = "South (back) height",
-                heightM = southM,
-                onHeightMChange = { value ->
-                    southM = SolarHeightLimits.clampSouthM(value, northM, spec.arrayL)
-                },
-            )
-            Text(
-                "Tilt  ${formatTilt(spec.tiltDeg)}",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                "Range 1–13 ft. Tilt is set by the north/south height difference.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                "Total  ${SolarInsights.formatTotalKw(spec)}  ·  ${SolarInsights.formatPanelMix(spec)}\n" +
-                    "Panels ${spec.panelCount}  ·  Grid ${spec.cols}×${spec.rows}\n" +
-                    "Setup  ${SolarInsights.formatSetup(layout, spec.useMeters)}\n" +
-                    "Includes ${SolarArrayDims.SetupBufferFt.toInt()} ft buffer for poles and racking.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            OverlayToggle(
-                title = "Show dimensions",
-                subtitle = "Numeric size marks on the setup footprint.",
-                checked = showDimensions,
-                onCheckedChange = { showDimensions = it },
-            )
-            OverlayToggle(
-                title = "Show north/south",
-                subtitle = "NORTH and SOUTH marks on the array.",
-                checked = showNorthSouth,
-                onCheckedChange = { showNorthSouth = it },
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Units", style = MaterialTheme.typography.titleSmall)
+                ControlCard(title = "Panel power") {
                     Text(
-                        "Dimension labels and setup readout.",
-                        style = MaterialTheme.typography.bodySmall,
+                        "${spec.panelWatts} W  ·  ${SolarInsights.formatProductSize(product)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    BrandSlider(
+                        value = panelWatts.toFloat(),
+                        onValueChange = { value ->
+                            panelWatts = product.clampWatts(value.toInt())
+                        },
+                        valueRange = product.minWatts.toFloat()..product.maxWatts.toFloat(),
+                        steps = product.sliderSteps.coerceAtLeast(0),
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("ft", style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = useMeters,
-                        onCheckedChange = { useMeters = it },
+                ControlCard(title = "System size") {
+                    SegmentRow(
+                        labels = listOf("2 kW", "3 kW", "4 kW", "5 kW"),
+                        selectedIndex = kw - 2,
+                        onSelect = { kw = it + 2 },
                     )
-                    Text("m", style = MaterialTheme.typography.bodyMedium)
+                }
+                ControlCard(title = "Alignment") {
+                    SegmentRow(
+                        labels = listOf(
+                            "${spec.panelCount / 2}×2  Two rows",
+                            "${spec.panelCount}×1  Single row",
+                        ),
+                        selectedIndex = if (rows == 2) 0 else 1,
+                        onSelect = { rows = if (it == 0) 2 else 1 },
+                    )
+                }
+                ControlCard(title = "Heights") {
+                    HeightControl(
+                        title = "North (front)",
+                        heightM = northM,
+                        onHeightMChange = { value ->
+                            northM = SolarHeightLimits.clampNorthM(value, southM, spec.arrayL)
+                        },
+                    )
+                    HeightControl(
+                        title = "South (back)",
+                        heightM = southM,
+                        onHeightMChange = { value ->
+                            southM = SolarHeightLimits.clampSouthM(value, northM, spec.arrayL)
+                        },
+                    )
+                    Text(
+                        "Tilt ${formatTilt(spec.tiltDeg)}. Range 1–13 ft.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+                ControlCard(title = "Display") {
+                    OverlayToggle(
+                        title = "Show dimensions",
+                        subtitle = "Numeric size marks on the setup footprint.",
+                        checked = showDimensions,
+                        onCheckedChange = { showDimensions = it },
+                    )
+                    OverlayToggle(
+                        title = "Show north/south",
+                        subtitle = "NORTH and SOUTH marks on the array.",
+                        checked = showNorthSouth,
+                        onCheckedChange = { showNorthSouth = it },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Units", style = MaterialTheme.typography.titleSmall)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("ft", style = MaterialTheme.typography.bodySmall)
+                            Switch(
+                                checked = useMeters,
+                                onCheckedChange = { useMeters = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = scheme.onPrimary,
+                                    checkedTrackColor = scheme.primary,
+                                ),
+                            )
+                            Text("m", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                if (debugUrl != null) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(scheme.surfaceContainerHigh)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showTech = !showTech }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Technical details",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                            Icon(
+                                if (showTech) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
+                                tint = scheme.onSurfaceVariant,
+                            )
+                        }
+                        AnimatedVisibility(visible = showTech) {
+                            Column(
+                                modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                SelectionContainer {
+                                    Text(debugUrl!!, style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (debugHead != null) {
+                                    Text(
+                                        debugHead!!,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = scheme.onSurfaceVariant,
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("GLB URL", debugUrl))
+                                        copied = true
+                                    },
+                                ) {
+                                    Text(if (copied) "Copied URL" else "Copy URL")
+                                }
+                            }
+                        }
+                    }
                 }
             }
             if (error != null) {
-                Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            if (debugUrl != null) {
-                Text("Public GLB URL (debug)", style = MaterialTheme.typography.titleSmall)
-                SelectionContainer {
-                    Text(debugUrl!!, style = MaterialTheme.typography.bodySmall)
-                }
-                if (debugHead != null) {
-                    Text(
-                        debugHead!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("GLB URL", debugUrl))
-                        copied = true
-                    },
-                ) {
-                    Text(if (copied) "Copied URL" else "Copy URL")
-                }
+                Text(
+                    error!!,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(scheme.errorContainer)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = scheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             Button(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .height(52.dp),
                 enabled = !busy,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = scheme.primary,
+                    contentColor = scheme.onPrimary,
+                ),
                 onClick = {
                     error = null
                     debugUrl = null
                     debugHead = null
                     copied = false
+                    showTech = false
                     busy = true
                     scope.launch {
                         try {
@@ -388,6 +490,7 @@ private fun SolarConfigScreen(
                             debugUrl = fileUrl
                             debugHead = probe.summary
                             if (!probe.okToOpen) {
+                                showTech = true
                                 throw IllegalStateException(
                                     probe.blockReason ?: "Public GLB URL is not usable by Scene Viewer.",
                                 )
@@ -406,7 +509,7 @@ private fun SolarConfigScreen(
                     CircularProgressIndicator(
                         modifier = Modifier.width(18.dp),
                         strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = scheme.onPrimary,
                     )
                 } else {
                     Icon(Icons.Filled.ViewInAr, contentDescription = null)
@@ -414,10 +517,104 @@ private fun SolarConfigScreen(
                 Text(
                     if (busy) "Preparing AR…" else "View in Google AR",
                     modifier = Modifier.padding(start = 8.dp),
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun ControlCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        content = {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = scheme.primary,
+            )
+            content()
+        },
+    )
+}
+
+@Composable
+private fun SegmentRow(
+    labels: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val selected = index == selectedIndex
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (selected) scheme.primary else scheme.surfaceContainerLowest)
+                    .clickable { onSelect(index) }
+                    .padding(vertical = 10.dp, horizontal = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    color = if (selected) scheme.onPrimary else scheme.onSurface,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BrandSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int = 0,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = valueRange,
+        steps = steps,
+        colors = SliderDefaults.colors(
+            thumbColor = scheme.primary,
+            activeTrackColor = scheme.primary,
+            inactiveTrackColor = scheme.outlineVariant,
+        ),
+    )
+}
+
+@Composable
+private fun OverlayPill(text: String) {
+    Text(
+        text,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xCC0F766E))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        color = Color.White,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+    )
 }
 
 @Composable
@@ -427,6 +624,7 @@ private fun OverlayToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -434,11 +632,19 @@ private fun OverlayToggle(
     ) {
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
         }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = scheme.onPrimary,
+                checkedTrackColor = scheme.primary,
+            ),
         )
     }
 }
@@ -450,6 +656,7 @@ private fun HeightControl(
     onHeightMChange: (Float) -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
+    val scheme = MaterialTheme.colorScheme
     val feet = SolarHeightLimits.metersToFeet(heightM)
     var text by remember { mutableStateOf(formatFeetInput(feet)) }
     var focused by remember { mutableStateOf(false) }
@@ -460,7 +667,7 @@ private fun HeightControl(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -469,7 +676,7 @@ private fun HeightControl(
             Text(title, style = MaterialTheme.typography.titleSmall)
             OutlinedTextField(
                 modifier = Modifier
-                    .width(108.dp)
+                    .width(96.dp)
                     .onFocusChanged { state ->
                         val nowFocused = state.isFocused
                         if (focused && !nowFocused) {
@@ -491,6 +698,11 @@ private fun HeightControl(
                 },
                 suffix = { Text("ft") },
                 singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = scheme.primary,
+                    cursorColor = scheme.primary,
+                ),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Decimal,
                     imeAction = ImeAction.Done,
@@ -500,7 +712,7 @@ private fun HeightControl(
                 ),
             )
         }
-        Slider(
+        BrandSlider(
             value = feet.coerceIn(SolarHeightLimits.MinFt, SolarHeightLimits.MaxFt),
             onValueChange = { valueFt ->
                 text = formatFeetInput(valueFt)
@@ -517,8 +729,8 @@ private fun formatTilt(tiltDeg: Float): String {
     val mag = abs(tiltDeg)
     return when {
         mag < 0.5f -> "0° · level"
-        tiltDeg > 0f -> "${"%.0f".format(mag)}° toward north"
-        else -> "${"%.0f".format(mag)}° toward south"
+        tiltDeg > 0f -> "${"%.0f".format(mag)}° N"
+        else -> "${"%.0f".format(mag)}° S"
     }
 }
 
@@ -530,39 +742,34 @@ private fun SpecReadout(
 ) {
     Column(
         modifier = modifier
-            .background(Color(0xCC000000), RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xCC0F766E))
+            .border(1.dp, Color(0x66CCFBF1), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
             SolarInsights.formatCompanyWatts(spec),
             color = Color.White,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
         )
         Text(
             "Total  ${SolarInsights.formatTotalKw(spec)}  ·  ${SolarInsights.formatPanelMix(spec)}",
-            color = Color.White,
-            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFFE6FFFA),
+            style = MaterialTheme.typography.bodySmall,
         )
         Text(
             "Setup  ${SolarInsights.formatSetup(layout, spec.useMeters)}",
-            color = Color.White,
-            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFFE6FFFA),
+            style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            "North  ${SolarInsights.formatAxisMagnitude(spec.northHeightM, spec.useMeters)}",
-            color = Color.White,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Text(
-            "South  ${SolarInsights.formatAxisMagnitude(spec.southHeightM, spec.useMeters)}",
-            color = Color.White,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Text(
-            "Tilt  ${formatTilt(spec.tiltDeg)}",
-            color = Color.White,
-            style = MaterialTheme.typography.bodyMedium,
+            "N ${SolarInsights.formatAxisMagnitude(spec.northHeightM, spec.useMeters)}   ·   " +
+                "S ${SolarInsights.formatAxisMagnitude(spec.southHeightM, spec.useMeters)}   ·   " +
+                formatTilt(spec.tiltDeg),
+            color = Color(0xFFE6FFFA),
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }

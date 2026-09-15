@@ -3,7 +3,6 @@ package com.imt.greenenergy.ar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
 import com.google.android.filament.MaterialInstance
 import io.github.sceneview.NodeScope
 import io.github.sceneview.loaders.MaterialLoader
@@ -36,27 +35,34 @@ fun NodeScope.AssembledArray(
     }
     val steel = remember(materialLoader) {
         materialLoader.createColorInstance(
-            Color(0.68f, 0.70f, 0.66f),
-            metallic = 0.85f,
-            roughness = 0.42f,
+            SolarArrayLook.Steel,
+            metallic = 0.90f,
+            roughness = 0.34f,
         )
     }
     val aluminum = remember(materialLoader) {
         materialLoader.createColorInstance(
-            Color(0.78f, 0.79f, 0.81f),
-            metallic = 0.92f,
-            roughness = 0.28f,
+            SolarArrayLook.Aluminum,
+            metallic = 0.94f,
+            roughness = 0.22f,
         )
     }
-    val ground = remember(materialLoader) {
+    val grass = remember(materialLoader) {
         materialLoader.createColorInstance(
-            Color(0.82f, 0.84f, 0.86f),
+            SolarArrayLook.Grass,
             metallic = 0f,
-            roughness = 0.7f,
+            roughness = 0.92f,
+        )
+    }
+    val concrete = remember(materialLoader) {
+        materialLoader.createColorInstance(
+            SolarArrayLook.Concrete,
+            metallic = 0.08f,
+            roughness = 0.78f,
         )
     }
     val tilt = Rotation(x = spec.tiltDeg)
-    val groundCube = remember { Size(1f, 0.02f, 1f) }
+    val groundCube = remember { Size(1f, 1f, 1f) }
 
     panelInstances.forEachIndexed { index, instance ->
         val center = layout.panelCenters.getOrNull(index)
@@ -86,12 +92,26 @@ fun NodeScope.AssembledArray(
     }
 
     Node(
-        position = Position(y = 0.01f),
-        scale = Scale(x = layout.footprintW, y = 1f, z = layout.footprintL),
+        position = Position(y = -0.02f),
+        scale = Scale(
+            x = layout.footprintW * SolarArrayDims.SitePadScale,
+            y = 0.03f,
+            z = layout.footprintL * SolarArrayDims.SitePadScale,
+        ),
     ) {
         CubeNode(
             size = groundCube,
-            materialInstance = ground,
+            materialInstance = grass,
+        )
+    }
+
+    Node(
+        position = Position(y = 0.018f),
+        scale = Scale(x = layout.footprintW, y = 0.036f, z = layout.footprintL),
+    ) {
+        CubeNode(
+            size = groundCube,
+            materialInstance = concrete,
         )
     }
 
@@ -227,6 +247,14 @@ private fun NodeScope.WorldPosts(
                     CubeNode(size = plateCube, materialInstance = steel)
                 }
             }
+            key("cap-$ix-$iz") {
+                Node(
+                    position = Position(top.x, top.y + 0.012f, top.z),
+                    scale = Scale(x = 0.72f, y = 2f, z = 0.72f),
+                ) {
+                    CubeNode(size = plateCube, materialInstance = steel)
+                }
+            }
         }
     }
 }
@@ -238,16 +266,16 @@ private fun NodeScope.NorthSouthMarks(
 ) {
     val northPaint = remember(materialLoader) {
         materialLoader.createColorInstance(
-            Color(0.16f, 0.42f, 0.92f),
-            metallic = 0.08f,
-            roughness = 0.4f,
+            SolarArrayLook.Teal,
+            metallic = 0.12f,
+            roughness = 0.38f,
         )
     }
     val southPaint = remember(materialLoader) {
         materialLoader.createColorInstance(
-            Color(0.92f, 0.36f, 0.16f),
-            metallic = 0.08f,
-            roughness = 0.4f,
+            SolarArrayLook.Amber,
+            metallic = 0.12f,
+            roughness = 0.38f,
         )
     }
     val stripSize = remember(layout.arrayW) {
@@ -275,7 +303,7 @@ private fun NodeScope.NorthSouthMarks(
             text = "NORTH",
             fontSize = 110f,
             textColor = android.graphics.Color.WHITE,
-            backgroundColor = 0xCC1565C0.toInt(),
+            backgroundColor = 0xCC0F766E.toInt(),
             widthMeters = 1.8f,
             heightMeters = 0.45f,
             position = Position(0f, 0.38f, northS - 0.5f),
@@ -286,7 +314,7 @@ private fun NodeScope.NorthSouthMarks(
             text = "SOUTH",
             fontSize = 110f,
             textColor = android.graphics.Color.WHITE,
-            backgroundColor = 0xCCE64A19.toInt(),
+            backgroundColor = 0xCCB45309.toInt(),
             widthMeters = 1.8f,
             heightMeters = 0.45f,
             position = Position(0f, 0.38f, southS + 0.5f),
@@ -302,9 +330,9 @@ private fun NodeScope.SetupDimensionMarks(
 ) {
     val paint = remember(materialLoader) {
         materialLoader.createColorInstance(
-            Color(0.95f, 0.82f, 0.18f),
-            metallic = 0.12f,
-            roughness = 0.4f,
+            SolarArrayLook.Amber,
+            metallic = 0.14f,
+            roughness = 0.42f,
         )
     }
     val halfW = layout.footprintW / 2f
@@ -335,7 +363,7 @@ private fun NodeScope.SetupDimensionMarks(
             text = SolarInsights.formatAxisMagnitude(layout.footprintW, useMeters),
             fontSize = 96f,
             textColor = android.graphics.Color.BLACK,
-            backgroundColor = 0xE6FFD54F.toInt(),
+            backgroundColor = 0xE6FBBF24.toInt(),
             widthMeters = 1.9f,
             heightMeters = 0.42f,
             position = Position(0f, 0.32f, halfL + 0.42f),
@@ -346,7 +374,7 @@ private fun NodeScope.SetupDimensionMarks(
             text = SolarInsights.formatAxisMagnitude(layout.footprintL, useMeters),
             fontSize = 96f,
             textColor = android.graphics.Color.BLACK,
-            backgroundColor = 0xE6FFD54F.toInt(),
+            backgroundColor = 0xE6FBBF24.toInt(),
             widthMeters = 1.9f,
             heightMeters = 0.42f,
             position = Position(halfW + 0.42f, 0.32f, 0f),
