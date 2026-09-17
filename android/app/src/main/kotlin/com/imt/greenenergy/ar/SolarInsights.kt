@@ -16,13 +16,8 @@ object SolarInsights {
     }
 
     fun formatSetup(layout: SolarArrayLayout, useMeters: Boolean = false): String {
-        return if (useMeters) {
-            "${"%.2f".format(layout.footprintW)} × ${"%.2f".format(layout.footprintL)} m"
-        } else {
-            val widthFt = SolarHeightLimits.metersToFeet(layout.footprintW)
-            val lengthFt = SolarHeightLimits.metersToFeet(layout.footprintL)
-            "${"%.1f".format(widthFt)} × ${"%.1f".format(lengthFt)} ft"
-        }
+        return "${formatAxisMagnitude(layout.footprintW, useMeters)} × " +
+            formatAxisMagnitude(layout.footprintL, useMeters)
     }
 
     fun formatAxisMagnitude(meters: Float, useMeters: Boolean): String {
@@ -32,4 +27,10 @@ object SolarInsights {
             "${"%.1f".format(SolarHeightLimits.metersToFeet(meters))} ft"
         }
     }
+
+    fun formatWidth(layout: SolarArrayLayout, useMeters: Boolean): String =
+        formatAxisMagnitude(layout.footprintW, useMeters)
+
+    fun formatLength(layout: SolarArrayLayout, useMeters: Boolean): String =
+        formatAxisMagnitude(layout.footprintL, useMeters)
 }

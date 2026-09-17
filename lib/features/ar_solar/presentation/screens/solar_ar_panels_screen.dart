@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/network/api_constants.dart';
 import 'package:solar_sales/core/providers/network_providers.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
@@ -67,6 +68,8 @@ class SolarArPanelsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final canRead = auth.hasPermission(arSolarPanelReadPermission);
     final async = ref.watch(enabledSolarPanelsProvider);
     final scheme = Theme.of(context).colorScheme;
 
@@ -83,47 +86,57 @@ class SolarArPanelsScreen extends ConsumerWidget {
                 'Pick a panel, design the rooftop array, then view it in Google AR.',
           ),
           Expanded(
-            child: async.when(
-              loading: () => const LoadingState(),
-              error: (e, _) => ErrorState(
-                message: e.toString(),
-                onRetry: () => ref.invalidate(enabledSolarPanelsProvider),
-              ),
-              data: (panels) {
-                if (panels.isEmpty) {
-                  return const EmptyState(
-                    title: 'No solar panels yet',
+            child: !canRead
+                ? const EmptyState(
+                    title: 'Solar AR is not available',
                     subtitle:
-                        'Ask an admin to add panel sizes in Green Energy → AR Panels.',
-                    icon: Icons.solar_power_outlined,
-                  );
-                }
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    ref.invalidate(enabledSolarPanelsProvider);
-                    await ref.read(enabledSolarPanelsProvider.future);
-                  },
-                  child: ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
-                      AppSpacing.xs,
-                      AppSpacing.md,
-                      32,
+                        'Your role does not include Solar AR access. Ask an admin to grant permission.',
+                    icon: Icons.lock_outline_rounded,
+                  )
+                : async.when(
+                    loading: () => const LoadingState(),
+                    error: (e, _) => ErrorState(
+                      message: e.toString(),
+                      onRetry: () =>
+                          ref.invalidate(enabledSolarPanelsProvider),
                     ),
-                    itemCount: panels.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final panel = panels[index];
-                      return _PanelDesignCard(
-                        panel: panel,
-                        onDesign: () => _openDesigner(context, ref, panel),
-                      ).appFadeSlide(index: index);
+                    data: (panels) {
+                      if (panels.isEmpty) {
+                        return const EmptyState(
+                          title: 'No solar panels yet',
+                          subtitle:
+                              'Ask an admin to add panel sizes in Green Energy → AR Panels.',
+                          icon: Icons.solar_power_outlined,
+                        );
+                      }
+                      return RefreshIndicator(
+                        onRefresh: () async {
+                          ref.invalidate(enabledSolarPanelsProvider);
+                          await ref.read(enabledSolarPanelsProvider.future);
+                        },
+                        child: ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.md,
+                            AppSpacing.xs,
+                            AppSpacing.md,
+                            32,
+                          ),
+                          itemCount: panels.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final panel = panels[index];
+                            return _PanelDesignCard(
+                              panel: panel,
+                              onDesign: () =>
+                                  _openDesigner(context, ref, panel),
+                            ).appFadeSlide(index: index);
+                          },
+                        ),
+                      );
                     },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),

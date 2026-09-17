@@ -18,17 +18,9 @@ object SolarArrayGlbExporter {
         val busMat = builder.material(SolarArrayLook.BusbarRgb, metallic = 0.82f, roughness = 0.32f)
         val steelMat = builder.material(SolarArrayLook.SteelRgb, metallic = 0.90f, roughness = 0.34f)
         val aluMat = builder.material(SolarArrayLook.AluminumRgb, metallic = 0.94f, roughness = 0.22f)
-        val grassMat = builder.material(SolarArrayLook.GrassRgb, metallic = 0f, roughness = 0.92f)
         val concreteMat = builder.material(SolarArrayLook.ConcreteRgb, metallic = 0.08f, roughness = 0.78f)
 
-        builder.box(
-            cx = 0f, cy = -0.02f, cz = 0f,
-            sx = layout.footprintW * SolarArrayDims.SitePadScale,
-            sy = 0.03f,
-            sz = layout.footprintL * SolarArrayDims.SitePadScale,
-            rotXDeg = 0f,
-            material = grassMat,
-        )
+        // Match in-app preview: concrete pad only (no green site pad).
         builder.box(
             cx = 0f, cy = 0.018f, cz = 0f,
             sx = layout.footprintW, sy = 0.036f, sz = layout.footprintL,

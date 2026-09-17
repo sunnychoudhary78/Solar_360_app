@@ -54,7 +54,8 @@ object SolarArrayLook {
     val Frame = Color(0.78f, 0.80f, 0.82f)
     val Busbar = Color(0.72f, 0.58f, 0.18f)
     val Teal = Color(0.08f, 0.72f, 0.65f)
-    val Amber = Color(0.96f, 0.76f, 0.28f)
+    val Amber = Color(1.0f, 0.88f, 0.08f)
+    val Ink = Color(0.05f, 0.05f, 0.05f) 
 
     val GrassRgb = floatArrayOf(0.18f, 0.34f, 0.20f)
     val ConcreteRgb = floatArrayOf(0.62f, 0.63f, 0.61f)
@@ -63,4 +64,5 @@ object SolarArrayLook {
     val GlassRgb = floatArrayOf(0.06f, 0.10f, 0.16f)
     val FrameRgb = floatArrayOf(0.78f, 0.80f, 0.82f)
     val BusbarRgb = floatArrayOf(0.72f, 0.58f, 0.18f)
+
 }

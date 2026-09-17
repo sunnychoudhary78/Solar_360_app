@@ -17,6 +17,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -68,23 +70,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import io.github.sceneview.RenderQuality
 import io.github.sceneview.SceneView
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.Node
 import io.github.sceneview.rememberCameraManipulator
+import io.github.sceneview.rememberCameraNode
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberMaterialLoader
 import io.github.sceneview.rememberModelLoader
+import io.github.sceneview.rememberView
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -186,6 +194,8 @@ private fun SolarConfigScreen(
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
     val materialLoader = rememberMaterialLoader(engine)
+    val filamentView = rememberView(engine)
+    val cameraNode = rememberCameraNode(engine)
     val orbitHome = remember(product.id, product.widthM, product.lengthM) {
         val largest = SolarArraySpec(kw = 5, rows = 1, product = product, panelWatts = panelWatts)
         val frame = SolarArrayLayoutEngine.compute(largest)
@@ -202,6 +212,10 @@ private fun SolarConfigScreen(
         orbitHomePosition = orbitHome,
         targetPosition = cameraTarget,
     )
+    var widthChipPx by remember { mutableStateOf<Offset?>(null) }
+    var lengthChipPx by remember { mutableStateOf<Offset?>(null) }
+    val widthLabelWorld = remember(layout) { layout.widthLabelWorld() }
+    val lengthLabelWorld = remember(layout) { layout.lengthLabelWorld() }
 
     Column(
         modifier = Modifier
@@ -243,11 +257,19 @@ private fun SolarConfigScreen(
             SceneView(
                 modifier = Modifier.fillMaxSize(),
                 engine = engine,
+                view = filamentView,
+                cameraNode = cameraNode,
                 modelLoader = modelLoader,
                 materialLoader = materialLoader,
                 autoCenterContent = false,
                 renderQuality = RenderQuality.Performance,
                 cameraManipulator = cameraManipulator,
+                onFrame = {
+                    val vp = filamentView.viewport
+                    val cam = filamentView.camera ?: cameraNode.camera
+                    widthChipPx = projectWorldToScreen(cam, vp.width, vp.height, widthLabelWorld)
+                    lengthChipPx = projectWorldToScreen(cam, vp.width, vp.height, lengthLabelWorld)
+                },
             ) {
                 Node {
                     AssembledArray(
@@ -266,6 +288,16 @@ private fun SolarConfigScreen(
                 OverlayPill("${spec.kw} kW")
                 OverlayPill("${spec.panelCount} panels")
                 OverlayPill(formatTilt(spec.tiltDeg))
+            }
+            if (showDimensions) {
+                AnchoredDimensionChip(
+                    text = SolarInsights.formatWidth(layout, spec.useMeters),
+                    screen = widthChipPx,
+                )
+                AnchoredDimensionChip(
+                    text = SolarInsights.formatLength(layout, spec.useMeters),
+                    screen = lengthChipPx,
+                )
             }
             SpecReadout(
                 modifier = Modifier
@@ -331,14 +363,14 @@ private fun SolarConfigScreen(
                 }
                 ControlCard(title = "Heights") {
                     HeightControl(
-                        title = "North (front)",
+                        title = "South (front)",
                         heightM = northM,
                         onHeightMChange = { value ->
                             northM = SolarHeightLimits.clampNorthM(value, southM, spec.arrayL)
                         },
                     )
                     HeightControl(
-                        title = "South (back)",
+                        title = "North (back)",
                         heightM = southM,
                         onHeightMChange = { value ->
                             southM = SolarHeightLimits.clampSouthM(value, northM, spec.arrayL)
@@ -542,7 +574,7 @@ private fun ControlCard(
                 title,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = scheme.primary,
+                color = Color.White,
             )
             content()
         },
@@ -600,6 +632,86 @@ private fun BrandSlider(
             activeTrackColor = scheme.primary,
             inactiveTrackColor = scheme.outlineVariant,
         ),
+    )
+}
+
+@Composable
+private fun BoxScope.AnchoredDimensionChip(
+    text: String,
+    screen: Offset?,
+) {
+    if (screen == null) return
+    var chipW by remember { mutableIntStateOf(0) }
+    var chipH by remember { mutableIntStateOf(0) }
+    DimensionChip(
+        text = text,
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .onSizeChanged { size ->
+                chipW = size.width
+                chipH = size.height
+            }
+            .offset {
+                IntOffset(
+                    screen.x.roundToInt() - chipW / 2,
+                    screen.y.roundToInt() - chipH / 2,
+                )
+            },
+    )
+}
+
+@Composable
+private fun DimensionChip(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text,
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xE6FBBF24))
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        color = Color.Black,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+    )
+}
+
+private const val DimBarGap = 0.52f
+private const val DimLabelLift = 0.42f
+private const val DimLabelOutset = 0.55f
+
+private fun SolarArrayLayout.widthLabelWorld(): Position {
+    return Position(0f, DimLabelLift, footprintL / 2f + DimBarGap + DimLabelOutset)
+}
+
+private fun SolarArrayLayout.lengthLabelWorld(): Position {
+    return Position(footprintW / 2f + DimBarGap + DimLabelOutset, DimLabelLift, 0f)
+}
+
+private fun projectWorldToScreen(
+    camera: com.google.android.filament.Camera,
+    viewportWidth: Int,
+    viewportHeight: Int,
+    world: Position,
+): Offset? {
+    if (viewportWidth <= 0 || viewportHeight <= 0) return null
+    val view = FloatArray(16)
+    camera.getViewMatrix(view)
+    val projD = DoubleArray(16)
+    camera.getCullingProjectionMatrix(projD)
+    val proj = FloatArray(16) { index -> projD[index].toFloat() }
+    val world4 = floatArrayOf(world.x, world.y, world.z, 1f)
+    val eye = FloatArray(4)
+    val clip = FloatArray(4)
+    android.opengl.Matrix.multiplyMV(eye, 0, view, 0, world4, 0)
+    android.opengl.Matrix.multiplyMV(clip, 0, proj, 0, eye, 0)
+    if (clip[3] <= 1e-5f) return null
+    val ndcX = clip[0] / clip[3]
+    val ndcY = clip[1] / clip[3]
+    return Offset(
+        (ndcX + 1f) * 0.5f * viewportWidth,
+        (1f - ndcY) * 0.5f * viewportHeight,
     )
 }
 
@@ -673,7 +785,11 @@ private fun HeightControl(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = Color.White,
+            )
             OutlinedTextField(
                 modifier = Modifier
                     .width(96.dp)
@@ -696,12 +812,15 @@ private fun HeightControl(
                         }
                     }
                 },
-                suffix = { Text("ft") },
+                suffix = { Text("ft", color = Color.White) },
                 singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = scheme.primary,
                     cursorColor = scheme.primary,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    disabledTextColor = Color.White,
                 ),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Decimal,
@@ -729,8 +848,8 @@ private fun formatTilt(tiltDeg: Float): String {
     val mag = abs(tiltDeg)
     return when {
         mag < 0.5f -> "0° · level"
-        tiltDeg > 0f -> "${"%.0f".format(mag)}° N"
-        else -> "${"%.0f".format(mag)}° S"
+        tiltDeg > 0f -> "${"%.0f".format(mag)}° S"
+        else -> "${"%.0f".format(mag)}° N"
     }
 }
 
@@ -760,13 +879,14 @@ private fun SpecReadout(
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            "Setup  ${SolarInsights.formatSetup(layout, spec.useMeters)}",
+            "Width  ${SolarInsights.formatWidth(layout, spec.useMeters)}   ·   " +
+                "Length  ${SolarInsights.formatLength(layout, spec.useMeters)}",
             color = Color(0xFFE6FFFA),
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            "N ${SolarInsights.formatAxisMagnitude(spec.northHeightM, spec.useMeters)}   ·   " +
-                "S ${SolarInsights.formatAxisMagnitude(spec.southHeightM, spec.useMeters)}   ·   " +
+            "S ${SolarInsights.formatAxisMagnitude(spec.northHeightM, spec.useMeters)}   ·   " +
+                "N ${SolarInsights.formatAxisMagnitude(spec.southHeightM, spec.useMeters)}   ·   " +
                 formatTilt(spec.tiltDeg),
             color = Color(0xFFE6FFFA),
             style = MaterialTheme.typography.bodySmall,

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/widgets/status_badge.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/shared/utils/excel_download_action.dart';
 import 'package:solar_sales/shared/utils/excel_export.dart';
 import 'package:solar_sales/shared/utils/excel_rows.dart';
@@ -44,6 +45,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canRead = ref.watch(authProvider).hasPermission('report.read');
     final async = ref.watch(reportsProvider);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -53,14 +55,22 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       appBar: AppAppBar(
         title: 'Reports',
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-            onPressed: () => ref.invalidate(reportsProvider),
-          ),
+          if (canRead)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'Refresh',
+              onPressed: () => ref.invalidate(reportsProvider),
+            ),
         ],
       ),
-      body: async.when(
+      body: !canRead
+          ? const EmptyState(
+              title: 'Reports are not available',
+              subtitle:
+                  'Your role does not include report access. Ask an admin to grant permission.',
+              icon: Icons.lock_outline_rounded,
+            )
+          : async.when(
         loading: () => const LoadingState(),
         error: (e, _) => ErrorState(
           message: cleanError(e),

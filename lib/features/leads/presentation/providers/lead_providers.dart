@@ -31,9 +31,13 @@ final allLeadsProvider = FutureProvider.autoDispose<List<LeadModel>>((
   return leads.where((lead) => lead.isActive).toList();
 });
 
-/// Unfiltered lead list used by Green Energy Reports (matches web `/solar/reports`).
+/// Unfiltered lead list used by Green Energy Reports (requires `report.read`).
 final greenEnergyReportsLeadsProvider =
-    FutureProvider.autoDispose<List<LeadModel>>((ref) {
+    FutureProvider.autoDispose<List<LeadModel>>((ref) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.hasPermission('report.read')) {
+    return const [];
+  }
   return ref.watch(leadRepositoryProvider).getAllLeads();
 });
 

@@ -3,6 +3,7 @@
 /// Solar lead permissions intentionally have two levels:
 /// - `lead.read` grants API and workflow access.
 /// - `leads.read` grants the Leads list/menu (CompanyAdmin + SolarSales).
+/// - `ar_solar_panel.read` grants the Solar AR catalog (not legacy solar_panel.*).
 library;
 
 class AppModules {
@@ -38,6 +39,7 @@ const solarPerms = [
   'leads.read',
   'installation.read',
   'closedlead.read',
+  'ar_solar_panel.read',
 ];
 
 const billbookRoleNames = [
