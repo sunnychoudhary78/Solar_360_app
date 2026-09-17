@@ -326,7 +326,7 @@ Scale the panel mesh if catalog `widthM`/`lengthM` differ from the authored GLB 
 
 ### 6.4 Designer UX
 
-Split screen: SceneView **top**, controls **bottom** (scrollable).
+Cinematic preview-first: **full-bleed SceneView** behind a floating glass HUD. Compact header (close, title, watt chip) and KPI pills overlay the top; a 2-line spec readout sits above a frosted control sheet (~38% height, scrollable) with a sticky **View in Google AR** CTA.
 
 | Control | Spec |
 | --- | --- |
@@ -334,10 +334,10 @@ Split screen: SceneView **top**, controls **bottom** (scrollable).
 | Rows | **1 or 2**, default 2 |
 | North / south post height | Clamp ~1–13 ft (store metres). Slope vs array length must stay valid (`sin < 0.98`) |
 | Panel watts | Slider min–max, step from catalog |
-| Overlays | Dimension labels, north/south labels, ft/m toggle |
+| Overlays | Dimension / N-S chips on the sheet header (not a separate Display card) |
 | Primary button | **View in Google AR**; while working show **Preparing AR…** and disable the button |
 
-Close icon finishes the Activity (back to Flutter list).
+Close icon finishes the Activity (back to Flutter list). Camera orbit framing reserves ~12% top and ~36% bottom chrome so the array stays in the visible window.
 
 Live preview: Filament engine + `modelLoader` from `models/solar_panel.glb`. Recompute `SolarArrayLayoutEngine` whenever spec changes. **No API** during slider moves.
 
