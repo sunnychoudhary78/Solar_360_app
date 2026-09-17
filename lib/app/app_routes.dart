@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:solar_sales/app/app_root.dart';
+import 'package:solar_sales/features/ar_solar/presentation/screens/solar_ar_panels_screen.dart';
 import 'package:solar_sales/features/auth/presentation/screens/login_screen.dart'
     show LoginScreen, ChangePasswordScreen;
 import 'package:solar_sales/features/customers/presentation/screens/customer_form_screen.dart';
@@ -55,6 +56,7 @@ class AppRoutes {
     },
     '/solar/leads/form': (_) => const LeadFormScreen(),
     '/solar/home': (_) => const SolarHomeScreen(),
+    '/solar/ar': (_) => const SolarArPanelsScreen(),
     '/solar/notifications': (_) => const NotificationsScreen(),
     '/solar/support': (_) => const SupportTicketsScreen(),
     '/dashboard': (_) => const DashboardScreen(),

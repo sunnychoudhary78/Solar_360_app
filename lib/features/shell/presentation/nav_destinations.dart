@@ -10,13 +10,7 @@ import 'package:solar_sales/features/quotations/presentation/screens/quotations_
 import 'package:solar_sales/shared/module/module_access.dart';
 
 /// Where a destination lives in the navigation chrome.
-enum NavSection {
-  main,
-  catalog,
-  approvals,
-  solarCrm,
-  app,
-}
+enum NavSection { main, catalog, approvals, solarCrm, app }
 
 /// Whether the destination is an IndexedStack tab or a pushed named route.
 enum NavKind { shellTab, route }
@@ -299,6 +293,18 @@ class NavDestinations {
       quickActionSubtitle: 'Post-conversion pipeline',
     ),
     AppDestination(
+      id: 'ge_solar_ar',
+      label: 'Solar AR',
+      icon: Icons.view_in_ar_outlined,
+      selectedIcon: Icons.view_in_ar_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      permission: 'ar_solar_panel.read',
+      route: '/solar/ar',
+      quickAction: true,
+      quickActionSubtitle: 'Design rooftop in AR',
+    ),
+    AppDestination(
       id: 'ge_customers',
       label: 'Customers',
       icon: Icons.people_outline,
@@ -325,7 +331,7 @@ class NavDestinations {
       selectedIcon: Icons.analytics_rounded,
       section: NavSection.solarCrm,
       kind: NavKind.route,
-      anyOf: ['report.read', 'leads.read', 'lead.read', 'dashboard.read'],
+      permission: 'report.read',
       route: '/solar/reports',
       quickAction: true,
       quickActionSubtitle: 'Pipeline summaries',

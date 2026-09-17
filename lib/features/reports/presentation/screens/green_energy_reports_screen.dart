@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/workflow/lead_workflow.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/shared/utils/excel_download_action.dart';
 import 'package:solar_sales/shared/utils/excel_export.dart';
@@ -43,6 +44,7 @@ class _GreenEnergyReportsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final canRead = ref.watch(authProvider).hasPermission('report.read');
     final async = ref.watch(greenEnergyReportsLeadsProvider);
     final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
@@ -53,14 +55,23 @@ class _GreenEnergyReportsScreenState
         title: 'Reports',
         subtitle: 'Green Energy pipeline',
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-            onPressed: () => ref.invalidate(greenEnergyReportsLeadsProvider),
-          ),
+          if (canRead)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'Refresh',
+              onPressed: () =>
+                  ref.invalidate(greenEnergyReportsLeadsProvider),
+            ),
         ],
       ),
-      body: async.when(
+      body: !canRead
+          ? const EmptyState(
+              title: 'Reports are not available',
+              subtitle:
+                  'Your role does not include report access. Ask an admin to grant permission.',
+              icon: Icons.lock_outline_rounded,
+            )
+          : async.when(
         loading: () => const LoadingState(),
         error: (e, _) => ErrorState(
           message: cleanError(e),

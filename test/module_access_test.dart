@@ -134,9 +134,9 @@ void main() {
     AppDestination dest(String id) =>
         NavDestinations.solar.firstWhere((d) => d.id == id);
 
-    test('leads and converted use leads.read or lead.read', () {
+    test('leads menu uses leads.read only; converted still allows lead.read', () {
       expect(dest('ge_leads').visibleFor((p) => p == 'leads.read'), isTrue);
-      expect(dest('ge_leads').visibleFor((p) => p == 'lead.read'), isTrue);
+      expect(dest('ge_leads').visibleFor((p) => p == 'lead.read'), isFalse);
       expect(dest('ge_converted').visibleFor((p) => p == 'lead.read'), isTrue);
       expect(
         dest('ge_converted').visibleFor((p) => p == 'invoice.read'),
@@ -154,12 +154,23 @@ void main() {
       expect(dest('ge_completed').visibleFor((p) => p == 'lead.read'), isFalse);
     });
 
-    test('reports match web anyOf permissions', () {
+    test('reports require report.read only', () {
       expect(dest('ge_reports').visibleFor((p) => p == 'report.read'), isTrue);
-      expect(dest('ge_reports').visibleFor((p) => p == 'leads.read'), isTrue);
-      expect(dest('ge_reports').visibleFor((p) => p == 'lead.read'), isTrue);
-      expect(dest('ge_reports').visibleFor((p) => p == 'dashboard.read'), isTrue);
+      expect(dest('ge_reports').visibleFor((p) => p == 'leads.read'), isFalse);
+      expect(dest('ge_reports').visibleFor((p) => p == 'lead.read'), isFalse);
+      expect(dest('ge_reports').visibleFor((p) => p == 'dashboard.read'), isFalse);
       expect(dest('ge_reports').visibleFor((p) => p == 'invoice.read'), isFalse);
+    });
+
+    test('solar AR uses ar_solar_panel.read, not solar_panel.read', () {
+      expect(
+        dest('ge_solar_ar').visibleFor((p) => p == 'ar_solar_panel.read'),
+        isTrue,
+      );
+      expect(
+        dest('ge_solar_ar').visibleFor((p) => p == 'solar_panel.read'),
+        isFalse,
+      );
     });
 
     test('support is visible with either solar or ticket permission', () {

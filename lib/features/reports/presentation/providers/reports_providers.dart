@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/providers/network_providers.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 
 import '../../data/models/report_models.dart';
 import '../../data/reports_api_service.dart';
@@ -15,5 +16,9 @@ final reportsRepositoryProvider = Provider<ReportsRepository>((ref) {
 });
 
 final reportsProvider = FutureProvider<ReportsBundle>((ref) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.hasPermission('report.read')) {
+    return const ReportsBundle();
+  }
   return ref.watch(reportsRepositoryProvider).loadAll();
 });

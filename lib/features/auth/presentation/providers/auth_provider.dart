@@ -353,7 +353,8 @@ class AuthNotifier extends Notifier<AuthState> {
       final previousRoles = state.roles;
       final previousProfile = state.profile;
 
-      // Critical path: one network call (switch-role returns user + permissions).
+      // Switch-role returns a new JWT; menus must use the active-role
+      // permission list from GET /auth/permissions, not a stale cache.
       final result = await _repo.switchRole(role);
 
       var profile = _profileFromSwitchUser(
@@ -361,10 +362,12 @@ class AuthNotifier extends Notifier<AuthState> {
         previous: previousProfile,
       );
 
-      // Prefer permissions from the switch response; only fetch if empty.
-      var permissions = result.permissions;
-      if (permissions.isEmpty) {
+      List<String> permissions;
+      try {
         permissions = await _repo.getPermissions();
+      } catch (_) {
+        permissions = result.permissions;
+        if (permissions.isEmpty) rethrow;
       }
 
       final assignedRoles = _mergeAssignedRolesInMemory(

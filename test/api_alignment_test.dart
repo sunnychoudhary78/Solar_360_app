@@ -4,6 +4,7 @@ import 'package:solar_sales/core/network/api_endpoints.dart';
 import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/core/utils/profile_url.dart';
 import 'package:solar_sales/core/utils/upload_url.dart';
+import 'package:solar_sales/features/ar_solar/presentation/providers/ar_solar_providers.dart';
 import 'package:solar_sales/features/auth/data/auth_api_service.dart';
 import 'package:solar_sales/features/leads/presentation/providers/green_energy_dashboard_providers.dart';
 import 'package:solar_sales/features/notifications/data/notification_api_service.dart';
@@ -49,6 +50,12 @@ void main() {
 
     test('territory filters use the same permission name as web', () {
       expect(territoryFiltersPermission, 'territoryFilters');
+    });
+
+    test('AR solar panel permissions match the API rename', () {
+      expect(arSolarPanelReadPermission, 'ar_solar_panel.read');
+      expect(arSolarPanelCreatePermission, 'ar_solar_panel.create');
+      expect(arSolarPanelUpdatePermission, 'ar_solar_panel.update');
     });
 
     test('marketing templates endpoint matches backend', () {
