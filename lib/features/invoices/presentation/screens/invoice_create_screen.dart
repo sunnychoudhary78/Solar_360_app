@@ -16,6 +16,7 @@ import 'package:solar_sales/shared/utils/validators.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/document_totals_summary.dart';
+import 'package:solar_sales/shared/widgets/dropdown_separated_item.dart';
 import 'package:solar_sales/shared/widgets/invoice_dispatch_fields.dart';
 import 'package:solar_sales/shared/widgets/party_address_fields.dart';
 import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
@@ -555,6 +556,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             DropdownButtonFormField<String>(
               value: line.itemId,
               isExpanded: true,
+              itemHeight: null,
               decoration: const InputDecoration(
                 labelText: 'Select Item *',
                 contentPadding: EdgeInsets.symmetric(
@@ -562,18 +564,26 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                   vertical: 12,
                 ),
               ),
-              items: approved
-                  .map(
-                    (it) => DropdownMenuItem(
-                      value: it.id,
-                      child: Text(
-                        '${it.name} (${formatInr(it.sellingPrice)}, ${ItemUnits.labelFor(it.unit)}, GST ${it.gstPercent}%)',
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
+              selectedItemBuilder: (context) => [
+                for (final it in approved)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${it.name} (${formatInr(it.sellingPrice)}, ${ItemUnits.labelFor(it.unit)}, GST ${it.gstPercent}%)',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
-                  )
-                  .toList(),
+                  ),
+              ],
+              items: separatedDropdownMenuItems(
+                items: approved,
+                value: (it) => it.id,
+                child: (it) => Text(
+                  '${it.name} (${formatInr(it.sellingPrice)}, ${ItemUnits.labelFor(it.unit)}, GST ${it.gstPercent}%)',
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ),
               onChanged: (v) {
                 setState(() {
                   line.itemId = v;
