@@ -18,6 +18,8 @@ import 'package:solar_sales/features/leads/presentation/screens/image_viewer_scr
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
 import 'package:solar_sales/features/leads/presentation/widgets/lead_attachments_view.dart';
 import 'package:solar_sales/features/leads/presentation/widgets/workflow_stepper.dart';
+import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_history_section.dart';
+import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_share_dialog.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
@@ -1063,6 +1065,9 @@ registration_time=${result.regTime.trim()}
     final textTheme = Theme.of(context).textTheme;
     final auth = ref.watch(authProvider);
     final roleKey = auth.workflowRoleKey;
+    final canWhatsAppLead =
+        auth.hasPermission('lead.update') || auth.hasPermission('lead.create');
+    final canViewWhatsAppHistory = auth.hasPermission('lead.read');
     final nextStatuses = _resolveNextStatuses(roleKey);
     final files = collectLeadFiles(_lead);
     final customerName = _lead.fullName.trim().isEmpty
@@ -1231,6 +1236,25 @@ registration_time=${result.regTime.trim()}
                       ),
                     ),
                   _headerCard(customerName),
+                  if (canWhatsAppLead && _lead.id.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => showWhatsAppShareDialog(
+                          context,
+                          entityType: 'lead',
+                          entityId: _lead.id,
+                          title: 'Message lead on WhatsApp',
+                        ),
+                        icon: const Icon(
+                          Icons.chat_rounded,
+                          color: Color(0xFF25D366),
+                        ),
+                        label: const Text('WhatsApp'),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   WorkflowStepper(
                     currentStatus: _lead.status.trim().isNotEmpty
@@ -1615,6 +1639,14 @@ registration_time=${result.regTime.trim()}
                     )
                   else
                     ...history.map(_historyTile),
+                  if (canViewWhatsAppHistory && _lead.id.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    WhatsAppHistorySection(
+                      entityType: 'lead',
+                      entityId: _lead.id,
+                      padding: EdgeInsets.zero,
+                    ),
+                  ],
                 ],
               ),
             ),

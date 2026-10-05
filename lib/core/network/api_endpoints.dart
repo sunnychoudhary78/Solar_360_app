@@ -103,6 +103,11 @@ class ApiEndpoints {
   static String invoicePdf(String id) => 'invoices/$id/pdf';
   static String invoiceEmail(String id) => 'invoices/$id/send-email';
 
+  // WhatsApp share (same routes as the web app)
+  static const whatsappCompose = 'whatsapp/compose';
+  static const whatsappShare = 'whatsapp/share';
+  static const whatsappMessages = 'whatsapp/messages';
+
   // Solar CRM — leads
   static const leads = 'leads';
   static String lead(String id) => 'leads/$id';

@@ -19,6 +19,9 @@ import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:solar_sales/shared/widgets/premium_ui.dart';
 import 'package:solar_sales/shared/widgets/rejection_banner.dart';
 
+import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_history_section.dart';
+import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_share_dialog.dart';
+
 import '../providers/quotation_providers.dart';
 
 class QuotationDetailScreen extends ConsumerWidget {
@@ -90,6 +93,21 @@ class QuotationDetailScreen extends ConsumerWidget {
               onPressed: () => _sendEmail(context, ref, q.customer?.email),
               icon: const Icon(Icons.email_outlined, size: 18),
               label: const Text('Email'),
+            ),
+          if (canCreate && canEmail)
+            OutlinedButton.icon(
+              onPressed: () => showWhatsAppShareDialog(
+                context,
+                entityType: 'quotation',
+                entityId: q.id,
+                title: 'Send quotation on WhatsApp',
+              ),
+              icon: const Icon(
+                Icons.chat_rounded,
+                size: 18,
+                color: Color(0xFF25D366),
+              ),
+              label: const Text('WhatsApp'),
             ),
           if (canCreate && canSubmit)
             FilledButton(
@@ -204,6 +222,10 @@ class QuotationDetailScreen extends ConsumerWidget {
                           gstAmount: q.gstAmount,
                           totalAmount: q.totalAmount,
                         ),
+                      ),
+                      WhatsAppHistorySection(
+                        entityType: 'quotation',
+                        entityId: q.id,
                       ),
                     ],
                   ),

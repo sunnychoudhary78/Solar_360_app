@@ -24,6 +24,9 @@ import 'package:solar_sales/shared/widgets/rejection_banner.dart';
 import '../../data/models/invoice_model.dart';
 import '../providers/invoice_providers.dart';
 import '../utils/invoice_warehouse_stock.dart';
+import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_history_section.dart';
+import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_share_dialog.dart';
+
 import '../widgets/invoice_stock_plan_panel.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
@@ -103,6 +106,21 @@ class InvoiceDetailScreen extends ConsumerWidget {
               onPressed: () => _sendEmail(context, ref, inv.customer?.email),
               icon: const Icon(Icons.email_outlined, size: 18),
               label: const Text('Email'),
+            ),
+          if (canCreate && canEmail)
+            OutlinedButton.icon(
+              onPressed: () => showWhatsAppShareDialog(
+                context,
+                entityType: 'invoice',
+                entityId: inv.id,
+                title: 'Send invoice on WhatsApp',
+              ),
+              icon: const Icon(
+                Icons.chat_rounded,
+                size: 18,
+                color: Color(0xFF25D366),
+              ),
+              label: const Text('WhatsApp'),
             ),
           if (canCreate && canSubmit)
             FilledButton(
@@ -223,6 +241,10 @@ class InvoiceDetailScreen extends ConsumerWidget {
                           gstAmount: inv.gstAmount,
                           totalAmount: inv.totalAmount,
                         ),
+                      ),
+                      WhatsAppHistorySection(
+                        entityType: 'invoice',
+                        entityId: inv.id,
                       ),
                     ],
                   ),

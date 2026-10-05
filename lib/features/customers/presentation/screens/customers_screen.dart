@@ -15,6 +15,8 @@ import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 import 'package:solar_sales/shared/utils/formatters.dart';
 
+import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_history_section.dart';
+
 import '../../data/models/customer_model.dart';
 import '../providers/customer_providers.dart';
 
@@ -63,7 +65,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(customerListProvider);
-    final canCreate = ref.watch(authProvider).hasPermission('customer.create');
+    final auth = ref.watch(authProvider);
+    final canCreate = auth.hasPermission('customer.create');
+    final canViewWhatsApp = auth.hasPermission('customer.read');
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -154,6 +158,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                           return _CustomerRow(
                             customer: customer,
                             index: index,
+                            onWhatsApp: canViewWhatsApp
+                                ? () => showWhatsAppCustomerHistory(
+                                      context,
+                                      customerId: customer.id,
+                                      customerName: customer.name,
+                                    )
+                                : null,
                             onTap: () async {
                               final result = await Navigator.pushNamed(
                                 context,
@@ -181,11 +192,13 @@ class _CustomerRow extends StatelessWidget {
   final CustomerModel customer;
   final int index;
   final VoidCallback onTap;
+  final VoidCallback? onWhatsApp;
 
   const _CustomerRow({
     required this.customer,
     required this.index,
     required this.onTap,
+    this.onWhatsApp,
   });
 
   @override
@@ -204,11 +217,25 @@ class _CustomerRow extends StatelessWidget {
       subtitle: subtitle,
       leadingLabel: customer.name.isEmpty ? 'C' : customer.name,
       onTap: onTap,
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(
-              alpha: 0.5,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onWhatsApp != null)
+            IconButton(
+              tooltip: 'WhatsApp history',
+              onPressed: onWhatsApp,
+              icon: const Icon(
+                Icons.chat_rounded,
+                color: Color(0xFF25D366),
+              ),
             ),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(
+                  alpha: 0.5,
+                ),
+          ),
+        ],
       ),
     );
   }
