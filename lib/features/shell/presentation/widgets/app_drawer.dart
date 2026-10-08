@@ -97,6 +97,7 @@ class AppDrawer extends ConsumerWidget {
         activeModule,
         section,
         hasPerm,
+        companyAdmin: auth.isCompanyAdmin,
       );
       if (items.isEmpty) continue;
 

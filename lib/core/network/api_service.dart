@@ -4,8 +4,13 @@ import 'package:flutter/foundation.dart';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
+  final Map<String, String> fieldErrors;
 
-  const ApiException(this.message, {this.statusCode});
+  const ApiException(
+    this.message, {
+    this.statusCode,
+    this.fieldErrors = const {},
+  });
 
   @override
   String toString() => message;
@@ -124,13 +129,22 @@ class ApiService {
     if (errorData is Map) {
       final code = errorData['code']?.toString() ?? '';
       final message = errorData['message'] ?? errorData['error'];
+      final fieldErrors = _fieldErrorsFrom(errorData['fieldErrors']);
       if (code == 'SUBSCRIPTION_INACTIVE' ||
           (message != null &&
               message.toString().toUpperCase().contains('SUBSCRIPTION'))) {
-        return ApiException('SUBSCRIPTION_INACTIVE', statusCode: status);
+        return ApiException(
+          'SUBSCRIPTION_INACTIVE',
+          statusCode: status,
+          fieldErrors: fieldErrors,
+        );
       }
       if (message != null) {
-        return ApiException(message.toString(), statusCode: status);
+        return ApiException(
+          message.toString(),
+          statusCode: status,
+          fieldErrors: fieldErrors,
+        );
       }
     }
 
@@ -168,5 +182,17 @@ class ApiService {
     }
 
     return ApiException('Something went wrong', statusCode: status);
+  }
+
+  Map<String, String> _fieldErrorsFrom(dynamic raw) {
+    if (raw is! Map) return const {};
+    final out = <String, String>{};
+    for (final entry in raw.entries) {
+      final key = '${entry.key}'.trim();
+      final value = '${entry.value}'.trim();
+      if (key.isEmpty || value.isEmpty) continue;
+      out[key] = value;
+    }
+    return out;
   }
 }

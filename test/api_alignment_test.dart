@@ -71,13 +71,17 @@ void main() {
     });
 
     test('API host follows the selected environment', () {
-      expect(ApiConstants.baseUrl, contains('immortalgroup.in/api'));
-      expect(
-        ApiConstants.baseUrl,
-        ApiConstants.current == Environment.uat
-            ? 'https://uat-imt-billbook.immortalgroup.in/api'
-            : 'https://imt-billbook.immortalgroup.in/api',
-      );
+      switch (ApiConstants.current) {
+        case Environment.local:
+          expect(ApiConstants.baseUrl, 'http://192.168.1.21:3004/api');
+        case Environment.uat:
+          expect(
+            ApiConstants.baseUrl,
+            'https://uat-imt-billbook.immortalgroup.in/api',
+          );
+        case Environment.prod:
+          expect(ApiConstants.baseUrl, 'https://imt-billbook.immortalgroup.in/api');
+      }
     });
 
     test('lead upload URLs use the backend /api/uploads mount', () {

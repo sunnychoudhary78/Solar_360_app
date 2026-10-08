@@ -141,6 +141,26 @@ class ApiEndpoints {
   static const employeePhoto = 'employee-photo';
   static const employeePhotoUpload = 'employee-photo/photo';
 
+  // Site survey templates and filled surveys
+  static const surveyTemplates = 'survey-templates';
+  static String surveyTemplate(String id) => 'survey-templates/$id';
+  static String surveyTemplatePublish(String id) => 'survey-templates/$id/publish';
+  static String surveyTemplateSetDefault(String id) =>
+      'survey-templates/$id/set-default';
+  static String surveyTemplateDuplicate(String id) =>
+      'survey-templates/$id/duplicate';
+  static String surveyTemplateDeactivate(String id) =>
+      'survey-templates/$id/deactivate';
+  static const surveyTemplateStarter = 'survey-templates/starter';
+
+  static String siteSurveyByLead(String leadId) => 'site-surveys/lead/$leadId';
+  static String siteSurvey(String id) => 'site-surveys/$id';
+  static String siteSurveyDiscard(String id) => 'site-surveys/$id/discard';
+  static String siteSurveyFiles(String id) => 'site-surveys/$id/files';
+  static String siteSurveyFile(String id, String fileId) =>
+      'site-surveys/$id/files/$fileId';
+  static String siteSurveyPdf(String id) => 'site-surveys/$id/pdf';
+
   // AR solar panel catalog
   static const solarPanels = 'solar-panels';
   static const solarPanelsEnabled = 'solar-panels/enabled';

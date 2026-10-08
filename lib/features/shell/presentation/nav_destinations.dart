@@ -7,6 +7,7 @@ import 'package:solar_sales/features/invoices/presentation/screens/invoices_scre
 import 'package:solar_sales/features/leads/presentation/screens/solar_home_screen.dart';
 import 'package:solar_sales/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:solar_sales/features/quotations/presentation/screens/quotations_screen.dart';
+import 'package:solar_sales/features/site_survey/data/site_survey_config.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
 
 /// Where a destination lives in the navigation chrome.
@@ -31,6 +32,7 @@ class AppDestination {
     this.screen,
     this.quickAction = false,
     this.quickActionSubtitle,
+    this.companyAdminWhenLocal = false,
   });
 
   final String id;
@@ -56,12 +58,23 @@ class AppDestination {
   final bool quickAction;
   final String? quickActionSubtitle;
 
+  /// Shown to Company Admin while site survey data is still stored on device.
+  final bool companyAdminWhenLocal;
+
   IconData get effectiveSelectedIcon => selectedIcon ?? icon;
 
   bool visibleFor(bool Function(String permission) hasPermission) {
     if (anyOf.isNotEmpty) return anyOf.any(hasPermission);
     if (permission.isEmpty) return true;
     return hasPermission(permission);
+  }
+
+  bool shownTo({
+    required bool Function(String permission) hasPermission,
+    bool companyAdmin = false,
+  }) {
+    if (visibleFor(hasPermission)) return true;
+    return companyAdminWhenLocal && companyAdmin && kSiteSurveyUseLocalStore;
   }
 }
 
@@ -349,6 +362,23 @@ class NavDestinations {
       quickActionSubtitle: 'Add a new lead',
     ),
     AppDestination(
+      id: 'ge_survey_templates',
+      label: 'Survey Templates',
+      icon: Icons.assignment_outlined,
+      selectedIcon: Icons.assignment_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      anyOf: [
+        'survey_template.read',
+        'survey_template.create',
+        'survey_template.update',
+      ],
+      companyAdminWhenLocal: true,
+      route: '/solar/survey-templates',
+      quickAction: true,
+      quickActionSubtitle: 'Design site survey forms',
+    ),
+    AppDestination(
       id: 'ge_support',
       label: 'Support',
       icon: Icons.headset_mic_outlined,
@@ -390,22 +420,24 @@ class NavDestinations {
   static List<AppDestination> forSection(
     String moduleId,
     NavSection section,
-    bool Function(String permission) hasPermission,
-  ) {
+    bool Function(String permission) hasPermission, {
+    bool companyAdmin = false,
+  }) {
     return forModule(moduleId).where((d) {
       if (d.section != section) return false;
-      return d.visibleFor(hasPermission);
+      return d.shownTo(hasPermission: hasPermission, companyAdmin: companyAdmin);
     }).toList();
   }
 
   /// Home quick-action tiles (excludes the home tab itself).
   static List<AppDestination> quickActions(
     String moduleId,
-    bool Function(String permission) hasPermission,
-  ) {
+    bool Function(String permission) hasPermission, {
+    bool companyAdmin = false,
+  }) {
     return forModule(moduleId).where((d) {
       if (!d.quickAction) return false;
-      return d.visibleFor(hasPermission);
+      return d.shownTo(hasPermission: hasPermission, companyAdmin: companyAdmin);
     }).toList();
   }
 

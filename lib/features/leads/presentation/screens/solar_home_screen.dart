@@ -174,6 +174,7 @@ class _SolarHomeContent extends ConsumerWidget {
     final quickDests = NavDestinations.quickActions(
       AppModules.solar,
       auth.hasPermission,
+      companyAdmin: auth.isCompanyAdmin,
     );
 
     return Column(

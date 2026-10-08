@@ -40,6 +40,7 @@ import 'package:solar_sales/features/reports/presentation/screens/reports_screen
 import 'package:solar_sales/features/settings/presentation/screens/marketing_templates_screen.dart';
 import 'package:solar_sales/features/settings/presentation/screens/settings_screen.dart';
 import 'package:solar_sales/features/shell/presentation/screens/app_shell.dart';
+import 'package:solar_sales/features/site_survey/presentation/screens/survey_templates_screen.dart';
 import 'package:solar_sales/features/support/presentation/screens/support_ticket_detail_screen.dart';
 import 'package:solar_sales/features/support/presentation/screens/support_tickets_screen.dart';
 
@@ -57,6 +58,7 @@ class AppRoutes {
     '/solar/leads/form': (_) => const LeadFormScreen(),
     '/solar/home': (_) => const SolarHomeScreen(),
     '/solar/ar': (_) => const SolarArPanelsScreen(),
+    '/solar/survey-templates': (_) => const SurveyTemplatesScreen(),
     '/solar/notifications': (_) => const NotificationsScreen(),
     '/solar/support': (_) => const SupportTicketsScreen(),
     '/dashboard': (_) => const DashboardScreen(),

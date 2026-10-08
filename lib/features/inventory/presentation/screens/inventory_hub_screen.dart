@@ -70,7 +70,7 @@ class InventoryHubScreen extends ConsumerWidget {
                 const SliverToBoxAdapter(
                   child: PageHeader(
                     icon: Icons.inventory_2_rounded,
-                    title: 'Inventory Operations',
+                      title: 'Inventory Operations',
                     subtitle:
                         'Manage materials, track ledger history & monitor stock alerts',
                   ),

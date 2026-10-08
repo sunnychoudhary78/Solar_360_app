@@ -18,6 +18,8 @@ import 'package:solar_sales/features/leads/presentation/screens/image_viewer_scr
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
 import 'package:solar_sales/features/leads/presentation/widgets/lead_attachments_view.dart';
 import 'package:solar_sales/features/leads/presentation/widgets/workflow_stepper.dart';
+import 'package:solar_sales/features/site_survey/presentation/site_survey_access.dart';
+import 'package:solar_sales/features/site_survey/presentation/widgets/site_survey_lead_card.dart';
 import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_history_section.dart';
 import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_share_dialog.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -1363,6 +1365,8 @@ registration_time=${result.regTime.trim()}
                       _lead.vendorVisitedSite ? 'Yes' : 'No',
                     ),
                   ]),
+                  if (SiteSurveyAccess.canReadSurvey(auth))
+                    SiteSurveyLeadCard(lead: _lead),
                   if (_hasRegistrationDetailsFrontend)
                     _section('Registration', [
                       _row('Registration ID', _displayRegistrationId),
