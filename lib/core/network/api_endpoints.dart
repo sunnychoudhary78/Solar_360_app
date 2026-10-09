@@ -166,4 +166,13 @@ class ApiEndpoints {
   static const solarPanelsEnabled = 'solar-panels/enabled';
   static String solarPanel(String id) => 'solar-panels/$id';
   static const arModels = 'ar-models';
+
+  // Solar CRM — task management
+  static const solarTasks = 'solar-tasks';
+  static const solarTasksMeta = 'solar-tasks/meta';
+  static const solarTasksProjects = 'solar-tasks/projects';
+  static const solarTasksAssignees = 'solar-tasks/assignees';
+  static const solarTasksChecklist = 'solar-tasks/checklist';
+  static String solarTask(String id) => 'solar-tasks/$id';
+  static String solarTaskStatus(String id) => 'solar-tasks/$id/status';
 }

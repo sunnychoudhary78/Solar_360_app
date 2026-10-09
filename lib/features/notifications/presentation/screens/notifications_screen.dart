@@ -27,9 +27,26 @@ class NotificationsScreen extends ConsumerWidget {
   ) {
     final redirect = notification.redirectUrl?.trim();
     if (redirect != null && redirect.isNotEmpty) {
-      final path = redirect.split('?').first;
-      final mapped = _mapWebPath(path);
+      final uri = _parseAppUri(redirect);
+      final mapped = _mapWebPath(uri.path, query: uri.queryParameters);
       if (mapped != null) return mapped;
+    }
+
+    // Assignment notifications store task/lead ids in metadata even if redirect
+    // parsing fails.
+    final taskId = notification.metadataString('task_id');
+    final isTaskAssignment = taskId != null ||
+        notification.title.trim().toLowerCase() == 'task assigned to you';
+    if (isTaskAssignment) {
+      final projectId =
+          notification.metadataString('lead_id') ?? notification.leadId;
+      return (
+        route: '/solar/task-management',
+        arguments: <String, String>{
+          if (projectId != null && projectId.isNotEmpty) 'project': projectId,
+          'task': ?taskId,
+        },
+      );
     }
 
     final leadId = notification.leadId;
@@ -39,40 +56,68 @@ class NotificationsScreen extends ConsumerWidget {
     return null;
   }
 
-  ({String route, Object? arguments})? _mapWebPath(String path) {
-    if (path == '/items/approvals' ||
-        path == '/quotations/approvals' ||
-        path == '/invoices/approvals' ||
-        path == '/items' ||
-        path == '/quotations' ||
-        path == '/invoices' ||
-        path == '/customers' ||
-        path == '/inventory' ||
-        path == '/inventory/warehouses' ||
-        path == '/solar/leads') {
-      return (route: path, arguments: null);
+  Uri _parseAppUri(String redirect) {
+    final raw = redirect.trim();
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return Uri.parse(raw);
+    }
+    final normalized = raw.startsWith('/') ? raw : '/$raw';
+    return Uri.parse('app://local$normalized');
+  }
+
+  ({String route, Object? arguments})? _mapWebPath(
+    String path, {
+    Map<String, String> query = const {},
+  }) {
+    final cleanPath = path.endsWith('/') && path.length > 1
+        ? path.substring(0, path.length - 1)
+        : path;
+
+    if (cleanPath == '/solar/task-management') {
+      final project = (query['project'] ?? '').trim();
+      final task = (query['task'] ?? '').trim();
+      return (
+        route: '/solar/task-management',
+        arguments: <String, String>{
+          if (project.isNotEmpty) 'project': project,
+          if (task.isNotEmpty) 'task': task,
+        },
+      );
     }
 
-    final itemMatch = RegExp(r'^/items/([^/]+)$').firstMatch(path);
+    if (cleanPath == '/items/approvals' ||
+        cleanPath == '/quotations/approvals' ||
+        cleanPath == '/invoices/approvals' ||
+        cleanPath == '/items' ||
+        cleanPath == '/quotations' ||
+        cleanPath == '/invoices' ||
+        cleanPath == '/customers' ||
+        cleanPath == '/inventory' ||
+        cleanPath == '/inventory/warehouses' ||
+        cleanPath == '/solar/leads') {
+      return (route: cleanPath, arguments: null);
+    }
+
+    final itemMatch = RegExp(r'^/items/([^/]+)$').firstMatch(cleanPath);
     if (itemMatch != null) {
       return (route: '/items/detail', arguments: itemMatch.group(1));
     }
-    final quoteMatch = RegExp(r'^/quotations/([^/]+)$').firstMatch(path);
+    final quoteMatch = RegExp(r'^/quotations/([^/]+)$').firstMatch(cleanPath);
     if (quoteMatch != null) {
       return (route: '/quotations/detail', arguments: quoteMatch.group(1));
     }
-    final invoiceMatch = RegExp(r'^/invoices/([^/]+)$').firstMatch(path);
+    final invoiceMatch = RegExp(r'^/invoices/([^/]+)$').firstMatch(cleanPath);
     if (invoiceMatch != null) {
       return (route: '/invoices/detail', arguments: invoiceMatch.group(1));
     }
-    final leadMatch = RegExp(r'^/solar/leads/([^/]+)$').firstMatch(path);
+    final leadMatch = RegExp(r'^/solar/leads/([^/]+)$').firstMatch(cleanPath);
     if (leadMatch != null) {
       return (route: '/solar/leads/detail', arguments: leadMatch.group(1));
     }
 
     // Exact Flutter-style routes already used by the app.
-    if (path.startsWith('/')) {
-      return (route: path, arguments: null);
+    if (cleanPath.startsWith('/')) {
+      return (route: cleanPath, arguments: null);
     }
     return null;
   }

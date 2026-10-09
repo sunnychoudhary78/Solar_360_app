@@ -379,6 +379,18 @@ class NavDestinations {
       quickActionSubtitle: 'Design site survey forms',
     ),
     AppDestination(
+      id: 'ge_tasks',
+      label: 'Task Management',
+      icon: Icons.checklist_outlined,
+      selectedIcon: Icons.checklist_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      permission: 'task.read',
+      route: '/solar/task-management',
+      quickAction: true,
+      quickActionSubtitle: 'Project tasks & assignees',
+    ),
+    AppDestination(
       id: 'ge_support',
       label: 'Support',
       icon: Icons.headset_mic_outlined,

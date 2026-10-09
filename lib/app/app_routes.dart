@@ -41,6 +41,7 @@ import 'package:solar_sales/features/settings/presentation/screens/marketing_tem
 import 'package:solar_sales/features/settings/presentation/screens/settings_screen.dart';
 import 'package:solar_sales/features/shell/presentation/screens/app_shell.dart';
 import 'package:solar_sales/features/site_survey/presentation/screens/survey_templates_screen.dart';
+import 'package:solar_sales/features/solar_tasks/presentation/screens/solar_tasks_screen.dart';
 import 'package:solar_sales/features/support/presentation/screens/support_ticket_detail_screen.dart';
 import 'package:solar_sales/features/support/presentation/screens/support_tickets_screen.dart';
 
@@ -61,6 +62,22 @@ class AppRoutes {
     '/solar/survey-templates': (_) => const SurveyTemplatesScreen(),
     '/solar/notifications': (_) => const NotificationsScreen(),
     '/solar/support': (_) => const SupportTicketsScreen(),
+    '/solar/task-management': (context) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      String? projectId;
+      String? taskId;
+      if (args is String) {
+        projectId = args;
+      } else if (args is Map) {
+        projectId =
+            args['project']?.toString() ?? args['projectId']?.toString();
+        taskId = args['task']?.toString() ?? args['taskId']?.toString();
+      }
+      return SolarTasksScreen(
+        initialProjectId: projectId,
+        initialTaskId: taskId,
+      );
+    },
     '/dashboard': (_) => const DashboardScreen(),
     '/settings': (_) => const SettingsScreen(),
     '/settings/templates': (_) => const MarketingTemplatesScreen(),
