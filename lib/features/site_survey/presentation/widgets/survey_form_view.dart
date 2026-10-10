@@ -322,6 +322,7 @@ class _FieldBlock extends StatelessWidget {
                 },
         );
       case 'boolean':
+        // Match web: tap selected Yes/No again to clear (required checked on submit).
         final current = value == true || value == 'true'
             ? true
             : value == false || value == 'false'
@@ -334,9 +335,7 @@ class _FieldBlock extends StatelessWidget {
               current == true,
               readOnly
                   ? null
-                  : () => onChanged(
-                        current == true && !field.required ? null : true,
-                      ),
+                  : () => onChanged(current == true ? null : true),
             ),
             const SizedBox(width: 8),
             _choice(
@@ -344,13 +343,13 @@ class _FieldBlock extends StatelessWidget {
               current == false,
               readOnly
                   ? null
-                  : () => onChanged(
-                        current == false && !field.required ? null : false,
-                      ),
+                  : () => onChanged(current == false ? null : false),
             ),
           ],
         );
       case 'select':
+        // Match web chip toggle: tap the active option again to clear selection.
+        final selected = field.options.contains('$value') ? '$value' : null;
         if (field.options.length <= 4) {
           return Wrap(
             spacing: 8,
@@ -359,30 +358,26 @@ class _FieldBlock extends StatelessWidget {
               for (final option in field.options)
                 _choice(
                   option,
-                  '$value' == option,
+                  selected == option,
                   readOnly
                       ? null
-                      : () => onChanged(
-                            '$value' == option && !field.required
-                                ? null
-                                : option,
-                          ),
+                      : () => onChanged(selected == option ? null : option),
                 ),
             ],
           );
         }
         return DropdownButtonFormField<String?>(
-          initialValue: field.options.contains('$value') ? '$value' : null,
+          key: ValueKey('select-${field.id}-$selected'),
+          initialValue: selected,
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             isDense: true,
           ),
           items: [
-            if (!field.required)
-              const DropdownMenuItem<String?>(
-                value: null,
-                child: Text('No selection'),
-              ),
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('No selection'),
+            ),
             for (final option in field.options)
               DropdownMenuItem<String?>(value: option, child: Text(option)),
           ],
@@ -545,9 +540,11 @@ class _FieldBlock extends StatelessWidget {
   }
 
   Widget _choice(String label, bool selected, VoidCallback? onTap) {
-    return ChoiceChip(
+    // FilterChip reliably fires on re-tap so users can clear an accidental pick.
+    return FilterChip(
       label: Text(label),
       selected: selected,
+      showCheckmark: true,
       onSelected: onTap == null ? null : (_) => onTap(),
     );
   }

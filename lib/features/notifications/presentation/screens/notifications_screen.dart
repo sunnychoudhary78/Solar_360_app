@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/module/presentation/providers/module_provider.dart';
 import 'package:solar_sales/features/notifications/data/models/notification_model.dart';
 import 'package:solar_sales/features/notifications/presentation/providers/notification_providers.dart';
+import 'package:solar_sales/features/solar_tasks/presentation/solar_task_access.dart';
+import 'package:solar_sales/shared/utils/app_snackbar.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
@@ -136,6 +139,16 @@ class NotificationsScreen extends ConsumerWidget {
     final target = _navigationFor(notification);
     if (target == null) return;
     if (!context.mounted) return;
+
+    if (target.route == '/solar/task-management' &&
+        !SolarTaskAccess.canRead(ref.read(authProvider))) {
+      showAppSnackBar(
+        context,
+        'Your role is missing "task.read". Ask an admin to grant it.',
+        isError: true,
+      );
+      return;
+    }
 
     await Navigator.pushNamed(
       context,

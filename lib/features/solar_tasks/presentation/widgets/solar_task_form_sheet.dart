@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/solar_tasks/data/models/solar_task_models.dart';
 import 'package:solar_sales/features/solar_tasks/data/solar_task_constants.dart';
 import 'package:solar_sales/features/solar_tasks/presentation/providers/solar_task_providers.dart';
+import 'package:solar_sales/features/solar_tasks/presentation/solar_task_access.dart';
 import 'package:solar_sales/shared/utils/app_snackbar.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/dropdown_separated_item.dart';
@@ -14,8 +16,26 @@ Future<void> showSolarTaskFormSheet({
   SolarTaskFormData? initial,
   String? preferredPhaseKey,
 }) {
+  final auth = ref.read(authProvider);
+  final isEditing = initial?.isEditing == true;
+  if (isEditing && !SolarTaskAccess.canUpdate(auth)) {
+    showAppSnackBar(
+      context,
+      'You do not have permission to update tasks.',
+      isError: true,
+    );
+    return Future.value();
+  }
+  if (!isEditing && !SolarTaskAccess.canCreate(auth)) {
+    showAppSnackBar(
+      context,
+      'You do not have permission to create tasks.',
+      isError: true,
+    );
+    return Future.value();
+  }
+
   final board = ref.read(solarTaskBoardProvider);
-  final notifier = ref.read(solarTaskBoardProvider.notifier);
   final form = initial ??
       SolarTaskFormData(
         leadId: board.projectId,
@@ -36,7 +56,7 @@ Future<void> showSolarTaskFormSheet({
     builder: (context) {
       return _SolarTaskFormSheet(
         initial: form,
-        canOpenLeads: notifier.canOpenLeads,
+        canOpenLeads: SolarTaskAccess.canOpenLeads(auth),
       );
     },
   );
@@ -266,96 +286,107 @@ class _SolarTaskFormSheetState extends ConsumerState<_SolarTaskFormSheet> {
                       setState(() => _form = _form.copyWith(title: value)),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _FieldLabel('Phase', isRequired: true),
-                          DropdownButtonFormField<String>(
-                            key: ValueKey('phase-${_form.phaseKey}'),
-                            initialValue: _form.phaseKey,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                            ),
-                            selectedItemBuilder: (context) => [
-                              for (final phase in board.phases)
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    phase.label,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                            ],
-                            items: separatedDropdownMenuItems(
-                              items: board.phases,
-                              value: (p) => p.key,
-                              child: (p) => Text(p.label),
-                            ),
-                            onChanged: (value) => setState(
-                              () => _form =
-                                  _form.copyWith(phaseKey: value ?? 'sales'),
-                            ),
-                          ),
-                        ],
-                      ),
+                const _FieldLabel('Phase', isRequired: true),
+                DropdownButtonFormField<String>(
+                  key: ValueKey('phase-${_form.phaseKey}'),
+                  initialValue: _form.phaseKey,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _FieldLabel('Assignee', isRequired: true),
-                          DropdownButtonFormField<String>(
-                            key: ValueKey('assignee-${_form.assigneeId}'),
-                            initialValue: _form.assigneeId.isEmpty
-                                ? null
-                                : _form.assigneeId,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                            ),
-                            hint: const Text('Select a person'),
-                            selectedItemBuilder: (context) => [
-                              for (final person in board.assignees)
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    person.optionLabel,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                            ],
-                            items: separatedDropdownMenuItems(
-                              items: board.assignees,
-                              value: (a) => a.id,
-                              child: (a) => Text(
-                                a.optionLabel,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            onChanged: (value) => setState(
-                              () => _form =
-                                  _form.copyWith(assigneeId: value ?? ''),
-                            ),
-                          ),
-                        ],
+                  ),
+                  selectedItemBuilder: (context) => [
+                    for (final phase in board.phases)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          phase.label,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       ),
-                    ),
                   ],
+                  items: [
+                    for (final phase in board.phases)
+                      DropdownMenuItem(
+                        value: phase.key,
+                        child: Text(phase.label),
+                      ),
+                  ],
+                  onChanged: (value) => setState(
+                    () => _form = _form.copyWith(phaseKey: value ?? 'sales'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const _FieldLabel('Assignee', isRequired: true),
+                DropdownButtonFormField<String>(
+                  key: ValueKey('assignee-${_form.assigneeId}'),
+                  initialValue:
+                      _form.assigneeId.isEmpty ? null : _form.assigneeId,
+                  isExpanded: true,
+                  itemHeight: null,
+                  menuMaxHeight: MediaQuery.sizeOf(context).height * 0.45,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                  ),
+                  hint: const Text('Select a person'),
+                  selectedItemBuilder: (context) => [
+                    for (final person in board.assignees)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          person.name,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                  ],
+                  items: [
+                    for (final person in board.assignees)
+                      DropdownMenuItem(
+                        value: person.id,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                person.name,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              if ((person.role ?? '').trim().isNotEmpty ||
+                                  (person.designation ?? '').trim().isNotEmpty)
+                                Text(
+                                  [
+                                    if ((person.role ?? '').trim().isNotEmpty)
+                                      person.role!.trim(),
+                                    if ((person.designation ?? '')
+                                        .trim()
+                                        .isNotEmpty)
+                                      person.designation!.trim(),
+                                  ].join(' · '),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) => setState(
+                    () => _form = _form.copyWith(assigneeId: value ?? ''),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(

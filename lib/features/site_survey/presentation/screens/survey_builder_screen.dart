@@ -6,6 +6,7 @@ import 'package:solar_sales/core/widgets/app_message.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/site_survey/data/models/survey_models.dart';
 import 'package:solar_sales/features/site_survey/data/survey_validation.dart';
+import 'package:solar_sales/features/site_survey/data/survey_visibility.dart';
 import 'package:solar_sales/features/site_survey/presentation/providers/site_survey_providers.dart';
 import 'package:solar_sales/features/site_survey/presentation/screens/survey_preview_screen.dart';
 import 'package:solar_sales/features/site_survey/presentation/site_survey_access.dart';
@@ -144,6 +145,23 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
     setState(() => _schema = _schema.copyWith(sections: sections));
   }
 
+  Future<void> _editSection(int sectionIndex) async {
+    final section = _schema.sections[sectionIndex];
+    final earlier = <SurveyField>[
+      for (var s = 0; s < sectionIndex; s++) ..._schema.sections[s].fields,
+    ];
+    final edited = await showModalBottomSheet<SurveySection>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _SectionSettingsEditor(section: section, earlier: earlier),
+    );
+    if (edited == null) return;
+    final sections = [..._schema.sections];
+    sections[sectionIndex] = edited;
+    setState(() => _schema = _schema.copyWith(sections: sections));
+  }
+
   void _openTest() {
     final schemaError = validateSchema(_schema);
     if (schemaError != null) {
@@ -276,6 +294,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
                   sections[s] = sections[s].copyWith(title: title);
                   setState(() => _schema = _schema.copyWith(sections: sections));
                 },
+                onEditSection: () => _editSection(s),
                 onAddField: () => _addField(s),
                 onEditField: (fieldIndex) => _editField(s, fieldIndex),
                 onDeleteField: (fieldIndex) {
@@ -474,6 +493,7 @@ class _SectionEditor extends StatelessWidget {
     required this.canEdit,
     required this.fieldsById,
     required this.onTitle,
+    required this.onEditSection,
     required this.onAddField,
     required this.onEditField,
     required this.onDeleteField,
@@ -485,6 +505,7 @@ class _SectionEditor extends StatelessWidget {
   final bool canEdit;
   final Map<String, SurveyField> fieldsById;
   final ValueChanged<String> onTitle;
+  final VoidCallback onEditSection;
   final VoidCallback onAddField;
   final ValueChanged<int> onEditField;
   final ValueChanged<int> onDeleteField;
@@ -494,6 +515,7 @@ class _SectionEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final fieldCount = section.fields.length;
+    final condition = describeShowIf(section.showIf, fieldsById, subject: 'section');
 
     return AppCard(
       margin: const EdgeInsets.only(bottom: 12),
@@ -509,56 +531,71 @@ class _SectionEditor extends StatelessWidget {
                 top: Radius.circular(AppRadius.xl),
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: scheme.primaryContainer,
-                  child: Text(
-                    '${index + 1}',
-                    style: TextStyle(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: scheme.primaryContainer,
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: section.title,
-                    readOnly: !canEdit,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                    decoration: const InputDecoration(
-                      labelText: 'Section title',
-                      isDense: true,
-                      filled: true,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: section.title,
+                        readOnly: !canEdit,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                        decoration: const InputDecoration(
+                          labelText: 'Section title',
+                          isDense: true,
+                          filled: true,
+                        ),
+                        onChanged: onTitle,
+                      ),
                     ),
-                    onChanged: onTitle,
-                  ),
-                ),
-                Container(
-                  margin: const EdgeInsets.only(left: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
-                    '$fieldCount field${fieldCount == 1 ? '' : 's'}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurfaceVariant,
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Text(
+                        '$fieldCount field${fieldCount == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
                     ),
-                  ),
+                    if (canEdit)
+                      IconButton(
+                        tooltip: 'Section settings',
+                        onPressed: onEditSection,
+                        icon: Icon(Icons.tune_rounded, color: scheme.primary),
+                      ),
+                    if (canEdit)
+                      IconButton(
+                        tooltip: 'Delete section',
+                        onPressed: onDeleteSection,
+                        icon: Icon(Icons.delete_outline, color: scheme.error),
+                      ),
+                  ],
                 ),
-                if (canEdit)
-                  IconButton(
-                    tooltip: 'Delete section',
-                    onPressed: onDeleteSection,
-                    icon: Icon(Icons.delete_outline, color: scheme.error),
-                  ),
+                if (condition != null) ...[
+                  const SizedBox(height: 8),
+                  _ConditionBadge(label: condition),
+                ],
               ],
             ),
           ),
@@ -704,7 +741,7 @@ class _SectionFieldTile extends StatelessWidget {
     final visual = surveyFieldTypeVisual(field.type);
     final typeLabel = info?.label ?? field.type;
     final preview = _fieldPreview(field);
-    final condition = _conditionLabel(field.showIf, fieldsById);
+    final condition = describeShowIf(field.showIf, fieldsById);
 
     return Material(
       color: scheme.surfaceContainerLowest,
@@ -842,37 +879,7 @@ class _SectionFieldTile extends StatelessWidget {
                     ],
                     if (condition != null) ...[
                       const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEEF2FF),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.alt_route_rounded,
-                              size: 12,
-                              color: Color(0xFF4338CA),
-                            ),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                condition,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF4338CA),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      _ConditionBadge(label: condition),
                     ],
                   ],
                 ),
@@ -915,29 +922,39 @@ class _SectionFieldTile extends StatelessWidget {
         return (field.placeholder ?? '').trim();
     }
   }
+}
 
-  static String? _conditionLabel(
-    ShowIfRule? rule,
-    Map<String, SurveyField> fieldsById,
-  ) {
-    if (rule == null) return null;
-    final source = fieldsById[rule.field]?.label ?? rule.field;
-    final op = switch (rule.op) {
-      'equals' => 'is',
-      'not_equals' => 'is not',
-      'answered' => 'is answered',
-      'not_answered' => 'is not answered',
-      'gt' => '>',
-      'lt' => '<',
-      _ => rule.op,
-    };
-    if (rule.op == 'answered' || rule.op == 'not_answered') {
-      return 'Show if $source $op';
-    }
-    final value = rule.value is bool
-        ? (rule.value == true ? 'Yes' : 'No')
-        : '${rule.value ?? ''}';
-    return 'Show if $source $op $value';
+class _ConditionBadge extends StatelessWidget {
+  const _ConditionBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF2FF),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.alt_route_rounded, size: 12, color: Color(0xFF4338CA)),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF4338CA),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1038,7 +1055,7 @@ class _FieldEditorState extends State<_FieldEditor> {
                   ),
             ),
             const SizedBox(height: 10),
-            if (info != null)
+            if (info != null) ...[
               Container(
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerLow,
@@ -1049,21 +1066,12 @@ class _FieldEditorState extends State<_FieldEditor> {
                 ),
                 child: SurveyFieldTypeTile(info: info, dense: true),
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 6, 4, 12),
-              child: Text(
-                'Key · ${widget.field.id}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
+              const SizedBox(height: 12),
+            ],
             TextField(
               controller: _label,
               decoration: const InputDecoration(
-                labelText: 'Label',
+                labelText: 'Question / label *',
                 prefixIcon: Icon(Icons.short_text_rounded),
               ),
             ),
@@ -1080,39 +1088,33 @@ class _FieldEditorState extends State<_FieldEditor> {
                       : scheme.outlineVariant.withValues(alpha: 0.45),
                 ),
               ),
-              child: SwitchListTile(
+              child: CheckboxListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                controlAffinity: ListTileControlAffinity.leading,
                 title: const Text(
                   'Required',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 subtitle: Text(
-                  _required
-                      ? 'Surveyors must answer this field'
-                      : 'Optional — can be left blank',
+                  "The survey can't be submitted without it.",
                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                 ),
                 value: _required,
-                onChanged: (value) => setState(() => _required = value),
+                onChanged: (value) => setState(() => _required = value ?? false),
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _help,
-              decoration: const InputDecoration(
-                labelText: 'Help text',
-                prefixIcon: Icon(Icons.help_outline_rounded),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (type == 'text' || type == 'textarea' || type == 'number')
+            if (type == 'select' || type == 'multiselect') ...[
+              const SizedBox(height: 12),
               TextField(
-                controller: _placeholder,
+                controller: _options,
+                maxLines: 4,
                 decoration: const InputDecoration(
-                  labelText: 'Placeholder',
-                  prefixIcon: Icon(Icons.text_fields_rounded),
+                  labelText: 'Options (one per line)',
+                  alignLabelWithHint: true,
+                  prefixIcon: Icon(Icons.list_alt_rounded),
                 ),
               ),
+            ],
             if (type == 'number') ...[
               const SizedBox(height: 12),
               TextField(
@@ -1143,101 +1145,58 @@ class _FieldEditorState extends State<_FieldEditor> {
                 ],
               ),
             ],
-            if (type == 'select' || type == 'multiselect') ...[
-              TextField(
-                controller: _options,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Options (one per line)',
-                  alignLabelWithHint: true,
-                  prefixIcon: Icon(Icons.list_alt_rounded),
-                ),
-              ),
-            ],
             if (type == 'photo') ...[
+              const SizedBox(height: 12),
               TextField(
                 controller: _maxPhotos,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Max photos',
+                  helperText: 'Between 1 and 10.',
                   prefixIcon: Icon(Icons.photo_library_outlined),
                 ),
               ),
             ],
-            const SizedBox(height: 18),
-            PremiumSectionTitle(
-              title: 'Visibility',
-              subtitle: 'Show this field only when a condition matches',
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String?>(
-              initialValue: _showIf?.field,
-              decoration: const InputDecoration(
-                labelText: 'Earlier field',
-                prefixIcon: Icon(Icons.filter_alt_outlined),
-              ),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('Always show')),
-                for (final field in widget.earlier)
-                  DropdownMenuItem(value: field.id, child: Text(field.label)),
-              ],
-              onChanged: (value) => setState(() {
-                if (value == null) {
-                  _showIf = null;
-                } else {
-                  _showIf = ShowIfRule(
-                    field: value,
-                    op: _showIf?.op ?? 'equals',
-                    value: _showIf?.value,
-                  );
-                }
-              }),
-            ),
-            if (_showIf != null) ...[
+            if (type == 'text' || type == 'textarea' || type == 'number') ...[
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _showIf!.op,
+              TextField(
+                controller: _placeholder,
                 decoration: const InputDecoration(
-                  labelText: 'Condition',
-                  prefixIcon: Icon(Icons.compare_arrows_rounded),
+                  labelText: 'Placeholder',
+                  prefixIcon: Icon(Icons.text_fields_rounded),
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'equals', child: Text('equals')),
-                  DropdownMenuItem(value: 'not_equals', child: Text('not equals')),
-                  DropdownMenuItem(value: 'answered', child: Text('answered')),
-                  DropdownMenuItem(value: 'not_answered', child: Text('not answered')),
-                  DropdownMenuItem(value: 'gt', child: Text('greater than')),
-                  DropdownMenuItem(value: 'lt', child: Text('less than')),
-                ],
-                onChanged: (value) => setState(() {
-                  _showIf = _showIf!.copyWith(op: value);
-                }),
               ),
-              if (_showIf!.op != 'answered' && _showIf!.op != 'not_answered') ...[
-                const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: _showIf!.value == null ? '' : '${_showIf!.value}',
-                  decoration: const InputDecoration(
-                    labelText: 'Value',
-                    prefixIcon: Icon(Icons.input_rounded),
-                  ),
-                  onChanged: (text) {
-                    final earlier = widget.earlier.cast<SurveyField?>().firstWhere(
-                      (field) => field!.id == _showIf!.field,
-                      orElse: () => null,
-                    );
-                    Object? parsed = text;
-                    if (earlier?.type == 'boolean') {
-                      parsed = text.trim().toLowerCase() == 'true' ||
-                          text.trim().toLowerCase() == 'yes';
-                    } else if (earlier?.type == 'number') {
-                      parsed = num.tryParse(text.trim()) ?? text;
-                    }
-                    _showIf = _showIf!.copyWith(value: parsed);
-                  },
-                ),
-              ],
             ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _help,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Help text',
+                helperText: 'Shown under the field to guide the surveyor.',
+                alignLabelWithHint: true,
+                prefixIcon: Icon(Icons.help_outline_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ShowIfConditionEditor(
+              subject: 'field',
+              rule: _showIf,
+              sources: widget.earlier,
+              onChanged: (rule) => setState(() => _showIf = rule),
+            ),
+            const SizedBox(height: 12),
+            InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Field key *',
+                helperText: 'Used to store the answer. Lowercase letters, numbers and _ only.',
+                prefixIcon: Icon(Icons.vpn_key_outlined),
+              ),
+              child: Text(
+                widget.field.id,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+              ),
+            ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _apply,
@@ -1245,6 +1204,316 @@ class _FieldEditorState extends State<_FieldEditor> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SectionSettingsEditor extends StatefulWidget {
+  const _SectionSettingsEditor({required this.section, required this.earlier});
+
+  final SurveySection section;
+  final List<SurveyField> earlier;
+
+  @override
+  State<_SectionSettingsEditor> createState() => _SectionSettingsEditorState();
+}
+
+class _SectionSettingsEditorState extends State<_SectionSettingsEditor> {
+  late final TextEditingController _title;
+  late final TextEditingController _description;
+  ShowIfRule? _showIf;
+
+  @override
+  void initState() {
+    super.initState();
+    _title = TextEditingController(text: widget.section.title);
+    _description = TextEditingController(text: widget.section.description ?? '');
+    _showIf = widget.section.showIf;
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  void _apply() {
+    Navigator.pop(
+      context,
+      widget.section.copyWith(
+        title: _title.text.trim().isEmpty ? widget.section.title : _title.text.trim(),
+        description: _description.text.trim(),
+        showIf: _showIf,
+        clearShowIf: _showIf == null,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Section settings',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _title,
+              decoration: const InputDecoration(
+                labelText: 'Title *',
+                prefixIcon: Icon(Icons.title_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _description,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                alignLabelWithHint: true,
+                prefixIcon: Icon(Icons.notes_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ShowIfConditionEditor(
+              subject: 'section',
+              rule: _showIf,
+              sources: widget.earlier,
+              onChanged: (rule) => setState(() => _showIf = rule),
+            ),
+            const SizedBox(height: 12),
+            InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Section key *',
+                prefixIcon: Icon(Icons.vpn_key_outlined),
+              ),
+              child: Text(
+                widget.section.id,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _apply,
+              child: const Text('Apply changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Matches web `ConditionEditor`: checkbox "Show this … only when…" + rule picks.
+class _ShowIfConditionEditor extends StatelessWidget {
+  const _ShowIfConditionEditor({
+    required this.subject,
+    required this.rule,
+    required this.sources,
+    required this.onChanged,
+  });
+
+  final String subject;
+  final ShowIfRule? rule;
+  final List<SurveyField> sources;
+  final ValueChanged<ShowIfRule?> onChanged;
+
+  SurveyField? get _source {
+    if (rule == null) return null;
+    for (final field in sources) {
+      if (field.id == rule!.field) return field;
+    }
+    return null;
+  }
+
+  void _enable(bool enabled) {
+    if (!enabled) {
+      onChanged(null);
+      return;
+    }
+    if (sources.isEmpty) return;
+    final source = sources.last;
+    final ops = opsForSourceType(source.type);
+    final op = ops.first;
+    onChanged(
+      ShowIfRule(
+        field: source.id,
+        op: op,
+        value: ruleOpNeedsValue(op) ? defaultRuleValue(source) : null,
+      ),
+    );
+  }
+
+  void _pickSource(String fieldId) {
+    final source = sources.firstWhere((field) => field.id == fieldId);
+    final ops = opsForSourceType(source.type);
+    final op = ops.contains(rule?.op) ? rule!.op : ops.first;
+    onChanged(
+      ShowIfRule(
+        field: source.id,
+        op: op,
+        value: ruleOpNeedsValue(op) ? defaultRuleValue(source) : null,
+      ),
+    );
+  }
+
+  void _pickOp(String op) {
+    final source = _source;
+    if (source == null || rule == null) return;
+    onChanged(
+      ShowIfRule(
+        field: rule!.field,
+        op: op,
+        value: ruleOpNeedsValue(op)
+            ? (rule!.value ?? defaultRuleValue(source))
+            : null,
+      ),
+    );
+  }
+
+  void _pickValue(Object? value) {
+    if (rule == null) return;
+    onChanged(rule!.copyWith(value: value, clearValue: value == null));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = rule != null;
+    final source = _source;
+    final ops = source == null ? const <String>[] : opsForSourceType(source.type);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+            title: Text(
+              'Show this $subject only when…',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            value: enabled,
+            onChanged: sources.isEmpty ? null : (value) => _enable(value ?? false),
+          ),
+          if (sources.isEmpty)
+            Text(
+              'Add a question above this $subject to use a condition.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            )
+          else if (enabled) ...[
+            DropdownButtonFormField<String>(
+              key: ValueKey('source-${rule!.field}'),
+              initialValue: source?.id,
+              decoration: const InputDecoration(
+                labelText: 'Choose a question',
+                isDense: true,
+              ),
+              items: [
+                for (final field in sources)
+                  DropdownMenuItem(value: field.id, child: Text(field.label)),
+              ],
+              onChanged: (value) {
+                if (value != null) _pickSource(value);
+              },
+            ),
+            if (source != null) ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                key: ValueKey('op-${rule!.field}-${rule!.op}'),
+                initialValue: ops.contains(rule!.op) ? rule!.op : ops.first,
+                decoration: const InputDecoration(
+                  labelText: 'Condition',
+                  isDense: true,
+                ),
+                items: [
+                  for (final op in ops)
+                    DropdownMenuItem(
+                      value: op,
+                      child: Text(ruleOpLabels[op] ?? op),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) _pickOp(value);
+                },
+              ),
+              if (ruleOpNeedsValue(rule!.op)) ...[
+                const SizedBox(height: 10),
+                if (source.type == 'boolean')
+                  DropdownButtonFormField<bool>(
+                    key: ValueKey('bool-${rule!.value}'),
+                    initialValue: rule!.value == true || rule!.value == 'true',
+                    decoration: const InputDecoration(
+                      labelText: 'Value',
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: true, child: Text('Yes')),
+                      DropdownMenuItem(value: false, child: Text('No')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) _pickValue(value);
+                    },
+                  )
+                else if (source.options.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('opt-${rule!.value}'),
+                    initialValue: source.options.contains('${rule!.value ?? ''}')
+                        ? '${rule!.value}'
+                        : source.options.first,
+                    decoration: const InputDecoration(
+                      labelText: 'Choose an option',
+                      isDense: true,
+                    ),
+                    items: [
+                      for (final option in source.options)
+                        DropdownMenuItem(value: option, child: Text(option)),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) _pickValue(value);
+                    },
+                  )
+                else
+                  TextFormField(
+                    key: ValueKey('val-${rule!.field}-${rule!.op}'),
+                    initialValue: rule!.value == null ? '' : '${rule!.value}',
+                    keyboardType: source.type == 'number'
+                        ? const TextInputType.numberWithOptions(decimal: true)
+                        : TextInputType.text,
+                    decoration: const InputDecoration(
+                      labelText: 'Value',
+                      isDense: true,
+                    ),
+                    onChanged: (text) {
+                      if (source.type == 'number') {
+                        _pickValue(num.tryParse(text.trim()) ?? text);
+                      } else {
+                        _pickValue(text);
+                      }
+                    },
+                  ),
+              ],
+            ],
+          ],
+        ],
       ),
     );
   }

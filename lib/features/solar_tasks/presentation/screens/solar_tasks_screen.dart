@@ -5,6 +5,7 @@ import 'package:solar_sales/features/auth/presentation/providers/auth_provider.d
 import 'package:solar_sales/features/solar_tasks/data/models/solar_task_models.dart';
 import 'package:solar_sales/features/solar_tasks/data/solar_task_constants.dart';
 import 'package:solar_sales/features/solar_tasks/presentation/providers/solar_task_providers.dart';
+import 'package:solar_sales/features/solar_tasks/presentation/solar_task_access.dart';
 import 'package:solar_sales/features/solar_tasks/presentation/widgets/solar_task_badge.dart';
 import 'package:solar_sales/features/solar_tasks/presentation/widgets/solar_task_form_sheet.dart';
 import 'package:solar_sales/features/solar_tasks/presentation/widgets/solar_task_preview_sheet.dart';
@@ -31,12 +32,32 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
   final _searchController = TextEditingController();
   bool _appliedInitialArgs = false;
   bool _openedInitialTask = false;
+  bool _permissionsRefreshStarted = false;
   String? _pendingTaskId;
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Match web RequirePermission: re-check /auth/permissions on page open.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _permissionsRefreshStarted) return;
+      _permissionsRefreshStarted = true;
+      try {
+        await ref.read(authProvider.notifier).refreshPermissions();
+      } catch (_) {
+        // Keep cached permissions if refresh fails.
+      }
+      if (!mounted) return;
+      if (SolarTaskAccess.canRead(ref.read(authProvider))) {
+        await ref.read(solarTaskBoardProvider.notifier).bootstrap();
+      }
+    });
   }
 
   @override
@@ -75,6 +96,14 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
   }
 
   Future<void> _openCreate([String? phaseKey]) {
+    if (!SolarTaskAccess.canCreate(ref.read(authProvider))) {
+      showAppSnackBar(
+        context,
+        'You do not have permission to create tasks.',
+        isError: true,
+      );
+      return Future.value();
+    }
     return showSolarTaskFormSheet(
       context: context,
       ref: ref,
@@ -83,6 +112,14 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
   }
 
   Future<void> _openEdit(SolarTaskModel task) {
+    if (!SolarTaskAccess.canUpdate(ref.read(authProvider))) {
+      showAppSnackBar(
+        context,
+        'You do not have permission to update tasks.',
+        isError: true,
+      );
+      return Future.value();
+    }
     return showSolarTaskFormSheet(
       context: context,
       ref: ref,
@@ -92,7 +129,7 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
 
   Future<void> _openPreview(SolarTaskModel task) {
     final board = ref.read(solarTaskBoardProvider);
-    final canUpdate = ref.read(authProvider).hasPermission('task.update');
+    final canUpdate = SolarTaskAccess.canUpdate(ref.read(authProvider));
     return showSolarTaskPreviewSheet(
       context: context,
       task: task,
@@ -104,6 +141,15 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
 
   Future<void> _changeStatus(SolarTaskModel task, String status) async {
     if (status == task.status) return;
+    if (!SolarTaskAccess.canUpdate(ref.read(authProvider))) {
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'You do not have permission to update tasks.',
+        isError: true,
+      );
+      return;
+    }
     try {
       await ref.read(solarTaskBoardProvider.notifier).changeStatus(task, status);
     } catch (e) {
@@ -117,11 +163,11 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
     final board = ref.watch(solarTaskBoardProvider);
     final notifier = ref.read(solarTaskBoardProvider.notifier);
     final auth = ref.watch(authProvider);
-    final canRead = auth.hasPermission('task.read');
-    final canCreate = auth.hasPermission('task.create');
-    final canUpdate = auth.hasPermission('task.update');
-    final canDelete = auth.hasPermission('task.delete');
-    final canOpenLeads = auth.hasAny(['leads.read', 'lead.read']);
+    final canRead = SolarTaskAccess.canRead(auth);
+    final canCreate = SolarTaskAccess.canCreate(auth);
+    final canUpdate = SolarTaskAccess.canUpdate(auth);
+    final canOversee = SolarTaskAccess.canOversee(auth);
+    final canOpenLeads = SolarTaskAccess.canOpenLeads(auth);
     final scheme = Theme.of(context).colorScheme;
     final summary = board.summary;
 
@@ -153,7 +199,7 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'You do not have permission to view tasks.',
+                  'Access denied',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
@@ -161,7 +207,7 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Ask an admin for the task.read permission.',
+                  'Your role is missing "task.read". Ask an admin to grant it, then log out and log in again.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
@@ -219,7 +265,7 @@ class _SolarTasksScreenState extends ConsumerState<SolarTasksScreen> {
                     const SizedBox(height: 12),
                     _FilterCard(
                       board: board,
-                      canDelete: canDelete,
+                      canOversee: canOversee,
                       canOpenLeads: canOpenLeads,
                       searchController: _searchController,
                       onLeadChanged: notifier.selectProject,
@@ -451,7 +497,7 @@ class _StatCell extends StatelessWidget {
 class _FilterCard extends StatelessWidget {
   const _FilterCard({
     required this.board,
-    required this.canDelete,
+    required this.canOversee,
     required this.canOpenLeads,
     required this.searchController,
     required this.onLeadChanged,
@@ -466,7 +512,7 @@ class _FilterCard extends StatelessWidget {
   });
 
   final SolarTaskBoardState board;
-  final bool canDelete;
+  final bool canOversee;
   final bool canOpenLeads;
   final TextEditingController searchController;
   final ValueChanged<String> onLeadChanged;
@@ -687,7 +733,7 @@ class _FilterCard extends StatelessWidget {
               runSpacing: 10,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                if (canDelete)
+                if (canOversee)
                   SegmentedButton<String>(
                     segments: const [
                       ButtonSegment(value: 'mine', label: Text('Mine')),

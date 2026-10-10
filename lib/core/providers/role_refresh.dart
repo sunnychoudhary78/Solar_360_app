@@ -9,6 +9,7 @@ import 'package:solar_sales/features/leads/presentation/providers/lead_providers
 import 'package:solar_sales/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:solar_sales/features/quotations/presentation/providers/quotation_providers.dart';
 import 'package:solar_sales/features/reports/presentation/providers/reports_providers.dart';
+import 'package:solar_sales/features/solar_tasks/presentation/providers/solar_task_providers.dart';
 
 /// Clears role-scoped caches after a role switch.
 ///
@@ -37,6 +38,7 @@ void invalidateRoleScopedData(Ref ref) {
   ref.invalidate(quotationListProvider);
   ref.invalidate(invoiceListProvider);
   ref.invalidate(itemListProvider);
+  ref.invalidate(solarTaskBoardProvider);
 }
 
 /// Runs cache invalidation after navigation/overlays have settled so Riverpod

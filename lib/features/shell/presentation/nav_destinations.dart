@@ -373,7 +373,12 @@ class NavDestinations {
       selectedIcon: Icons.checklist_rounded,
       section: NavSection.solarCrm,
       kind: NavKind.route,
-      permission: 'task.read',
+      anyOf: [
+        'task.read',
+        'task.create',
+        'task.update',
+        'task.delete',
+      ],
       route: '/solar/task-management',
       quickAction: true,
       quickActionSubtitle: 'Project tasks & assignees',

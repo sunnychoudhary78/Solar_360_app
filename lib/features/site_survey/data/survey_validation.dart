@@ -7,7 +7,8 @@ String? validateSchema(SurveySchema schema) {
   if (schema.sections.length > 30) return 'A template can have at most 30 sections';
   if (schema.fieldCount > 200) return 'A template can have at most 200 fields';
   final seen = <String>{};
-  final ordered = <String>[];
+  final orderedIds = <String>[];
+  final orderedFields = <SurveyField>[];
   for (final section in schema.sections) {
     if (section.title.trim().isEmpty) return 'Every section needs a title';
     if (section.title.length > 150) return 'Section titles must be 150 characters or less';
@@ -15,7 +16,7 @@ String? validateSchema(SurveySchema schema) {
       return 'Section id "${section.id}" must start with a letter and use only a-z, 0-9, _';
     }
     if (!seen.add(section.id)) return 'Duplicate id "${section.id}"';
-    final sectionError = _ruleError(section.showIf, ordered);
+    final sectionError = _ruleError(section.showIf, orderedIds, orderedFields);
     if (sectionError != null) return sectionError;
     for (final field in section.fields) {
       if (field.label.trim().isEmpty) return 'Every field needs a label';
@@ -23,7 +24,7 @@ String? validateSchema(SurveySchema schema) {
         return 'Field id "${field.id}" must start with a letter and use only a-z, 0-9, _';
       }
       if (!seen.add(field.id)) return 'Duplicate id "${field.id}"';
-      final fieldError = _ruleError(field.showIf, ordered);
+      final fieldError = _ruleError(field.showIf, orderedIds, orderedFields);
       if (fieldError != null) return fieldError;
       if (field.type == 'select' || field.type == 'multiselect') {
         if (field.options.isEmpty) return '${field.label} needs at least one option';
@@ -31,16 +32,51 @@ String? validateSchema(SurveySchema schema) {
           return '${field.label} has duplicate options';
         }
       }
-      ordered.add(field.id);
+      orderedIds.add(field.id);
+      orderedFields.add(field);
     }
   }
   return null;
 }
 
-String? _ruleError(ShowIfRule? rule, List<String> earlierFields) {
+String? _ruleError(ShowIfRule? rule, List<String> earlierFields, List<SurveyField> earlier) {
   if (rule == null) return null;
-  if (!earlierFields.contains(rule.field)) {
+  SurveyField? source;
+  for (final field in earlier) {
+    if (field.id == rule.field) {
+      source = field;
+      break;
+    }
+  }
+  if (source == null || !earlierFields.contains(rule.field)) {
     return 'A show-if rule can only use a field that appears earlier in the form';
+  }
+  final allowed = opsForSourceType(source.type);
+  if (!allowed.contains(rule.op)) {
+    return 'Unsupported condition "${rule.op}" for "${source.label}"';
+  }
+  if (!ruleOpNeedsValue(rule.op)) return null;
+  if (rule.op == 'gt' || rule.op == 'lt') {
+    final n = rule.value is num ? rule.value as num : num.tryParse('${rule.value ?? ''}');
+    if (n == null) return 'Condition value is required';
+    return null;
+  }
+  if (source.type == 'boolean') {
+    if (rule.value is! bool && rule.value != 'true' && rule.value != 'false') {
+      return 'Condition value must be Yes or No';
+    }
+    return null;
+  }
+  if (source.type == 'number') {
+    final n = rule.value is num ? rule.value as num : num.tryParse('${rule.value ?? ''}');
+    if (n == null) return 'Condition value is required';
+    return null;
+  }
+  final text = '${rule.value ?? ''}'.trim();
+  if (text.isEmpty) return 'Condition value is required';
+  if ((source.type == 'select' || source.type == 'multiselect') &&
+      !source.options.contains(text)) {
+    return '"$text" is not an option of "${source.label}"';
   }
   return null;
 }

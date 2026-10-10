@@ -5,6 +5,7 @@ import 'package:solar_sales/features/auth/presentation/providers/auth_provider.d
 import 'package:solar_sales/features/solar_tasks/data/models/solar_task_models.dart';
 import 'package:solar_sales/features/solar_tasks/data/solar_task_api_service.dart';
 import 'package:solar_sales/features/solar_tasks/data/solar_task_constants.dart';
+import 'package:solar_sales/features/solar_tasks/presentation/solar_task_access.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 
 final solarTaskApiServiceProvider = Provider<SolarTaskApiService>((ref) {
@@ -182,24 +183,64 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
 
   @override
   SolarTaskBoardState build() {
-    final canDelete = ref.read(authProvider).hasPermission('task.delete');
+    final auth = ref.read(authProvider);
+    final canRead = SolarTaskAccess.canRead(auth);
+    final canOversee = SolarTaskAccess.canOversee(auth);
+
+    // Drop Team scope immediately if the active role loses task.delete.
+    ref.listen(authProvider, (previous, next) {
+      final hadOversee =
+          previous != null && SolarTaskAccess.canOversee(previous);
+      final hadRead = previous != null && SolarTaskAccess.canRead(previous);
+      final lostOversee = hadOversee && !SolarTaskAccess.canOversee(next);
+      final lostRead = hadRead && !SolarTaskAccess.canRead(next);
+      if (lostRead) {
+        state = const SolarTaskBoardState(
+          scope: 'mine',
+          isLoading: false,
+          projectsReady: true,
+        );
+        return;
+      }
+      if (lostOversee && state.scope == 'team') {
+        _scopeTouched = false;
+        state = state.copyWith(scope: 'mine', assigneeFilter: '');
+        Future.microtask(() async {
+          await loadProjects();
+          await loadTasks();
+        });
+      }
+    });
+
+    if (!canRead) {
+      return const SolarTaskBoardState(
+        scope: 'mine',
+        isLoading: false,
+        projectsReady: true,
+      );
+    }
+
     Future.microtask(bootstrap);
     return SolarTaskBoardState(
-      scope: canDelete ? 'team' : 'mine',
+      scope: canOversee ? 'team' : 'mine',
       isLoading: true,
     );
   }
 
   SolarTaskApiService get _api => ref.read(solarTaskApiServiceProvider);
 
-  bool get canCreate =>
-      ref.read(authProvider).hasPermission('task.create');
-  bool get canUpdate =>
-      ref.read(authProvider).hasPermission('task.update');
-  bool get canDelete =>
-      ref.read(authProvider).hasPermission('task.delete');
+  bool get canRead => SolarTaskAccess.canRead(ref.read(authProvider));
+  bool get canCreate => SolarTaskAccess.canCreate(ref.read(authProvider));
+  bool get canUpdate => SolarTaskAccess.canUpdate(ref.read(authProvider));
+  bool get canOversee => SolarTaskAccess.canOversee(ref.read(authProvider));
   bool get canOpenLeads =>
-      ref.read(authProvider).hasAny(['leads.read', 'lead.read']);
+      SolarTaskAccess.canOpenLeads(ref.read(authProvider));
+
+  /// Effective list scope for API calls — never sends `team` without permission.
+  String? get _apiScope {
+    if (state.scope == 'team' && canOversee) return 'team';
+    return null;
+  }
 
   String get currentUserId {
     final auth = ref.read(authProvider);
@@ -207,17 +248,27 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
   }
 
   Future<void> bootstrap() async {
-    final canDelete = ref.read(authProvider).hasPermission('task.delete');
-    if (!_scopeTouched && canDelete && state.scope != 'team') {
+    if (!canRead) {
+      state = state.copyWith(
+        tasks: const [],
+        projects: const [],
+        isLoading: false,
+        projectsReady: true,
+      );
+      return;
+    }
+
+    if (!_scopeTouched && canOversee && state.scope != 'team') {
       state = state.copyWith(scope: 'team');
+    }
+    if (!canOversee && state.scope == 'team') {
+      state = state.copyWith(scope: 'mine', assigneeFilter: '');
     }
 
     try {
       final metaFuture = _api.meta();
       final assigneesFuture = _api.assignees();
-      final projectsFuture = _api.projects(
-        scope: state.scope == 'team' ? 'team' : null,
-      );
+      final projectsFuture = _api.projects(scope: _apiScope);
 
       final meta = await metaFuture;
       final assignees = await assigneesFuture;
@@ -243,10 +294,9 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
   }
 
   Future<void> loadProjects() async {
+    if (!canRead) return;
     try {
-      final projects = await _api.projects(
-        scope: state.scope == 'team' ? 'team' : null,
-      );
+      final projects = await _api.projects(scope: _apiScope);
       state = state.copyWith(projects: projects, projectsReady: true);
     } catch (e) {
       state = state.copyWith(error: cleanError(e));
@@ -254,12 +304,20 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
   }
 
   Future<void> loadTasks() async {
+    if (!canRead) {
+      state = state.copyWith(
+        tasks: const [],
+        isLoading: false,
+        projectsReady: true,
+      );
+      return;
+    }
     final requestId = ++_listRequest;
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final result = await _api.list(
         leadId: state.projectId.isEmpty ? null : state.projectId,
-        scope: state.scope == 'team' ? 'team' : null,
+        scope: _apiScope,
       );
       if (requestId != _listRequest) return;
       state = state.copyWith(
@@ -295,6 +353,7 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
   }
 
   void setScope(String scope) {
+    if (scope == 'team' && !canOversee) return;
     _scopeTouched = true;
     if (scope == state.scope) return;
     state = state.copyWith(
@@ -337,7 +396,7 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
       return const [];
     }
 
-    final canReuse = !canDelete &&
+    final canReuse = !canOversee &&
         leadId == state.projectId &&
         state.scope != 'team';
     if (canReuse) {
@@ -348,7 +407,7 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
     try {
       final result = await _api.list(
         leadId: leadId,
-        scope: canDelete ? 'team' : null,
+        scope: canOversee ? 'team' : null,
       );
       state = state.copyWith(dependencyOptions: result.data);
       return result.data;
@@ -359,6 +418,9 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
   }
 
   Future<void> changeStatus(SolarTaskModel task, String status) async {
+    if (!canUpdate) {
+      throw Exception('You do not have permission to update tasks.');
+    }
     await _api.updateStatus(task.id, status);
     await loadTasks();
   }
@@ -366,6 +428,7 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
   /// Resolves a task from the loaded board, or fetches it by id when needed
   /// (assignment notification deep links).
   Future<SolarTaskModel?> resolveTask(String taskId) async {
+    if (!canRead) return null;
     final id = taskId.trim();
     if (id.isEmpty) return null;
     for (final task in state.tasks) {
@@ -379,6 +442,14 @@ class SolarTaskBoardNotifier extends Notifier<SolarTaskBoardState> {
   }
 
   Future<SolarTaskModel> saveTask(SolarTaskFormData form) async {
+    if (form.isEditing) {
+      if (!canUpdate) {
+        throw Exception('You do not have permission to update tasks.');
+      }
+    } else if (!canCreate) {
+      throw Exception('You do not have permission to create tasks.');
+    }
+
     final payload = form.toPayload();
     final SolarTaskModel saved;
     if (form.isEditing) {

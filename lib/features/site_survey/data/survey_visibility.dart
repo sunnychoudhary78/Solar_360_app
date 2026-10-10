@@ -1,5 +1,68 @@
 import 'package:solar_sales/features/site_survey/data/models/survey_models.dart';
 
+/// Same ops / labels as web (`surveyFields.js`) and backend (`surveySchema.js`).
+const ruleOpOrder = <String>[
+  'equals',
+  'not_equals',
+  'gt',
+  'lt',
+  'answered',
+  'not_answered',
+];
+
+const ruleOpLabels = <String, String>{
+  'equals': 'is',
+  'not_equals': 'is not',
+  'gt': 'is greater than',
+  'lt': 'is less than',
+  'answered': 'is answered',
+  'not_answered': 'is not answered',
+};
+
+const _equalitySourceTypes = {
+  'text',
+  'number',
+  'boolean',
+  'select',
+  'multiselect',
+};
+
+bool ruleOpNeedsValue(String op) =>
+    op == 'equals' || op == 'not_equals' || op == 'gt' || op == 'lt';
+
+/// Operators a source field of this type can be tested with (matches web).
+List<String> opsForSourceType(String type) {
+  return [
+    for (final op in ruleOpOrder)
+      if (op == 'gt' || op == 'lt'
+          ? type == 'number'
+          : (!ruleOpNeedsValue(op) || _equalitySourceTypes.contains(type)))
+        op,
+  ];
+}
+
+Object? defaultRuleValue(SurveyField source) {
+  if (source.type == 'boolean') return true;
+  if (source.options.isNotEmpty) return source.options.first;
+  return '';
+}
+
+/// Human-readable badge text matching web `describeRule`.
+String? describeShowIf(
+  ShowIfRule? rule,
+  Map<String, SurveyField> fieldsById, {
+  String subject = 'field',
+}) {
+  if (rule == null) return null;
+  final source = fieldsById[rule.field]?.label ?? rule.field;
+  final op = ruleOpLabels[rule.op] ?? rule.op;
+  if (!ruleOpNeedsValue(rule.op)) return 'Show $subject when $source $op';
+  final value = rule.value is bool
+      ? (rule.value == true ? 'Yes' : 'No')
+      : '${rule.value ?? ''}';
+  return 'Show $subject when $source $op $value';
+}
+
 bool isEmptyAnswer(dynamic value) {
   if (value == null) return true;
   if (value is String && value.trim().isEmpty) return true;
