@@ -162,17 +162,6 @@ void main() {
       expect(dest('ge_reports').visibleFor((p) => p == 'invoice.read'), isFalse);
     });
 
-    test('solar AR uses ar_solar_panel.read, not solar_panel.read', () {
-      expect(
-        dest('ge_solar_ar').visibleFor((p) => p == 'ar_solar_panel.read'),
-        isTrue,
-      );
-      expect(
-        dest('ge_solar_ar').visibleFor((p) => p == 'solar_panel.read'),
-        isFalse,
-      );
-    });
-
     test('support is visible with either solar or ticket permission', () {
       expect(
         dest('ge_support').visibleFor((p) => p == 'solar.support.read'),

@@ -54,13 +54,6 @@
             </intent-filter>
 
         </activity>
-        <activity
-            android:name=".ar.SolarConfigActivity"
-            android:exported="false"
-            android:hardwareAccelerated="true"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.ArSolar"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" />
 
         <meta-data
             android:name="flutterEmbedding"
@@ -83,7 +76,6 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <package android:name="com.google.android.googlequicksearchbox" />
         <!-- wa.me links returned by POST /whatsapp/share -->
         <intent>
             <action android:name="android.intent.action.VIEW" />

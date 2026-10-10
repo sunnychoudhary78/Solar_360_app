@@ -161,11 +161,10 @@ class ApiEndpoints {
       'site-surveys/$id/files/$fileId';
   static String siteSurveyPdf(String id) => 'site-surveys/$id/pdf';
 
-  // AR solar panel catalog
+  // Solar panel catalog (used by 3D solar design module selection)
   static const solarPanels = 'solar-panels';
   static const solarPanelsEnabled = 'solar-panels/enabled';
   static String solarPanel(String id) => 'solar-panels/$id';
-  static const arModels = 'ar-models';
 
   // Solar CRM — task management
   static const solarTasks = 'solar-tasks';
