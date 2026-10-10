@@ -175,4 +175,18 @@ class ApiEndpoints {
   static const solarTasksChecklist = 'solar-tasks/checklist';
   static String solarTask(String id) => 'solar-tasks/$id';
   static String solarTaskStatus(String id) => 'solar-tasks/$id/status';
+
+  // 3D Solar Design (staff + public preview helpers)
+  static String solarDesignsForLead(String leadId) =>
+      'solar-designs/lead/$leadId';
+  static String solarDesign(String id) => 'solar-designs/$id';
+  static String solarDesignShare(String id) => 'solar-designs/$id/share';
+  static String solarDesignReport(String id) => 'solar-designs/$id/report';
+  static String solarDesignDeactivate(String id) =>
+      'solar-designs/$id/deactivate';
+  static const solarDesignGeocode = 'solar-designs/geocode';
+  static const solarDesignGeocodeSuggest = 'solar-designs/geocode/suggest';
+  static const solarDesignEnergyEstimate = 'solar-designs/energy-estimate';
+  static String publicSolarDesign(String code) =>
+      'public/solar-designs/$code';
 }

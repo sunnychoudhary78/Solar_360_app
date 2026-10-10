@@ -98,13 +98,35 @@ class ApiService {
           receiveTimeout: const Duration(seconds: 90),
         ),
       );
-      final data = response.data;
-      if (data is Uint8List) return data;
-      if (data is List<int>) return Uint8List.fromList(data);
-      throw Exception('Invalid PDF response');
+      return _bytesFrom(response.data);
     } on DioException catch (e) {
       throw _extractException(e);
     }
+  }
+
+  Future<Uint8List> postBytes(
+    String endpoint, [
+    Map<String, dynamic>? data,
+  ]) async {
+    try {
+      final response = await _dio.post(
+        _path(endpoint),
+        data: data ?? {},
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 90),
+        ),
+      );
+      return _bytesFrom(response.data);
+    } on DioException catch (e) {
+      throw _extractException(e);
+    }
+  }
+
+  Uint8List _bytesFrom(dynamic data) {
+    if (data is Uint8List) return data;
+    if (data is List<int>) return Uint8List.fromList(data);
+    throw Exception('Invalid binary response');
   }
 
   String _path(String endpoint) {

@@ -8,6 +8,7 @@ import 'package:solar_sales/features/ar_solar/presentation/providers/ar_solar_pr
 import 'package:solar_sales/features/auth/data/auth_api_service.dart';
 import 'package:solar_sales/features/leads/presentation/providers/green_energy_dashboard_providers.dart';
 import 'package:solar_sales/features/notifications/data/notification_api_service.dart';
+import 'package:solar_sales/shared/module/module_access.dart';
 
 import 'helpers/recording_adapter.dart';
 
@@ -56,6 +57,30 @@ void main() {
       expect(arSolarPanelReadPermission, 'ar_solar_panel.read');
       expect(arSolarPanelCreatePermission, 'ar_solar_panel.create');
       expect(arSolarPanelUpdatePermission, 'ar_solar_panel.update');
+    });
+
+    test('3D solar design endpoints match backend routes', () {
+      expect(
+        ApiEndpoints.solarDesignsForLead('lead-1'),
+        'solar-designs/lead/lead-1',
+      );
+      expect(ApiEndpoints.solarDesign('d1'), 'solar-designs/d1');
+      expect(ApiEndpoints.solarDesignShare('d1'), 'solar-designs/d1/share');
+      expect(ApiEndpoints.solarDesignReport('d1'), 'solar-designs/d1/report');
+      expect(
+        ApiEndpoints.solarDesignDeactivate('d1'),
+        'solar-designs/d1/deactivate',
+      );
+      expect(ApiEndpoints.solarDesignGeocode, 'solar-designs/geocode');
+      expect(
+        ApiEndpoints.publicSolarDesign('Hk3mPq9xTa'),
+        'public/solar-designs/Hk3mPq9xTa',
+      );
+      expect(
+        ApiConstants.publicSolarDesignUrl('Hk3mPq9xTa'),
+        '${ApiConstants.webAppBaseUrl}/p/Hk3mPq9xTa',
+      );
+      expect(solarPerms.contains('solar_design.read'), isTrue);
     });
 
     test('marketing templates endpoint matches backend', () {

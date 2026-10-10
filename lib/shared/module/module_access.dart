@@ -43,6 +43,7 @@ const solarPerms = [
   'site_survey.read',
   'survey_template.read',
   'task.read',
+  'solar_design.read',
 ];
 
 const billbookRoleNames = [
