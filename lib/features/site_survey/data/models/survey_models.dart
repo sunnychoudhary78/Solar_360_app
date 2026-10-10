@@ -588,15 +588,36 @@ const surveyProjectTypes = [
   'Agriculture',
 ];
 
+class SurveyFieldTypeInfo {
+  final String key;
+  final String label;
+  final String hint;
+
+  const SurveyFieldTypeInfo(this.key, this.label, this.hint);
+}
+
 const surveyFieldTypes = [
-  ('text', 'Short text'),
-  ('textarea', 'Long text'),
-  ('number', 'Number'),
-  ('date', 'Date'),
-  ('boolean', 'Yes / No'),
-  ('select', 'Single choice'),
-  ('multiselect', 'Multiple choice'),
-  ('photo', 'Photos'),
-  ('signature', 'Signature'),
-  ('location', 'GPS location'),
+  SurveyFieldTypeInfo('text', 'Short text', 'Name, model, short note'),
+  SurveyFieldTypeInfo('textarea', 'Long text', 'Remarks, descriptions'),
+  SurveyFieldTypeInfo('number', 'Number', 'Load, area, height'),
+  SurveyFieldTypeInfo('date', 'Date', 'Visit or due date'),
+  SurveyFieldTypeInfo('boolean', 'Yes / No', 'Quick check'),
+  SurveyFieldTypeInfo('select', 'Single choice', 'Pick one option'),
+  SurveyFieldTypeInfo('multiselect', 'Multiple choice', 'Pick many options'),
+  SurveyFieldTypeInfo('photo', 'Photos', 'Camera or gallery'),
+  SurveyFieldTypeInfo('signature', 'Signature', 'Customer sign-off'),
+  SurveyFieldTypeInfo('location', 'GPS location', 'Capture coordinates'),
 ];
+
+const surveyFieldTypeGroups = [
+  ('Basic', ['text', 'textarea', 'number', 'date']),
+  ('Choices', ['boolean', 'select', 'multiselect']),
+  ('On-site capture', ['photo', 'signature', 'location']),
+];
+
+SurveyFieldTypeInfo? surveyFieldTypeInfo(String key) {
+  for (final item in surveyFieldTypes) {
+    if (item.key == key) return item;
+  }
+  return null;
+}

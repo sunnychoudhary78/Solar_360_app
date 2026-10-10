@@ -1,10 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -15,8 +12,7 @@ import 'package:solar_sales/features/site_survey/data/models/survey_models.dart'
 import 'package:solar_sales/features/site_survey/data/survey_progress.dart';
 import 'package:solar_sales/features/site_survey/presentation/providers/site_survey_providers.dart';
 import 'package:solar_sales/features/site_survey/presentation/site_survey_access.dart';
-import 'package:solar_sales/features/site_survey/presentation/survey_image.dart';
-import 'package:solar_sales/features/site_survey/presentation/widgets/signature_pad.dart';
+import 'package:solar_sales/features/site_survey/presentation/survey_capture.dart';
 import 'package:solar_sales/features/site_survey/presentation/widgets/survey_form_view.dart';
 import 'package:solar_sales/shared/utils/pdf_helper.dart';
 
@@ -268,40 +264,15 @@ class _SiteSurveyScreenState extends ConsumerState<SiteSurveyScreen>
   Future<void> _addPhoto(SurveyField field) async {
     final survey = _survey;
     if (survey == null) return;
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Camera'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Gallery'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null) return;
-    final picked = await ImagePicker().pickImage(
-      source: source,
-      imageQuality: 85,
-    );
-    if (picked == null) return;
+    final bytes = await SurveyCapture.pickPreparedImage(context);
+    if (bytes == null || !mounted) return;
     try {
-      final prepared = await prepareSurveyImage(await picked.readAsBytes());
       final file = await ref.read(siteSurveyRepositoryProvider).saveFile(
         surveyId: survey.id,
         fieldId: field.id,
         kind: 'photo',
-        bytes: prepared.$1,
-        mimeType: prepared.$2,
+        bytes: bytes,
+        mimeType: 'image/jpeg',
       );
       final current = _answers[field.id];
       final ids = current is List ? current.map((e) => '$e').toList() : <String>[];
@@ -319,41 +290,18 @@ class _SiteSurveyScreenState extends ConsumerState<SiteSurveyScreen>
   Future<void> _sign(SurveyField field) async {
     final survey = _survey;
     if (survey == null) return;
-    final padKey = GlobalKey<SignaturePadState>();
-    final bytes = await showDialog<Uint8List>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(field.label),
-        content: SizedBox(width: 360, child: SignaturePad(key: padKey)),
-        actions: [
-          TextButton(
-            onPressed: () => padKey.currentState?.clear(),
-            child: const Text('Clear'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final png = await padKey.currentState?.export();
-              if (png == null || !context.mounted) return;
-              Navigator.pop(context, png);
-            },
-            child: const Text('Use signature'),
-          ),
-        ],
-      ),
+    final bytes = await SurveyCapture.captureSignature(
+      context,
+      title: field.label,
     );
-    if (bytes == null) return;
+    if (bytes == null || !mounted) return;
     try {
-      final prepared = await prepareSurveyImage(bytes);
       final file = await ref.read(siteSurveyRepositoryProvider).saveFile(
         surveyId: survey.id,
         fieldId: field.id,
         kind: 'signature',
-        bytes: prepared.$1,
-        mimeType: prepared.$2,
+        bytes: bytes,
+        mimeType: 'image/jpeg',
       );
       setState(() {
         _answers[field.id] = file.id;
@@ -366,32 +314,10 @@ class _SiteSurveyScreenState extends ConsumerState<SiteSurveyScreen>
   }
 
   Future<void> _location(SurveyField field) async {
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      if (!mounted) return;
-      showAppMessage(
-        context,
-        'Location permission is needed to capture the site',
-        isError: true,
-      );
-      return;
-    }
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-      ),
-    );
+    final value = await SurveyCapture.captureLocation(context);
+    if (value == null || !mounted) return;
     setState(() {
-      _answers[field.id] = {
-        'lat': position.latitude,
-        'lng': position.longitude,
-        'accuracy': position.accuracy,
-        'captured_at': DateTime.now().toUtc().toIso8601String(),
-      };
+      _answers[field.id] = value;
       _dirty = true;
     });
   }
@@ -684,10 +610,38 @@ class _SiteSurveyScreenState extends ConsumerState<SiteSurveyScreen>
                           RadioListTile<String>(
                             value: template.id,
                             title: Text(template.name),
-                            subtitle: Text(
-                              '${template.projectTypeLabel} · v${template.currentVersion}'
-                              '${template.recommended ? ' · Recommended' : ''}'
-                              '${template.isDefault ? ' · Default' : ''}',
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text(
+                                    '${template.projectTypeLabel} · v${template.currentVersion}',
+                                    style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  if (template.recommended)
+                                    const _TemplateBadge(
+                                      label: 'Recommended',
+                                      background: Color(0xFFFFFBEB),
+                                      foreground: Color(0xFFB45309),
+                                      icon: Icons.star_rounded,
+                                    ),
+                                  if (template.isDefault)
+                                    const _TemplateBadge(
+                                      label: 'Default',
+                                      background: Color(0xFFECFDF5),
+                                      foreground: Color(0xFF047857),
+                                      icon: Icons.check_circle_rounded,
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                       ],
@@ -700,6 +654,48 @@ class _SiteSurveyScreenState extends ConsumerState<SiteSurveyScreen>
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _TemplateBadge extends StatelessWidget {
+  const _TemplateBadge({
+    required this.label,
+    required this.background,
+    required this.foreground,
+    required this.icon,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: foreground.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: foreground),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: foreground,
+              height: 1.2,
+            ),
+          ),
+        ],
       ),
     );
   }

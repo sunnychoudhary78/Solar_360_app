@@ -54,5 +54,15 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Capture site survey photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose site survey photos from your library.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Optional microphone access when recording video with the camera.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Capture the survey site location.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Capture the survey site location.</string>
 </dict>
 </plist>

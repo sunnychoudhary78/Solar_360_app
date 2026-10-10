@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/widgets/app_message.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/site_survey/data/models/survey_models.dart';
@@ -8,6 +9,8 @@ import 'package:solar_sales/features/site_survey/data/survey_validation.dart';
 import 'package:solar_sales/features/site_survey/presentation/providers/site_survey_providers.dart';
 import 'package:solar_sales/features/site_survey/presentation/screens/survey_preview_screen.dart';
 import 'package:solar_sales/features/site_survey/presentation/site_survey_access.dart';
+import 'package:solar_sales/features/site_survey/presentation/widgets/survey_field_type_tile.dart';
+import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 
 class SurveyBuilderScreen extends ConsumerStatefulWidget {
   const SurveyBuilderScreen({super.key, required this.template});
@@ -102,25 +105,9 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
   }
 
   Future<void> _addField(int sectionIndex) async {
-    final type = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const ListTile(title: Text('Field types')),
-            for (final item in surveyFieldTypes)
-              ListTile(
-                title: Text(item.$2),
-                onTap: () => Navigator.pop(context, item.$1),
-              ),
-          ],
-        ),
-      ),
-    );
+    final type = await showSurveyFieldTypePicker(context);
     if (type == null) return;
-    final label = surveyFieldTypes.firstWhere((item) => item.$1 == type).$2;
+    final label = surveyFieldTypeInfo(type)?.label ?? type;
     final id = uniqueId(slugify(label), _ids);
     final field = SurveyField(
       id: id,
@@ -157,23 +144,43 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
     setState(() => _schema = _schema.copyWith(sections: sections));
   }
 
+  void _openTest() {
+    final schemaError = validateSchema(_schema);
+    if (schemaError != null) {
+      showAppMessage(context, schemaError, isError: true);
+      return;
+    }
+    if (_schema.fieldCount == 0) {
+      showAppMessage(context, 'Add at least one field before testing', isError: true);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SurveyPreviewScreen(
+          name: _name.text.trim().isEmpty ? 'Test form' : _name.text.trim(),
+          schema: _schema,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final canEdit = SiteSurveyAccess.canEditTemplates(ref.watch(authProvider));
+    final published = widget.template.isPublished;
+    final fieldCount = _schema.fieldCount;
+    final sectionCount = _schema.sections.length;
+
     return Scaffold(
+      backgroundColor: scheme.surfaceContainerLow,
       appBar: AppBar(
         title: Text(_name.text.isEmpty ? 'Template' : _name.text),
         actions: [
-          IconButton(
-            tooltip: 'Preview',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SurveyPreviewScreen(name: _name.text, schema: _schema),
-                ),
-              );
-            },
-            icon: const Icon(Icons.visibility_outlined),
+          TextButton.icon(
+            onPressed: _openTest,
+            icon: const Icon(Icons.science_outlined, size: 18),
+            label: const Text('Test'),
           ),
           if (canEdit)
             TextButton(onPressed: _saving ? null : _save, child: const Text('Save')),
@@ -184,65 +191,276 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          TextField(
-            controller: _name,
-            readOnly: !canEdit,
-            decoration: const InputDecoration(
-              labelText: 'Template name *',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (_) => setState(() {}),
+          _BuilderStatsBar(
+            published: published,
+            version: widget.template.currentVersion,
+            sections: sectionCount,
+            fields: fieldCount,
+            hasUnpublished: widget.template.hasUnpublishedChanges,
           ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String?>(
-            initialValue: _projectType,
-            decoration: const InputDecoration(labelText: 'Project type', border: OutlineInputBorder()),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Any project type')),
-              for (final type in surveyProjectTypes) DropdownMenuItem(value: type, child: Text(type)),
+          const SizedBox(height: 14),
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PremiumSectionTitle(
+                  title: 'Template details',
+                  subtitle: 'Name and how this template is categorized',
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _name,
+                  readOnly: !canEdit,
+                  decoration: const InputDecoration(
+                    labelText: 'Template name *',
+                    prefixIcon: Icon(Icons.title_rounded),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  initialValue: _projectType,
+                  decoration: const InputDecoration(
+                    labelText: 'Project type',
+                    prefixIcon: Icon(Icons.category_outlined),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Any project type')),
+                    for (final type in surveyProjectTypes)
+                      DropdownMenuItem(value: type, child: Text(type)),
+                  ],
+                  onChanged: canEdit ? (value) => setState(() => _projectType = value) : null,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _description,
+                  readOnly: !canEdit,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    alignLabelWithHint: true,
+                    prefixIcon: Icon(Icons.notes_outlined),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: PremiumSectionTitle(
+                  title: 'Form structure',
+                  subtitle: sectionCount == 0
+                      ? 'Add a section, then drop fields into it'
+                      : '$sectionCount section${sectionCount == 1 ? '' : 's'} · $fieldCount field${fieldCount == 1 ? '' : 's'}',
+                ),
+              ),
             ],
-            onChanged: canEdit ? (value) => setState(() => _projectType = value) : null,
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _description,
-            readOnly: !canEdit,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Description',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 16),
-          for (var s = 0; s < _schema.sections.length; s++)
-            _SectionEditor(
-              index: s,
-              section: _schema.sections[s],
-              canEdit: canEdit,
-              onTitle: (title) {
-                final sections = [..._schema.sections];
-                sections[s] = sections[s].copyWith(title: title);
-                setState(() => _schema = _schema.copyWith(sections: sections));
-              },
-              onAddField: () => _addField(s),
-              onEditField: (fieldIndex) => _editField(s, fieldIndex),
-              onDeleteField: (fieldIndex) {
-                final sections = [..._schema.sections];
-                final fields = [...sections[s].fields]..removeAt(fieldIndex);
-                sections[s] = sections[s].copyWith(fields: fields);
-                setState(() => _schema = _schema.copyWith(sections: sections));
-              },
-              onDeleteSection: () {
-                final sections = [..._schema.sections]..removeAt(s);
-                setState(() => _schema = _schema.copyWith(sections: sections));
-              },
-            ),
-          if (canEdit)
+          const SizedBox(height: 8),
+          if (_schema.sections.isEmpty)
+            _EmptyStructureHint(canEdit: canEdit, onAddSection: _addSection)
+          else
+            for (var s = 0; s < _schema.sections.length; s++)
+              _SectionEditor(
+                index: s,
+                section: _schema.sections[s],
+                canEdit: canEdit,
+                fieldsById: {
+                  for (final field in _schema.fields) field.id: field,
+                },
+                onTitle: (title) {
+                  final sections = [..._schema.sections];
+                  sections[s] = sections[s].copyWith(title: title);
+                  setState(() => _schema = _schema.copyWith(sections: sections));
+                },
+                onAddField: () => _addField(s),
+                onEditField: (fieldIndex) => _editField(s, fieldIndex),
+                onDeleteField: (fieldIndex) {
+                  final sections = [..._schema.sections];
+                  final fields = [...sections[s].fields]..removeAt(fieldIndex);
+                  sections[s] = sections[s].copyWith(fields: fields);
+                  setState(() => _schema = _schema.copyWith(sections: sections));
+                },
+                onDeleteSection: () {
+                  final sections = [..._schema.sections]..removeAt(s);
+                  setState(() => _schema = _schema.copyWith(sections: sections));
+                },
+              ),
+          if (canEdit && _schema.sections.isNotEmpty) ...[
+            const SizedBox(height: 4),
             OutlinedButton.icon(
               onPressed: _addSection,
               icon: const Icon(Icons.add),
               label: const Text('Add section'),
             ),
+          ],
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: _openTest,
+            icon: const Icon(Icons.science_outlined),
+            label: const Text('Test all fields'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BuilderStatsBar extends StatelessWidget {
+  const _BuilderStatsBar({
+    required this.published,
+    required this.version,
+    required this.sections,
+    required this.fields,
+    required this.hasUnpublished,
+  });
+
+  final bool published;
+  final int version;
+  final int sections;
+  final int fields;
+  final bool hasUnpublished;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final statusLabel = published
+        ? (hasUnpublished ? 'Draft changes' : 'Published')
+        : 'Draft';
+    final statusBg = published && !hasUnpublished
+        ? const Color(0xFFECFDF5)
+        : const Color(0xFFFFF7ED);
+    final statusFg = published && !hasUnpublished
+        ? const Color(0xFF047857)
+        : const Color(0xFFC2410C);
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _StatPill(
+          icon: Icons.circle,
+          label: statusLabel,
+          background: statusBg,
+          foreground: statusFg,
+          iconSize: 8,
+        ),
+        _StatPill(
+          icon: Icons.layers_outlined,
+          label: '$sections sections',
+          background: scheme.primaryContainer.withValues(alpha: 0.55),
+          foreground: scheme.primary,
+        ),
+        _StatPill(
+          icon: Icons.view_agenda_outlined,
+          label: '$fields fields',
+          background: scheme.secondaryContainer.withValues(alpha: 0.55),
+          foreground: scheme.onSecondaryContainer,
+        ),
+        if (published)
+          _StatPill(
+            icon: Icons.tag,
+            label: 'v$version',
+            background: scheme.surfaceContainerHighest,
+            foreground: scheme.onSurfaceVariant,
+          ),
+      ],
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  const _StatPill({
+    required this.icon,
+    required this.label,
+    required this.background,
+    required this.foreground,
+    this.iconSize = 14,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color background;
+  final Color foreground;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: iconSize, color: foreground),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: foreground,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyStructureHint extends StatelessWidget {
+  const _EmptyStructureHint({
+    required this.canEdit,
+    required this.onAddSection,
+  });
+
+  final bool canEdit;
+  final VoidCallback onAddSection;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AppCard(
+      variant: AppCardVariant.outlined,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      child: Column(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer.withValues(alpha: 0.65),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.dashboard_customize_outlined, color: scheme.primary),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No sections yet',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Start with a section, then add field types your surveyors will fill on site.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+          ),
+          if (canEdit) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onAddSection,
+              icon: const Icon(Icons.add),
+              label: const Text('Add first section'),
+            ),
+          ],
         ],
       ),
     );
@@ -254,6 +472,7 @@ class _SectionEditor extends StatelessWidget {
     required this.index,
     required this.section,
     required this.canEdit,
+    required this.fieldsById,
     required this.onTitle,
     required this.onAddField,
     required this.onEditField,
@@ -264,6 +483,7 @@ class _SectionEditor extends StatelessWidget {
   final int index;
   final SurveySection section;
   final bool canEdit;
+  final Map<String, SurveyField> fieldsById;
   final ValueChanged<String> onTitle;
   final VoidCallback onAddField;
   final ValueChanged<int> onEditField;
@@ -273,59 +493,451 @@ class _SectionEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Card(
+    final fieldCount = section.fields.length;
+
+    return AppCard(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow.withValues(alpha: 0.85),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadius.xl),
+              ),
+            ),
+            child: Row(
               children: [
                 CircleAvatar(
-                  radius: 14,
+                  radius: 16,
                   backgroundColor: scheme.primaryContainer,
-                  child: Text('${index + 1}', style: TextStyle(color: scheme.primary)),
+                  child: Text(
+                    '${index + 1}',
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: TextFormField(
                     initialValue: section.title,
                     readOnly: !canEdit,
-                    decoration: const InputDecoration(labelText: 'Section title', isDense: true),
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    decoration: const InputDecoration(
+                      labelText: 'Section title',
+                      isDense: true,
+                      filled: true,
+                    ),
                     onChanged: onTitle,
                   ),
                 ),
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Text(
+                    '$fieldCount field${fieldCount == 1 ? '' : 's'}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
                 if (canEdit)
-                  IconButton(onPressed: onDeleteSection, icon: const Icon(Icons.delete_outline)),
+                  IconButton(
+                    tooltip: 'Delete section',
+                    onPressed: onDeleteSection,
+                    icon: Icon(Icons.delete_outline, color: scheme.error),
+                  ),
               ],
             ),
-            Text('${section.fields.length} fields', style: TextStyle(color: scheme.onSurfaceVariant)),
-            for (var i = 0; i < section.fields.length; i++)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(section.fields[i].label),
-                subtitle: Text(
-                  '${section.fields[i].type}${section.fields[i].required ? ' · required' : ''}',
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (section.fields.isEmpty)
+                  _EmptyFieldsZone(canEdit: canEdit, onAddField: onAddField)
+                else ...[
+                  for (var i = 0; i < section.fields.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 8),
+                    _SectionFieldTile(
+                      field: section.fields[i],
+                      fieldsById: fieldsById,
+                      canEdit: canEdit,
+                      onEdit: () => onEditField(i),
+                      onDelete: () => onDeleteField(i),
+                    ),
+                  ],
+                  if (canEdit) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: onAddField,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add field'),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyFieldsZone extends StatelessWidget {
+  const _EmptyFieldsZone({
+    required this.canEdit,
+    required this.onAddField,
+  });
+
+  final bool canEdit;
+  final VoidCallback onAddField;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: canEdit ? onAddField : null,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: CustomPaint(
+          painter: _DashedBorderPainter(
+            color: scheme.outlineVariant.withValues(alpha: 0.9),
+            radius: AppRadius.lg,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+            child: Column(
+              children: [
+                Icon(Icons.add_box_outlined, color: scheme.primary),
+                const SizedBox(height: 6),
+                Text(
+                  canEdit ? 'Add your first field' : 'No fields in this section',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface,
+                  ),
                 ),
-                trailing: canEdit
-                    ? IconButton(
-                        onPressed: () => onDeleteField(i),
-                        icon: const Icon(Icons.close),
-                      )
-                    : null,
-                onTap: canEdit ? () => onEditField(i) : null,
-              ),
-            if (canEdit)
-              TextButton.icon(
-                onPressed: onAddField,
-                icon: const Icon(Icons.add),
-                label: const Text('Add field'),
-              ),
-          ],
+                const SizedBox(height: 2),
+                Text(
+                  'Short text, choices, photos, signature, GPS, and more',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0.7, 0.7, size.width - 1.4, size.height - 1.4),
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    const dash = 6.0;
+    const gap = 4.0;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = (distance + dash).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, next), paint);
+        distance = next + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
+}
+
+class _SectionFieldTile extends StatelessWidget {
+  const _SectionFieldTile({
+    required this.field,
+    required this.fieldsById,
+    required this.canEdit,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final SurveyField field;
+  final Map<String, SurveyField> fieldsById;
+  final bool canEdit;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final info = surveyFieldTypeInfo(field.type);
+    final visual = surveyFieldTypeVisual(field.type);
+    final typeLabel = info?.label ?? field.type;
+    final preview = _fieldPreview(field);
+    final condition = _conditionLabel(field.showIf, fieldsById);
+
+    return Material(
+      color: scheme.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: canEdit ? onEdit : null,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.55),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: visual.background,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Icon(visual.icon, size: 20, color: visual.foreground),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              text: field.label,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                              children: [
+                                if (field.required)
+                                  const TextSpan(
+                                    text: ' *',
+                                    style: TextStyle(
+                                      color: Color(0xFFE11D48),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (field.required)
+                          Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Required',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFE11D48),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      typeLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: visual.foreground,
+                      ),
+                    ),
+                    if (preview.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      if (field.options.isNotEmpty)
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            for (final option in field.options.take(4))
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: scheme.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: scheme.outlineVariant.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                                child: Text(
+                                  option,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            if (field.options.length > 4)
+                              Text(
+                                '+${field.options.length - 4} more',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        )
+                      else
+                        Text(
+                          preview,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                    if (condition != null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.alt_route_rounded,
+                              size: 12,
+                              color: Color(0xFF4338CA),
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                condition,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF4338CA),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (canEdit)
+                IconButton(
+                  tooltip: 'Remove field',
+                  onPressed: onDelete,
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _fieldPreview(SurveyField field) {
+    if (field.options.isNotEmpty) return 'options';
+    switch (field.type) {
+      case 'boolean':
+        return 'Yes · No';
+      case 'photo':
+        return 'Up to ${field.maxPhotos ?? 5} photos';
+      case 'signature':
+        return 'Signature pad';
+      case 'location':
+        return 'Capture GPS location';
+      case 'date':
+        return 'DD / MM / YYYY';
+      case 'number':
+        return field.unit == null || field.unit!.trim().isEmpty
+            ? 'Number'
+            : 'Number in ${field.unit}';
+      default:
+        return (field.placeholder ?? '').trim();
+    }
+  }
+
+  static String? _conditionLabel(
+    ShowIfRule? rule,
+    Map<String, SurveyField> fieldsById,
+  ) {
+    if (rule == null) return null;
+    final source = fieldsById[rule.field]?.label ?? rule.field;
+    final op = switch (rule.op) {
+      'equals' => 'is',
+      'not_equals' => 'is not',
+      'answered' => 'is answered',
+      'not_answered' => 'is not answered',
+      'gt' => '>',
+      'lt' => '<',
+      _ => rule.op,
+    };
+    if (rule.op == 'answered' || rule.op == 'not_answered') {
+      return 'Show if $source $op';
+    }
+    final value = rule.value is bool
+        ? (rule.value == true ? 'Yes' : 'No')
+        : '${rule.value ?? ''}';
+    return 'Show if $source $op $value';
   }
 }
 
@@ -409,84 +1021,161 @@ class _FieldEditorState extends State<_FieldEditor> {
   @override
   Widget build(BuildContext context) {
     final type = widget.field.type;
+    final info = surveyFieldTypeInfo(type);
+    final scheme = Theme.of(context).colorScheme;
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottom),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(widget.field.id, style: const TextStyle(fontSize: 12)),
-            const SizedBox(height: 8),
+            Text(
+              'Edit field',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            if (info != null)
+              Container(
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: SurveyFieldTypeTile(info: info, dense: true),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 6, 4, 12),
+              child: Text(
+                'Key · ${widget.field.id}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
             TextField(
               controller: _label,
-              decoration: const InputDecoration(labelText: 'Label', border: OutlineInputBorder()),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Required'),
-              value: _required,
-              onChanged: (value) => setState(() => _required = value),
-            ),
-            TextField(
-              controller: _help,
-              decoration: const InputDecoration(labelText: 'Help text', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Label',
+                prefixIcon: Icon(Icons.short_text_rounded),
+              ),
             ),
             const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: _required
+                    ? const Color(0xFFFFF1F2).withValues(alpha: 0.65)
+                    : scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: _required
+                      ? const Color(0xFFE11D48).withValues(alpha: 0.25)
+                      : scheme.outlineVariant.withValues(alpha: 0.45),
+                ),
+              ),
+              child: SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                title: const Text(
+                  'Required',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  _required
+                      ? 'Surveyors must answer this field'
+                      : 'Optional — can be left blank',
+                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+                value: _required,
+                onChanged: (value) => setState(() => _required = value),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _help,
+              decoration: const InputDecoration(
+                labelText: 'Help text',
+                prefixIcon: Icon(Icons.help_outline_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
             if (type == 'text' || type == 'textarea' || type == 'number')
               TextField(
                 controller: _placeholder,
-                decoration: const InputDecoration(labelText: 'Placeholder', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Placeholder',
+                  prefixIcon: Icon(Icons.text_fields_rounded),
+                ),
               ),
             if (type == 'number') ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               TextField(
                 controller: _unit,
-                decoration: const InputDecoration(labelText: 'Unit', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Unit',
+                  prefixIcon: Icon(Icons.straighten_outlined),
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: _min,
-                      decoration: const InputDecoration(labelText: 'Min', border: OutlineInputBorder()),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Min'),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
                       controller: _max,
-                      decoration: const InputDecoration(labelText: 'Max', border: OutlineInputBorder()),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Max'),
                     ),
                   ),
                 ],
               ),
             ],
             if (type == 'select' || type == 'multiselect') ...[
-              const SizedBox(height: 8),
               TextField(
                 controller: _options,
                 maxLines: 4,
                 decoration: const InputDecoration(
                   labelText: 'Options (one per line)',
-                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                  prefixIcon: Icon(Icons.list_alt_rounded),
                 ),
               ),
             ],
             if (type == 'photo') ...[
-              const SizedBox(height: 8),
               TextField(
                 controller: _maxPhotos,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Max photos', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Max photos',
+                  prefixIcon: Icon(Icons.photo_library_outlined),
+                ),
               ),
             ],
-            const SizedBox(height: 12),
-            const Text('Show only if'),
+            const SizedBox(height: 18),
+            PremiumSectionTitle(
+              title: 'Visibility',
+              subtitle: 'Show this field only when a condition matches',
+            ),
+            const SizedBox(height: 10),
             DropdownButtonFormField<String?>(
               initialValue: _showIf?.field,
-              decoration: const InputDecoration(labelText: 'Earlier field'),
+              decoration: const InputDecoration(
+                labelText: 'Earlier field',
+                prefixIcon: Icon(Icons.filter_alt_outlined),
+              ),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Always show')),
                 for (final field in widget.earlier)
@@ -496,13 +1185,22 @@ class _FieldEditorState extends State<_FieldEditor> {
                 if (value == null) {
                   _showIf = null;
                 } else {
-                  _showIf = ShowIfRule(field: value, op: _showIf?.op ?? 'equals', value: _showIf?.value);
+                  _showIf = ShowIfRule(
+                    field: value,
+                    op: _showIf?.op ?? 'equals',
+                    value: _showIf?.value,
+                  );
                 }
               }),
             ),
             if (_showIf != null) ...[
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _showIf!.op,
+                decoration: const InputDecoration(
+                  labelText: 'Condition',
+                  prefixIcon: Icon(Icons.compare_arrows_rounded),
+                ),
                 items: const [
                   DropdownMenuItem(value: 'equals', child: Text('equals')),
                   DropdownMenuItem(value: 'not_equals', child: Text('not equals')),
@@ -515,10 +1213,14 @@ class _FieldEditorState extends State<_FieldEditor> {
                   _showIf = _showIf!.copyWith(op: value);
                 }),
               ),
-              if (_showIf!.op != 'answered' && _showIf!.op != 'not_answered')
+              if (_showIf!.op != 'answered' && _showIf!.op != 'not_answered') ...[
+                const SizedBox(height: 12),
                 TextFormField(
                   initialValue: _showIf!.value == null ? '' : '${_showIf!.value}',
-                  decoration: const InputDecoration(labelText: 'Value'),
+                  decoration: const InputDecoration(
+                    labelText: 'Value',
+                    prefixIcon: Icon(Icons.input_rounded),
+                  ),
                   onChanged: (text) {
                     final earlier = widget.earlier.cast<SurveyField?>().firstWhere(
                       (field) => field!.id == _showIf!.field,
@@ -526,16 +1228,21 @@ class _FieldEditorState extends State<_FieldEditor> {
                     );
                     Object? parsed = text;
                     if (earlier?.type == 'boolean') {
-                      parsed = text.trim().toLowerCase() == 'true' || text.trim().toLowerCase() == 'yes';
+                      parsed = text.trim().toLowerCase() == 'true' ||
+                          text.trim().toLowerCase() == 'yes';
                     } else if (earlier?.type == 'number') {
                       parsed = num.tryParse(text.trim()) ?? text;
                     }
                     _showIf = _showIf!.copyWith(value: parsed);
                   },
                 ),
+              ],
             ],
-            const SizedBox(height: 12),
-            FilledButton(onPressed: _apply, child: const Text('Apply')),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _apply,
+              child: const Text('Apply changes'),
+            ),
           ],
         ),
       ),

@@ -284,8 +284,22 @@ class _TemplateCard extends StatelessWidget {
                 Chip(label: Text(template.projectTypeLabel), visualDensity: VisualDensity.compact),
                 if (template.isDefault)
                   Chip(
-                    avatar: Icon(Icons.star, size: 16, color: scheme.primary),
-                    label: const Text('Default'),
+                    avatar: const Icon(
+                      Icons.check_circle_rounded,
+                      size: 16,
+                      color: Color(0xFF047857),
+                    ),
+                    label: const Text(
+                      'Default',
+                      style: TextStyle(
+                        color: Color(0xFF047857),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFECFDF5),
+                    side: BorderSide(
+                      color: const Color(0xFF047857).withValues(alpha: 0.22),
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
               ],

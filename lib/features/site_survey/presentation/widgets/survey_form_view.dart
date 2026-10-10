@@ -329,9 +329,25 @@ class _FieldBlock extends StatelessWidget {
             : null;
         return Row(
           children: [
-            _choice('Yes', current == true, readOnly ? null : () => onChanged(true)),
+            _choice(
+              'Yes',
+              current == true,
+              readOnly
+                  ? null
+                  : () => onChanged(
+                        current == true && !field.required ? null : true,
+                      ),
+            ),
             const SizedBox(width: 8),
-            _choice('No', current == false, readOnly ? null : () => onChanged(false)),
+            _choice(
+              'No',
+              current == false,
+              readOnly
+                  ? null
+                  : () => onChanged(
+                        current == false && !field.required ? null : false,
+                      ),
+            ),
           ],
         );
       case 'select':
@@ -344,20 +360,31 @@ class _FieldBlock extends StatelessWidget {
                 _choice(
                   option,
                   '$value' == option,
-                  readOnly ? null : () => onChanged(option),
+                  readOnly
+                      ? null
+                      : () => onChanged(
+                            '$value' == option && !field.required
+                                ? null
+                                : option,
+                          ),
                 ),
             ],
           );
         }
-        return DropdownButtonFormField<String>(
+        return DropdownButtonFormField<String?>(
           initialValue: field.options.contains('$value') ? '$value' : null,
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             isDense: true,
           ),
           items: [
+            if (!field.required)
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('No selection'),
+              ),
             for (final option in field.options)
-              DropdownMenuItem(value: option, child: Text(option)),
+              DropdownMenuItem<String?>(value: option, child: Text(option)),
           ],
           onChanged: readOnly ? null : onChanged,
         );
