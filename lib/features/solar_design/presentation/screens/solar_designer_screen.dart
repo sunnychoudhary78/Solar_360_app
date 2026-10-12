@@ -10,8 +10,11 @@ import 'package:solar_sales/core/network/api_constants.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/shared/module/module_access.dart';
 
-/// Full rooftop designer — the same web SolarDesigner (`/solar/designs/:id`)
-/// loaded edge-to-edge so layout matches the CRM (no second Flutter app bar).
+/// Hosts the CRM SolarDesigner (`/solar/designs/:id`) for full web parity:
+/// draw roof → auto-fill panels → tools → save → reload.
+///
+/// Important: do **not** poke the Leaflet DOM on every React re-render.
+/// That was clearing roofs/panels when switching tools.
 class SolarDesignerScreen extends ConsumerStatefulWidget {
   const SolarDesignerScreen({
     super.key,
@@ -30,7 +33,7 @@ class SolarDesignerScreen extends ConsumerStatefulWidget {
 class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
   WebViewController? _controller;
   var _loading = true;
-  var _mobileTweaksInjected = false;
+  var _hostScriptInjected = false;
   String? _error;
   String? _token;
   late final String _designerUrl;
@@ -60,12 +63,12 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFFF5F5F5))
-      ..enableZoom(true)
+      // Leaflet must own pinch-zoom; WebView zoom steals gestures and breaks the map.
+      ..enableZoom(false)
       ..addJavaScriptChannel(
         'Solar360Host',
         onMessageReceived: (message) {
-          final raw = message.message.trim();
-          if (raw == 'close' && mounted) {
+          if (message.message.trim() == 'close' && mounted) {
             Navigator.of(context).maybePop();
           }
         },
@@ -73,24 +76,21 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
-            _mobileTweaksInjected = false;
+            _hostScriptInjected = false;
             if (!mounted) return;
             setState(() {
               _loading = true;
-              if (_isLoginUrl(url)) {
-                _error = null;
-              }
+              if (_isLoginUrl(url)) _error = null;
             });
           },
           onPageFinished: (url) async {
             await _ensureSession(url);
-            await _injectMobileTweaks(url);
+            await _injectHostScript(url);
             if (!mounted) return;
             setState(() => _loading = false);
           },
           onWebResourceError: (error) {
             if (!mounted) return;
-            // Tile / CDN failures must not blank the whole designer.
             if (error.isForMainFrame == false) return;
             setState(() {
               _loading = false;
@@ -122,7 +122,6 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
   <style>
     body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
       min-height:100vh;margin:0;background:#f5f7f6;color:#334155}
-    p{font-size:15px}
   </style>
 </head>
 <body>
@@ -163,158 +162,65 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     }
   }
 
-  /// Layout + search readability + Leaflet invalidateSize + web back → close.
-  Future<void> _injectMobileTweaks(String url) async {
+  /// Minimal host glue only. Must not mutate Leaflet layers / remount the map
+  /// when the user switches tools (that wiped roofs & auto-filled panels).
+  Future<void> _injectHostScript(String url) async {
     final controller = _controller;
-    if (controller == null || _mobileTweaksInjected) return;
+    if (controller == null || _hostScriptInjected) return;
     if (_isLoginUrl(url)) return;
     if (!url.contains('/solar/designs/')) return;
 
-    _mobileTweaksInjected = true;
+    _hostScriptInjected = true;
     await controller.runJavaScript('''
 (function () {
-  if (window.__solar360MobileTweaks) return;
-  window.__solar360MobileTweaks = true;
+  if (window.__solar360Host) return;
+  window.__solar360Host = true;
 
   var style = document.createElement('style');
-  style.setAttribute('data-solar360', 'mobile');
+  style.setAttribute('data-solar360', 'host');
   style.textContent = [
-    'html, body { background: #ffffff; height: 100%; overflow: hidden; }',
-    /* Keep designer chrome stacked correctly on narrow phones. */
-    '.fixed.inset-0 {',
-    '  display: flex !important;',
-    '  flex-direction: column !important;',
-    '  overflow: hidden !important;',
-    '}',
-    'header {',
-    '  position: relative !important;',
-    '  z-index: 60 !important;',
-    '  flex-shrink: 0 !important;',
-    '  background: #ffffff !important;',
-    '}',
-    /* Map column must clip the absolute PlaceSearch so it cannot cover Report/Save. */
-    'section.relative.isolate,',
-    'section.relative {',
-    '  position: relative !important;',
-    '  z-index: 0 !important;',
-    '  overflow: hidden !important;',
-    '  min-height: 0 !important;',
-    '  flex: 1 1 auto !important;',
-    '}',
-    '.leaflet-container {',
-    '  width: 100% !important;',
-    '  height: 100% !important;',
-    '  z-index: 1 !important;',
-    '  background: #e2e8f0 !important;',
-    '}',
-    /* Search sits inside the map pane only. */
-    'section.relative [role="combobox"],',
-    'section.relative .relative {',
-    '  z-index: 1000 !important;',
-    '}',
+    /* Readable search / form text in Android WebView */
     'input, textarea, select {',
     '  color: #0f172a !important;',
     '  -webkit-text-fill-color: #0f172a !important;',
     '  caret-color: #ea580c !important;',
-    '  opacity: 1 !important;',
     '}',
     'input::placeholder, textarea::placeholder {',
     '  color: #94a3b8 !important;',
     '  -webkit-text-fill-color: #94a3b8 !important;',
-    '  opacity: 1 !important;',
-    '}',
-    'input:-webkit-autofill, input:-webkit-autofill:focus {',
-    '  -webkit-text-fill-color: #0f172a !important;',
-    '  transition: background-color 99999s ease-in-out 0s;',
     '}',
     '[role="combobox"] {',
     '  color: #0f172a !important;',
     '  -webkit-text-fill-color: #0f172a !important;',
     '  font-size: 16px !important;',
     '}',
-    /* Suggestion list above map controls, still under header. */
-    'section.relative .absolute.inset-x-0,',
-    'section.relative ul[role="listbox"] {',
-    '  z-index: 1100 !important;',
-    '  max-height: min(40vh, 280px) !important;',
-    '}',
-    'aside { z-index: 20 !important; }'
+    /* Header above floating PlaceSearch */
+    'header { position: relative; z-index: 50; background: #fff; }',
+    /* Clip search to the map pane so it cannot cover Report / Save */
+    'section.relative { overflow: hidden; }',
+    'section.relative ul[role="listbox"] { max-height: min(40vh, 280px); }'
   ].join('\\n');
   document.head.appendChild(style);
 
-  function invalidateMapsHard() {
+  /* One gentle resize after first paint so tiles fill the container.
+     Do NOT run this on every React mutation — that clears roofs/panels. */
+  setTimeout(function () {
     try { window.dispatchEvent(new Event('resize')); } catch (e) {}
-    try {
-      document.querySelectorAll('.leaflet-container').forEach(function (c) {
-        if (c._leaflet_map && c._leaflet_map.invalidateSize) {
-          c._leaflet_map.invalidateSize(false);
-        }
-        /* Nudge layout so React-Leaflet ResizeObserver reflows tiles. */
-        var h = c.style.height;
-        c.style.height = (c.clientHeight + 1) + 'px';
-        void c.offsetHeight;
-        c.style.height = h || '';
-      });
-    } catch (e2) {}
-  }
-
-  var resizeTimer = null;
-  function scheduleInvalidate() {
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(invalidateMapsHard, 120);
-  }
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', scheduleInvalidate);
-    window.visualViewport.addEventListener('scroll', scheduleInvalidate);
-  }
-  window.addEventListener('resize', scheduleInvalidate);
-  document.addEventListener('focusin', function (ev) {
-    var t = ev.target;
-    if (!t || !t.closest) return;
-    if (!t.closest('[role="combobox"], input, textarea')) return;
-    /* Keep focus inside the map search — do not scroll the whole fixed shell
-       (that was dragging the search over Report / Save). */
-    setTimeout(function () {
-      try {
-        var pane = t.closest('section.relative');
-        if (pane) pane.scrollTop = 0;
-      } catch (e) {}
-      scheduleInvalidate();
-    }, 80);
-  });
-  document.addEventListener('focusout', function () {
-    setTimeout(scheduleInvalidate, 160);
-  });
-
-  /* After place pick, React flyTo runs — refresh tiles once animation starts. */
-  document.addEventListener('click', function (ev) {
-    var t = ev.target;
-    if (!t || !t.closest) return;
-    if (t.closest('ul[role="listbox"] button, ul[role="listbox"] [role="option"]')) {
-      setTimeout(invalidateMapsHard, 200);
-      setTimeout(invalidateMapsHard, 900);
-    }
-  }, true);
-
-  var moLayout = new MutationObserver(function () { scheduleInvalidate(); });
-  moLayout.observe(document.documentElement, { childList: true, subtree: true });
-  setTimeout(invalidateMapsHard, 300);
-  setTimeout(invalidateMapsHard, 1000);
-  setTimeout(invalidateMapsHard, 2000);
+  }, 500);
 
   function notifyClose() {
     try { Solar360Host.postMessage('close'); } catch (e) {}
   }
 
-  function wireBackControls(root) {
+  function wireBack(root) {
     var scope = root || document;
     var anchors = scope.querySelectorAll('a[href]');
     for (var i = 0; i < anchors.length; i++) {
       var a = anchors[i];
       if (a.dataset.solar360Back) continue;
       var href = a.getAttribute('href') || '';
-      var isLeadBack = /\\/solar\\/leads(\\/|\$)/.test(href) && href.indexOf('/solar/designs/') === -1;
+      var isLeadBack = /\\/solar\\/leads(\\/|\$)/.test(href)
+        && href.indexOf('/solar/designs/') === -1;
       if (!isLeadBack) continue;
       a.dataset.solar360Back = '1';
       a.addEventListener('click', function (ev) {
@@ -325,22 +231,19 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     }
   }
 
-  wireBackControls(document);
+  wireBack(document);
   var mo = new MutationObserver(function (mutations) {
     for (var i = 0; i < mutations.length; i++) {
       var nodes = mutations[i].addedNodes;
       for (var j = 0; j < nodes.length; j++) {
-        var n = nodes[j];
-        if (n.nodeType === 1) wireBackControls(n);
+        if (nodes[j].nodeType === 1) wireBack(nodes[j]);
       }
     }
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
   window.addEventListener('popstate', function () {
-    if (!/\\/solar\\/designs\\//.test(location.pathname)) {
-      notifyClose();
-    }
+    if (!/\\/solar\\/designs\\//.test(location.pathname)) notifyClose();
   });
 })();
 ''');
@@ -376,15 +279,11 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
   }
 
   NavigationDecision _handleNavigation(NavigationRequest request) {
-    final url = request.url;
-    final uri = Uri.tryParse(url);
+    final uri = Uri.tryParse(request.url);
     if (uri == null) return NavigationDecision.prevent;
 
-    // CRITICAL: Esri / CDN tile + asset loads are not main-frame navigations.
-    // Blocking them greys out the map ("Map data not yet available").
-    if (!request.isMainFrame) {
-      return NavigationDecision.navigate;
-    }
+    // Esri tiles / assets — never block.
+    if (!request.isMainFrame) return NavigationDecision.navigate;
 
     if (uri.scheme == 'about' || uri.scheme == 'data' || uri.scheme == 'blob') {
       return NavigationDecision.navigate;
@@ -398,6 +297,7 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     if (uri.scheme == 'http' || uri.scheme == 'https') {
       if (_isSameAppHost(uri)) {
         final path = uri.path;
+        // Leaving the designer via full navigation → close Flutter screen.
         if (!path.contains('/solar/designs/') &&
             !path.contains('/login') &&
             path.isNotEmpty &&
@@ -409,7 +309,6 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
         }
         return NavigationDecision.navigate;
       }
-      // Other https main-frame (rare) — allow in WebView so map/CDN never breaks.
       return NavigationDecision.navigate;
     }
 
@@ -426,7 +325,7 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     setState(() {
       _loading = true;
       _error = null;
-      _mobileTweaksInjected = false;
+      _hostScriptInjected = false;
     });
     final controller = _controller;
     if (controller == null) {
@@ -449,53 +348,50 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
         statusBarColor: Colors.white,
         statusBarIconBrightness: Brightness.dark,
       ),
-      child: PopScope(
-        canPop: true,
-        child: Scaffold(
-          resizeToAvoidBottomInset: true,
-          backgroundColor: Colors.white,
-          body: SafeArea(
-            bottom: false,
-            child: Stack(
-              children: [
-                if (_error != null)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.view_in_ar_outlined, size: 40),
-                          const SizedBox(height: 12),
-                          Text(_error!, textAlign: TextAlign.center),
-                          const SizedBox(height: 16),
-                          FilledButton(
-                            onPressed: _reload,
-                            child: const Text('Retry'),
-                          ),
-                          TextButton(
-                            onPressed: _onClose,
-                            child: const Text('Close'),
-                          ),
-                        ],
-                      ),
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          bottom: false,
+          child: Stack(
+            children: [
+              if (_error != null)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.view_in_ar_outlined, size: 40),
+                        const SizedBox(height: 12),
+                        Text(_error!, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: _reload,
+                          child: const Text('Retry'),
+                        ),
+                        TextButton(
+                          onPressed: _onClose,
+                          child: const Text('Close'),
+                        ),
+                      ],
                     ),
-                  )
-                else if (controller != null)
-                  Positioned.fill(
-                    child: WebViewWidget(controller: controller),
-                  )
-                else
-                  const SizedBox.expand(),
-                if (_loading)
-                  const Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    child: LinearProgressIndicator(minHeight: 2),
                   ),
-              ],
-            ),
+                )
+              else if (controller != null)
+                Positioned.fill(
+                  child: WebViewWidget(controller: controller),
+                )
+              else
+                const SizedBox.expand(),
+              if (_loading)
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+            ],
           ),
         ),
       ),
