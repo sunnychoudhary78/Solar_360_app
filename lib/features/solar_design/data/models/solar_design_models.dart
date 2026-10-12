@@ -290,6 +290,36 @@ class SolarDesignDetail extends SolarDesignSummary {
       );
 }
 
+/// Place hit from `/solar-designs/geocode` or `/geocode/suggest`.
+class SolarGeocodeHit {
+  final double lat;
+  final double lng;
+  final String label;
+  final String name;
+  final String detail;
+  final String type;
+
+  const SolarGeocodeHit({
+    required this.lat,
+    required this.lng,
+    this.label = '',
+    this.name = '',
+    this.detail = '',
+    this.type = '',
+  });
+
+  factory SolarGeocodeHit.fromJson(Map<String, dynamic> json) {
+    return SolarGeocodeHit(
+      lat: _num(json['lat']),
+      lng: _num(json['lng']),
+      label: _str(json['label']),
+      name: _str(json['name']),
+      detail: _str(json['detail']),
+      type: _str(json['type']),
+    );
+  }
+}
+
 String _str(dynamic value, {String fallback = ''}) {
   final text = value?.toString().trim() ?? '';
   return text.isEmpty ? fallback : text;

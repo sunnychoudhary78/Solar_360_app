@@ -41,6 +41,14 @@ class SolarDesignApiService {
     return SolarDesignDetail.fromJson(_asMap(res));
   }
 
+  Future<SolarDesignDetail> save({
+    required String id,
+    required Map<String, dynamic> body,
+  }) async {
+    final res = await _api.put(ApiEndpoints.solarDesign(id), body);
+    return SolarDesignDetail.fromJson(_asMap(res));
+  }
+
   Future<SolarDesignDetail> setSharing({
     required String id,
     required bool enabled,
@@ -59,6 +67,40 @@ class SolarDesignApiService {
     return _api.postBytes(ApiEndpoints.solarDesignReport(id), {
       'origin': ApiConstants.webAppBaseUrl,
     });
+  }
+
+  Future<List<SolarGeocodeHit>> geocode(String query) async {
+    final res = await _api.get(
+      ApiEndpoints.solarDesignGeocode,
+      queryParams: {'q': query},
+    );
+    return _parseGeocode(res);
+  }
+
+  Future<List<SolarGeocodeHit>> geocodeSuggest(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    final res = await _api.get(
+      ApiEndpoints.solarDesignGeocodeSuggest,
+      queryParams: {
+        'q': query,
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+      },
+    );
+    return _parseGeocode(res);
+  }
+
+  List<SolarGeocodeHit> _parseGeocode(dynamic res) {
+    final map = _asMap(res);
+    final raw = map['results'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => SolarGeocodeHit.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
   }
 
   Map<String, dynamic> _asMap(dynamic res) {

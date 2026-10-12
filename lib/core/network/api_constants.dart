@@ -34,4 +34,11 @@ class ApiConstants {
     final base = webAppBaseUrl.replaceAll(RegExp(r'/+$'), '');
     return '$base/p/$code';
   }
+
+  /// Full-screen web designer (same UI as CRM `/solar/designs/:id`).
+  static String solarDesignerUrl(String designId) {
+    final id = designId.trim();
+    final base = webAppBaseUrl.replaceAll(RegExp(r'/+$'), '');
+    return '$base/solar/designs/$id';
+  }
 }

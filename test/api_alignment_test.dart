@@ -73,6 +73,10 @@ void main() {
         ApiConstants.publicSolarDesignUrl('Hk3mPq9xTa'),
         '${ApiConstants.webAppBaseUrl}/p/Hk3mPq9xTa',
       );
+      expect(
+        ApiConstants.solarDesignerUrl('design-1'),
+        '${ApiConstants.webAppBaseUrl}/solar/designs/design-1',
+      );
       expect(solarPerms.contains('solar_design.read'), isTrue);
     });
 

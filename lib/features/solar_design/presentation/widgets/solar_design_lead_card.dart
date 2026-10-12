@@ -62,10 +62,10 @@ class _SolarDesignLeadCardState extends ConsumerState<SolarDesignLeadCard> {
     final subtitle = _loading
         ? 'Loading…'
         : _count == null
-            ? 'Open 3D rooftop designs'
+            ? 'Draw roof & place panels (same as web)'
             : _count == 0
-                ? 'No designs yet'
-                : '$_count design${_count == 1 ? '' : 's'}';
+                ? 'No designs yet — tap to create'
+                : '$_count design${_count == 1 ? '' : 's'} · open designer';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),

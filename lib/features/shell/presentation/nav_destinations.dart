@@ -350,6 +350,18 @@ class NavDestinations {
       quickActionSubtitle: 'Add a new lead',
     ),
     AppDestination(
+      id: 'ge_solar_design',
+      label: '3D Solar Design',
+      icon: Icons.view_in_ar_outlined,
+      selectedIcon: Icons.view_in_ar_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      permission: 'solar_design.read',
+      route: '/solar/3d-design',
+      quickAction: true,
+      quickActionSubtitle: 'Rooftop panel designer',
+    ),
+    AppDestination(
       id: 'ge_survey_templates',
       label: 'Survey Templates',
       icon: Icons.assignment_outlined,

@@ -11,6 +11,7 @@ import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/solar_design/data/models/solar_design_models.dart';
 import 'package:solar_sales/features/solar_design/presentation/providers/solar_design_providers.dart';
 import 'package:solar_sales/features/solar_design/presentation/screens/solar_design_preview_screen.dart';
+import 'package:solar_sales/features/solar_design/presentation/screens/solar_designer_screen.dart';
 import 'package:solar_sales/features/solar_design/presentation/solar_design_access.dart';
 import 'package:solar_sales/shared/utils/app_snackbar.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
@@ -63,19 +64,42 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
     }
   }
 
-  Future<(double, double)?> _resolveMapCenter() async {
+  /// Same starting-point rules as web `SolarDesignPanel.startingPoint`:
+  /// lead GPS → geocoded address → device GPS → India centre.
+  Future<({double lat, double lng, int zoom})?> _resolveMapCenter() async {
+    bool valid(double? lat, double? lng) {
+      if (lat == null || lng == null) return false;
+      if (lat == 0 && lng == 0) return false;
+      return lat.abs() <= 85 && lng.abs() <= 180;
+    }
+
     final leadLat = double.tryParse(widget.lead.latitude.trim());
     final leadLng = double.tryParse(widget.lead.longitude.trim());
-    if (leadLat != null &&
-        leadLng != null &&
-        leadLat.abs() <= 85 &&
-        leadLng.abs() <= 180) {
-      return (leadLat, leadLng);
+    if (valid(leadLat, leadLng)) {
+      return (lat: leadLat!, lng: leadLng!, zoom: 20);
     }
 
     final fromApi = _result?.lead;
-    if (fromApi?.latitude != null && fromApi?.longitude != null) {
-      return (fromApi!.latitude!, fromApi.longitude!);
+    if (valid(fromApi?.latitude, fromApi?.longitude)) {
+      return (lat: fromApi!.latitude!, lng: fromApi.longitude!, zoom: 20);
+    }
+
+    final address = [
+      widget.lead.address,
+      widget.lead.city,
+      widget.lead.state,
+      widget.lead.pincode,
+    ].where((p) => p.trim().isNotEmpty).join(', ');
+    if (address.length >= 2) {
+      try {
+        final hits =
+            await ref.read(solarDesignApiProvider).geocode(address);
+        if (hits.isNotEmpty && valid(hits.first.lat, hits.first.lng)) {
+          return (lat: hits.first.lat, lng: hits.first.lng, zoom: 19);
+        }
+      } catch (_) {
+        // Fall through — designer has its own place search.
+      }
     }
 
     try {
@@ -83,19 +107,39 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return null;
+      if (permission != LocationPermission.denied &&
+          permission != LocationPermission.deniedForever) {
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        );
+        if (valid(position.latitude, position.longitude)) {
+          return (
+            lat: position.latitude,
+            lng: position.longitude,
+            zoom: 18,
+          );
+        }
       }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-      return (position.latitude, position.longitude);
     } catch (_) {
-      return null;
+      // Fall through to India centre.
     }
+
+    // Web fallback (INDIA_CENTER) so create never fails without a pin.
+    return (lat: 20.5937, lng: 78.9629, zoom: 5);
+  }
+
+  Future<void> _openDesigner(SolarDesignSummary design) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SolarDesignerScreen(
+          designId: design.id,
+          title: design.name,
+        ),
+      ),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _createDesign() async {
@@ -114,17 +158,21 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
       }
       final created = await ref.read(solarDesignApiProvider).create(
             leadId: widget.lead.id,
-            centerLat: center.$1,
-            centerLng: center.$2,
+            centerLat: center.lat,
+            centerLng: center.lng,
+            mapZoom: center.zoom,
           );
       if (!mounted) return;
       showAppSnackBar(context, '${created.name} created');
-      await _load();
+      await _openDesigner(created.toSummary());
     } catch (e) {
       if (!mounted) return;
       showAppSnackBar(context, cleanError(e), isError: true);
     } finally {
-      if (mounted) setState(() => _creating = false);
+      if (mounted) {
+        setState(() => _creating = false);
+        await _load();
+      }
     }
   }
 
@@ -326,95 +374,115 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) {
+        final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: Text(
-                  design.name,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  '${design.capacityLabel} · ${design.panelsLabel}\n${design.energyLabel}',
-                ),
-                isThreeLine: true,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    title: Text(
+                      design.name,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(
+                      '${design.capacityLabel} · ${design.panelsLabel}\n${design.energyLabel}',
+                    ),
+                    isThreeLine: true,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.architecture_outlined),
+                    title: const Text('Open designer'),
+                    subtitle: const Text('Draw roof, place panels, 3D tools'),
+                    enabled: !busy,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openDesigner(design);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.view_in_ar_outlined),
+                    title: const Text('Customer 3D preview'),
+                    subtitle: const Text('Public share view'),
+                    enabled: !busy,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openPreview(design);
+                    },
+                  ),
+                  if (canUpdate) ...[
+                    ListTile(
+                      leading: const Icon(Icons.link),
+                      title: const Text('Copy preview link'),
+                      enabled: !busy,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _copyLink(design);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.chat),
+                      title: const Text('Share on WhatsApp'),
+                      enabled: !busy,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _shareWhatsApp(design);
+                      },
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        design.shareEnabled
+                            ? Icons.link_off_outlined
+                            : Icons.link_outlined,
+                      ),
+                      title: Text(
+                        design.shareEnabled
+                            ? 'Turn share link off'
+                            : 'Turn share link on',
+                      ),
+                      enabled: !busy,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _toggleShare(design);
+                      },
+                    ),
+                  ],
+                  ListTile(
+                    leading: const Icon(Icons.picture_as_pdf_outlined),
+                    title: const Text('Download PDF report'),
+                    enabled: !busy,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _downloadPdf(design);
+                    },
+                  ),
+                  if (canUpdate)
+                    ListTile(
+                      leading: Icon(
+                        Icons.delete_outline,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      title: Text(
+                        'Delete design',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      enabled: !busy,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _deleteDesign(design);
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                ],
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.view_in_ar_outlined),
-                title: const Text('Open 3D preview'),
-                enabled: !busy,
-                onTap: () {
-                  Navigator.pop(context);
-                  _openPreview(design);
-                },
-              ),
-              if (canUpdate) ...[
-                ListTile(
-                  leading: const Icon(Icons.link),
-                  title: const Text('Copy preview link'),
-                  enabled: !busy,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _copyLink(design);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.chat),
-                  title: const Text('Share on WhatsApp'),
-                  enabled: !busy,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _shareWhatsApp(design);
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    design.shareEnabled
-                        ? Icons.link_off_outlined
-                        : Icons.link_outlined,
-                  ),
-                  title: Text(
-                    design.shareEnabled
-                        ? 'Turn share link off'
-                        : 'Turn share link on',
-                  ),
-                  enabled: !busy,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _toggleShare(design);
-                  },
-                ),
-              ],
-              ListTile(
-                leading: const Icon(Icons.picture_as_pdf_outlined),
-                title: const Text('Download PDF report'),
-                enabled: !busy,
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadPdf(design);
-                },
-              ),
-              if (canUpdate)
-                ListTile(
-                  leading: Icon(
-                    Icons.delete_outline,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                  title: Text(
-                    'Delete design',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                  enabled: !busy,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _deleteDesign(design);
-                  },
-                ),
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
         );
       },
@@ -478,7 +546,7 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
                             EmptyState(
                               title: 'No 3D designs yet',
                               subtitle: canCreate
-                                  ? 'Create a design for $leadName. Full roof drawing is done on web; here you can create, preview, share and download the PDF.'
+                                  ? 'Create a design for $leadName, then draw the roof on satellite imagery and lay out panels — same designer as the web app.'
                                   : 'No designs have been saved for this lead.',
                               icon: Icons.view_in_ar_outlined,
                               action: canCreate
@@ -515,7 +583,7 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
                             return _DesignCard(
                               design: design,
                               busy: _busyIds.contains(design.id),
-                              onOpen: () => _openPreview(design),
+                              onOpen: () => _openDesigner(design),
                               onMore: () => _showActions(design),
                             );
                           },
