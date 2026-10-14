@@ -358,11 +358,69 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     '  section.relative > .absolute[class*="top-3"] {',
     '    max-width: calc(100% - 2.5rem) !important;',
     '  }',
+    '}',
+
+    /* —— Map / 3D full-screen toggle (additive only) —— */
+    '.solar360-fs-btn {',
+    '  position: absolute !important;',
+    '  right: 10px !important;',
+    '  bottom: 10px !important;',
+    '  z-index: 1100 !important;',
+    '  display: inline-flex !important;',
+    '  align-items: center !important;',
+    '  gap: 6px !important;',
+    '  max-width: calc(100% - 20px) !important;',
+    '  padding: 8px 12px !important;',
+    '  border: none !important;',
+    '  border-radius: 10px !important;',
+    '  background: #0f172a !important;',
+    '  color: #fff !important;',
+    '  font: 600 12px/1.2 system-ui, -apple-system, sans-serif !important;',
+    '  letter-spacing: 0.01em !important;',
+    '  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.35) !important;',
+    '  pointer-events: auto !important;',
+    '  -webkit-tap-highlight-color: transparent !important;',
+    '  cursor: pointer !important;',
+    '}',
+    '.solar360-fs-btn svg {',
+    '  width: 14px !important;',
+    '  height: 14px !important;',
+    '  flex-shrink: 0 !important;',
+    '}',
+    '.solar360-fs-btn[aria-pressed="true"] {',
+    '  background: #ea580c !important;',
+    '}',
+    'html.solar360-map-fs .fixed.inset-0.z-40.flex.flex-col > header {',
+    '  display: none !important;',
+    '}',
+    'html.solar360-map-fs aside[class*="max-h-"] {',
+    '  display: none !important;',
+    '}',
+    'html.solar360-map-fs .fixed.inset-0.z-40.flex.flex-col > .flex.min-h-0.flex-1 {',
+    '  overflow: visible !important;',
+    '}',
+    'html.solar360-map-fs section.relative.isolate,',
+    'html.solar360-map-fs section.relative {',
+    '  position: fixed !important;',
+    '  top: 0 !important;',
+    '  right: 0 !important;',
+    '  bottom: 0 !important;',
+    '  left: 0 !important;',
+    '  width: 100% !important;',
+    '  height: 100% !important;',
+    '  max-height: none !important;',
+    '  min-height: 0 !important;',
+    '  flex: none !important;',
+    '  z-index: 2000 !important;',
+    '  overflow: hidden !important;',
+    '}',
+    'html.solar360-map-fs .solar360-fs-btn {',
+    '  bottom: max(12px, var(--solar360-bottom-inset, 0px)) !important;',
     '}'
   ].join('\\n');
   document.head.appendChild(style);
 
-  /* Nudge Leaflet after layout settles. Avoid React-mutation loops. */
+  /* Nudge Leaflet / 3D after layout settles. Avoid React-mutation loops. */
   function bumpResize() {
     try { window.dispatchEvent(new Event('resize')); } catch (e) {}
     try {
@@ -373,6 +431,57 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
   }
   setTimeout(bumpResize, 400);
   setTimeout(bumpResize, 1200);
+
+  var FS_EXPAND_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+  var FS_COLLAPSE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>';
+
+  function isMapFullscreen() {
+    return document.documentElement.classList.contains('solar360-map-fs');
+  }
+
+  function setMapFullscreen(on) {
+    document.documentElement.classList.toggle('solar360-map-fs', !!on);
+    var buttons = document.querySelectorAll('[data-solar360="fs-btn"]');
+    for (var i = 0; i < buttons.length; i++) {
+      var btn = buttons[i];
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.setAttribute('aria-label', on ? 'Exit full screen' : 'View full screen');
+      btn.innerHTML = (on ? FS_COLLAPSE_ICON + '<span>Exit Full Screen</span>'
+        : FS_EXPAND_ICON + '<span>View Full Screen</span>');
+    }
+    setTimeout(bumpResize, 50);
+    setTimeout(bumpResize, 300);
+  }
+
+  function findMapSection(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    return scope.querySelector('section.relative.isolate')
+      || scope.querySelector('.fixed.inset-0.z-40 section.relative')
+      || document.querySelector('section.relative.isolate')
+      || document.querySelector('.fixed.inset-0.z-40 section.relative');
+  }
+
+  function ensureFullscreenButton(root) {
+    var section = findMapSection(root);
+    if (!section) return;
+    if (section.querySelector('[data-solar360="fs-btn"]')) return;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('data-solar360', 'fs-btn');
+    btn.className = 'solar360-fs-btn';
+    btn.setAttribute('aria-pressed', isMapFullscreen() ? 'true' : 'false');
+    btn.setAttribute('aria-label', isMapFullscreen() ? 'Exit full screen' : 'View full screen');
+    btn.innerHTML = isMapFullscreen()
+      ? FS_COLLAPSE_ICON + '<span>Exit Full Screen</span>'
+      : FS_EXPAND_ICON + '<span>View Full Screen</span>';
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      setMapFullscreen(!isMapFullscreen());
+    }, true);
+    section.appendChild(btn);
+  }
 
   function notifyClose() {
     try { Solar360Host.postMessage('close'); } catch (e) {}
@@ -397,12 +506,17 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     }
   }
 
-  wireBack(document);
+  function onDomAdded(root) {
+    wireBack(root);
+    ensureFullscreenButton(root);
+  }
+
+  onDomAdded(document);
   var mo = new MutationObserver(function (mutations) {
     for (var i = 0; i < mutations.length; i++) {
       var nodes = mutations[i].addedNodes;
       for (var j = 0; j < nodes.length; j++) {
-        if (nodes[j].nodeType === 1) wireBack(nodes[j]);
+        if (nodes[j].nodeType === 1) onDomAdded(nodes[j]);
       }
     }
   });
@@ -411,6 +525,12 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
   window.addEventListener('popstate', function () {
     if (!/\\/solar\\/designs\\//.test(location.pathname)) notifyClose();
   });
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && isMapFullscreen()) {
+      setMapFullscreen(false);
+    }
+  }, true);
 })();
 ''');
   }
