@@ -117,7 +117,7 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
 <html>
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
   <title>Opening designer</title>
   <style>
     body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
@@ -171,19 +171,48 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     if (!url.contains('/solar/designs/')) return;
 
     _hostScriptInjected = true;
+    // WebView often reports 0 for env(safe-area-inset-*); pass Flutter insets.
+    final mq = mounted ? MediaQuery.of(context) : null;
+    final bottomInset = (mq?.padding.bottom ?? 0).clamp(0, 48).toStringAsFixed(0);
+    final shortestSide = mq?.size.shortestSide ?? 390;
+
     await controller.runJavaScript('''
 (function () {
   if (window.__solar360Host) return;
   window.__solar360Host = true;
 
+  try {
+    var meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'viewport');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute(
+      'content',
+      'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+    );
+  } catch (e) {}
+
   var style = document.createElement('style');
   style.setAttribute('data-solar360', 'host');
   style.textContent = [
-    /* Readable search / form text in Android WebView */
+    ':root { --solar360-bottom-inset: ${bottomInset}px; --solar360-shortest: ${shortestSide.toStringAsFixed(0)}px; }',
+    /* —— Base: readable controls + no accidental page scroll —— */
+    'html, body {',
+    '  height: 100% !important;',
+    '  max-height: 100% !important;',
+    '  overflow: hidden !important;',
+    '  overscroll-behavior: none !important;',
+    '  -webkit-text-size-adjust: 100% !important;',
+    '  text-size-adjust: 100% !important;',
+    '}',
     'input, textarea, select {',
     '  color: #0f172a !important;',
     '  -webkit-text-fill-color: #0f172a !important;',
     '  caret-color: #ea580c !important;',
+    '  font-size: 16px !important;',
+    '  line-height: 1.25 !important;',
     '}',
     'input::placeholder, textarea::placeholder {',
     '  color: #94a3b8 !important;',
@@ -194,19 +223,156 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
     '  -webkit-text-fill-color: #0f172a !important;',
     '  font-size: 16px !important;',
     '}',
-    /* Header above floating PlaceSearch */
-    'header { position: relative; z-index: 50; background: #fff; }',
-    /* Clip search to the map pane so it cannot cover Report / Save */
-    'section.relative { overflow: hidden; }',
-    'section.relative ul[role="listbox"] { max-height: min(40vh, 280px); }'
+
+    /* —— Designer shell fills the WebView on every phone height —— */
+    'body > #root, body > #root > * {',
+    '  min-height: 0 !important;',
+    '}',
+    '.fixed.inset-0.z-40.flex.flex-col {',
+    '  top: 0 !important;',
+    '  right: 0 !important;',
+    '  bottom: 0 !important;',
+    '  left: 0 !important;',
+    '  width: 100% !important;',
+    '  height: 100% !important;',
+    '  max-height: 100% !important;',
+    '  overflow: hidden !important;',
+    '}',
+    '.fixed.inset-0.z-40.flex.flex-col > .flex.min-h-0.flex-1 {',
+    '  min-height: 0 !important;',
+    '  flex: 1 1 0 !important;',
+    '  overflow: hidden !important;',
+    '}',
+
+    /* Header stays above map; wraps instead of overflowing */
+    'header {',
+    '  position: relative !important;',
+    '  z-index: 50 !important;',
+    '  background: #fff !important;',
+    '  flex-shrink: 0 !important;',
+    '  max-width: 100% !important;',
+    '}',
+    'header .truncate {',
+    '  max-width: 100% !important;',
+    '  overflow: hidden !important;',
+    '  text-overflow: ellipsis !important;',
+    '  white-space: nowrap !important;',
+    '}',
+    'header .ml-auto {',
+    '  max-width: 100% !important;',
+    '}',
+
+    /* Map pane: MUST shrink on short phones (web min-h-320 caused top clip) */
+    'section.relative.isolate,',
+    'section.relative {',
+    '  position: relative !important;',
+    '  flex: 1 1 0 !important;',
+    '  min-height: 0 !important;',
+    '  max-height: 100% !important;',
+    '  overflow: hidden !important;',
+    '  z-index: 1 !important;',
+    '}',
+
+    /* Keep search + sun toggles fully inside the map (not cut at top) */
+    'section.relative > .absolute.left-3.top-3,',
+    'section.relative > .absolute[class*="top-3"] {',
+    '  top: 10px !important;',
+    '  left: 10px !important;',
+    '  right: auto !important;',
+    '  max-width: calc(100% - 3.25rem) !important;',
+    '  box-sizing: border-box !important;',
+    '  pointer-events: auto !important;',
+    '}',
+    /* PlaceSearch (has input) stays above sun-toggle chips */
+    'section.relative > .absolute[class*="top-3"]:has(input) {',
+    '  z-index: 1000 !important;',
+    '  width: min(400px, calc(100% - 3.25rem)) !important;',
+    '}',
+    'section.relative > .absolute[class*="top-3"]:not(:has(input)) {',
+    '  z-index: 20 !important;',
+    '}',
+    'section.relative .absolute .flex.h-10.items-center,',
+    'section.relative .relative > .flex.h-10.items-center {',
+    '  height: auto !important;',
+    '  min-height: 2.75rem !important;',
+    '  max-height: none !important;',
+    '  padding-top: 0.4rem !important;',
+    '  padding-bottom: 0.4rem !important;',
+    '  box-sizing: border-box !important;',
+    '  overflow: visible !important;',
+    '}',
+    'section.relative .relative > .flex.h-10.items-center input {',
+    '  height: auto !important;',
+    '  min-height: 1.5rem !important;',
+    '  font-size: 16px !important;',
+    '  line-height: 1.3 !important;',
+    '}',
+    'section.relative ul[role="listbox"],',
+    'section.relative .absolute.inset-x-0.top-full {',
+    '  max-height: min(36vh, 260px) !important;',
+    '  overflow-y: auto !important;',
+    '  -webkit-overflow-scrolling: touch !important;',
+    '  z-index: 1001 !important;',
+    '}',
+
+    /* Sun-path / panel-info chips wrap cleanly; stay fully visible */
+    'section.relative > .absolute[class*="top-3"][class*="flex"] {',
+    '  row-gap: 6px !important;',
+    '  column-gap: 6px !important;',
+    '  align-content: flex-start !important;',
+    '}',
+    'section.relative > .absolute[class*="top-3"] button {',
+    '  max-width: 100% !important;',
+    '  white-space: nowrap !important;',
+    '}',
+
+    /* Bottom tools / system-size panel: scroll + home-indicator padding */
+    'aside[class*="max-h-"] {',
+    '  max-height: min(42vh, 420px) !important;',
+    '  min-height: 0 !important;',
+    '  overflow-x: hidden !important;',
+    '  overflow-y: auto !important;',
+    '  -webkit-overflow-scrolling: touch !important;',
+    '  overscroll-behavior: contain !important;',
+    '  padding-bottom: max(12px, var(--solar360-bottom-inset, 0px)) !important;',
+    '  box-sizing: border-box !important;',
+    '}',
+
+    /* Short phones: give map more room; keep search/overlays on-screen */
+    '@media (max-height: 780px) {',
+    '  header { padding-top: 0.35rem !important; padding-bottom: 0.35rem !important; }',
+    '  aside[class*="max-h-"] { max-height: min(38vh, 340px) !important; }',
+    '}',
+    '@media (max-height: 680px) {',
+    '  aside[class*="max-h-"] { max-height: min(34vh, 280px) !important; }',
+    '  section.relative > .absolute.left-3.top-3,',
+    '  section.relative > .absolute[class*="top-3"] {',
+    '    top: 8px !important;',
+    '    left: 8px !important;',
+    '    max-width: calc(100% - 2.75rem) !important;',
+    '  }',
+    '}',
+    '@media (max-width: 380px) {',
+    '  header { padding-left: 0.5rem !important; padding-right: 0.5rem !important; gap: 0.35rem !important; }',
+    '  section.relative > .absolute.left-3.top-3,',
+    '  section.relative > .absolute[class*="top-3"] {',
+    '    max-width: calc(100% - 2.5rem) !important;',
+    '  }',
+    '}'
   ].join('\\n');
   document.head.appendChild(style);
 
-  /* One gentle resize after first paint so tiles fill the container.
-     Do NOT run this on every React mutation — that clears roofs/panels. */
-  setTimeout(function () {
+  /* Nudge Leaflet after layout settles. Avoid React-mutation loops. */
+  function bumpResize() {
     try { window.dispatchEvent(new Event('resize')); } catch (e) {}
-  }, 500);
+    try {
+      if (window.visualViewport) {
+        window.visualViewport.dispatchEvent(new Event('resize'));
+      }
+    } catch (e) {}
+  }
+  setTimeout(bumpResize, 400);
+  setTimeout(bumpResize, 1200);
 
   function notifyClose() {
     try { Solar360Host.postMessage('close'); } catch (e) {}
@@ -343,6 +509,15 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
   Widget build(BuildContext context) {
     final controller = _controller;
 
+    final media = MediaQuery.of(context);
+    // Top/side system insets only. Bottom (home indicator) is handled in injected
+    // CSS so the tools panel can scroll fully on short phones.
+    final safePadding = EdgeInsets.only(
+      top: media.padding.top,
+      left: media.padding.left,
+      right: media.padding.right,
+    );
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
         statusBarColor: Colors.white,
@@ -351,9 +526,10 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         backgroundColor: Colors.white,
-        body: SafeArea(
-          bottom: false,
+        body: Padding(
+          padding: safePadding,
           child: Stack(
+            fit: StackFit.expand,
             children: [
               if (_error != null)
                 Center(
@@ -379,9 +555,7 @@ class _SolarDesignerScreenState extends ConsumerState<SolarDesignerScreen> {
                   ),
                 )
               else if (controller != null)
-                Positioned.fill(
-                  child: WebViewWidget(controller: controller),
-                )
+                WebViewWidget(controller: controller)
               else
                 const SizedBox.expand(),
               if (_loading)
