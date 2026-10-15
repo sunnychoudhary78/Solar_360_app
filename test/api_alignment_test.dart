@@ -66,6 +66,22 @@ void main() {
       );
       expect(ApiEndpoints.solarDesignGeocode, 'solar-designs/geocode');
       expect(
+        ApiEndpoints.solarDesignGeocodeSuggest,
+        'solar-designs/geocode/suggest',
+      );
+      expect(
+        ApiEndpoints.solarDesignGeocodePlace,
+        'solar-designs/geocode/place',
+      );
+      expect(
+        ApiEndpoints.solarDesignEnergyEstimate,
+        'solar-designs/energy-estimate',
+      );
+      expect(
+        ApiEndpoints.solarDesignSurroundings('d1'),
+        'solar-designs/d1/surroundings',
+      );
+      expect(
         ApiEndpoints.publicSolarDesign('Hk3mPq9xTa'),
         'public/solar-designs/Hk3mPq9xTa',
       );

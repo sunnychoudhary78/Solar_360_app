@@ -9,6 +9,7 @@ import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
 import 'package:solar_sales/features/solar_design/data/models/solar_design_models.dart';
+import 'package:solar_sales/features/solar_design/data/solar_design_api_service.dart';
 import 'package:solar_sales/features/solar_design/presentation/providers/solar_design_providers.dart';
 import 'package:solar_sales/features/solar_design/presentation/screens/solar_design_preview_screen.dart';
 import 'package:solar_sales/features/solar_design/presentation/screens/solar_designer_screen.dart';
@@ -34,6 +35,8 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
   bool _creating = false;
   String? _error;
   final Set<String> _busyIds = {};
+  /// Cached surroundings presence (list API omits the field).
+  final Map<String, bool> _hasSurroundings = {};
 
   @override
   void initState() {
@@ -64,24 +67,38 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
     }
   }
 
-  /// Same starting-point rules as web `SolarDesignPanel.startingPoint`:
-  /// lead GPS → geocoded address → device GPS → India centre.
-  Future<({double lat, double lng, int zoom})?> _resolveMapCenter() async {
-    bool valid(double? lat, double? lng) {
-      if (lat == null || lng == null) return false;
-      if (lat == 0 && lng == 0) return false;
-      return lat.abs() <= 85 && lng.abs() <= 180;
-    }
+  bool _validCoords(double? lat, double? lng) {
+    if (lat == null || lng == null) return false;
+    if (lat == 0 && lng == 0) return false;
+    return lat.abs() <= 85 && lng.abs() <= 180;
+  }
 
+  /// Same starting-point rules as web `SolarDesignPanel.startingPoint`:
+  /// lead GPS → pasted lat,lng → geocoded address (incl. place_id) → device GPS → India centre.
+  Future<({double lat, double lng, int zoom})?> _resolveMapCenter() async {
     final leadLat = double.tryParse(widget.lead.latitude.trim());
     final leadLng = double.tryParse(widget.lead.longitude.trim());
-    if (valid(leadLat, leadLng)) {
+    if (_validCoords(leadLat, leadLng)) {
       return (lat: leadLat!, lng: leadLng!, zoom: 20);
     }
 
     final fromApi = _result?.lead;
-    if (valid(fromApi?.latitude, fromApi?.longitude)) {
+    if (_validCoords(fromApi?.latitude, fromApi?.longitude)) {
       return (lat: fromApi!.latitude!, lng: fromApi.longitude!, zoom: 20);
+    }
+
+    // Pasted "lat, lng" in address (same as web PlaceSearch).
+    final pasted = SolarDesignApiService.parseLatLngPair(widget.lead.address) ??
+        SolarDesignApiService.parseLatLngPair(
+          [
+            widget.lead.address,
+            widget.lead.city,
+            widget.lead.state,
+            widget.lead.pincode,
+          ].where((p) => p.trim().isNotEmpty).join(', '),
+        );
+    if (pasted != null && _validCoords(pasted.lat, pasted.lng)) {
+      return (lat: pasted.lat, lng: pasted.lng, zoom: 19);
     }
 
     final address = [
@@ -92,10 +109,14 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
     ].where((p) => p.trim().isNotEmpty).join(', ');
     if (address.length >= 2) {
       try {
-        final hits =
-            await ref.read(solarDesignApiProvider).geocode(address);
-        if (hits.isNotEmpty && valid(hits.first.lat, hits.first.lng)) {
-          return (lat: hits.first.lat, lng: hits.first.lng, zoom: 19);
+        final api = ref.read(solarDesignApiProvider);
+        final hits = await api.geocode(address);
+        for (final hit in hits) {
+          final resolved = await api.resolveGeocodeHit(hit);
+          if (resolved != null &&
+              _validCoords(resolved.lat, resolved.lng)) {
+            return (lat: resolved.lat, lng: resolved.lng, zoom: 19);
+          }
         }
       } catch (_) {
         // Fall through — designer has its own place search.
@@ -114,7 +135,7 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
             accuracy: LocationAccuracy.high,
           ),
         );
-        if (valid(position.latitude, position.longitude)) {
+        if (_validCoords(position.latitude, position.longitude)) {
           return (
             lat: position.latitude,
             lng: position.longitude,
@@ -331,6 +352,52 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
     });
   }
 
+  Future<void> _loadSurroundings(SolarDesignSummary design) async {
+    await _withBusy(design.id, () async {
+      try {
+        final detail = await ref.read(solarDesignApiProvider).loadSurroundings(
+              id: design.id,
+            );
+        if (!mounted) return;
+        setState(() {
+          _hasSurroundings[design.id] = detail.surroundings?.isLoaded == true;
+        });
+        final status = detail.surroundings?.statusLabel ?? 'Loaded';
+        showAppSnackBar(context, '3D surroundings $status');
+      } catch (e) {
+        if (!mounted) return;
+        showAppSnackBar(context, cleanError(e), isError: true);
+      }
+    });
+  }
+
+  Future<void> _clearSurroundings(SolarDesignSummary design) async {
+    await _withBusy(design.id, () async {
+      try {
+        await ref.read(solarDesignApiProvider).clearSurroundings(design.id);
+        if (!mounted) return;
+        setState(() => _hasSurroundings[design.id] = false);
+        showAppSnackBar(context, '3D surroundings cleared');
+      } catch (e) {
+        if (!mounted) return;
+        showAppSnackBar(context, cleanError(e), isError: true);
+      }
+    });
+  }
+
+  /// Refresh surroundings flag from detail when opening actions (list omits it).
+  Future<void> _refreshSurroundingsFlag(String designId) async {
+    try {
+      final detail = await ref.read(solarDesignApiProvider).getById(designId);
+      if (!mounted) return;
+      setState(() {
+        _hasSurroundings[designId] = detail.surroundings?.isLoaded == true;
+      });
+    } catch (_) {
+      // Keep cached value; actions still work.
+    }
+  }
+
   Future<void> _deleteDesign(SolarDesignSummary design) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -357,6 +424,7 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
       try {
         await ref.read(solarDesignApiProvider).deactivate(design.id);
         if (!mounted) return;
+        setState(() => _hasSurroundings.remove(design.id));
         showAppSnackBar(context, 'Design deleted');
         await _load();
       } catch (e) {
@@ -375,115 +443,155 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) {
-        final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    title: Text(
-                      design.name,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    subtitle: Text(
-                      '${design.capacityLabel} · ${design.panelsLabel}\n${design.energyLabel}',
-                    ),
-                    isThreeLine: true,
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.architecture_outlined),
-                    title: const Text('Open designer'),
-                    subtitle: const Text('Draw roof, place panels, 3D tools'),
-                    enabled: !busy,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _openDesigner(design);
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.view_in_ar_outlined),
-                    title: const Text('Customer 3D preview'),
-                    subtitle: const Text('Public share view'),
-                    enabled: !busy,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _openPreview(design);
-                    },
-                  ),
-                  if (canUpdate) ...[
-                    ListTile(
-                      leading: const Icon(Icons.link),
-                      title: const Text('Copy preview link'),
-                      enabled: !busy,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _copyLink(design);
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.chat),
-                      title: const Text('Share on WhatsApp'),
-                      enabled: !busy,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _shareWhatsApp(design);
-                      },
-                    ),
-                    ListTile(
-                      leading: Icon(
-                        design.shareEnabled
-                            ? Icons.link_off_outlined
-                            : Icons.link_outlined,
-                      ),
-                      title: Text(
-                        design.shareEnabled
-                            ? 'Turn share link off'
-                            : 'Turn share link on',
-                      ),
-                      enabled: !busy,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _toggleShare(design);
-                      },
-                    ),
-                  ],
-                  ListTile(
-                    leading: const Icon(Icons.picture_as_pdf_outlined),
-                    title: const Text('Download PDF report'),
-                    enabled: !busy,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _downloadPdf(design);
-                    },
-                  ),
-                  if (canUpdate)
-                    ListTile(
-                      leading: Icon(
-                        Icons.delete_outline,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      title: Text(
-                        'Delete design',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            if (canUpdate && !_hasSurroundings.containsKey(design.id)) {
+              // Mark pending immediately so rebuilds don't re-fetch.
+              _hasSurroundings[design.id] = false;
+              _refreshSurroundingsFlag(design.id).then((_) {
+                if (sheetContext.mounted) setSheetState(() {});
+              });
+            }
+            final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
+            final surroundingsLoaded = _hasSurroundings[design.id] == true;
+            return SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        title: Text(
+                          design.name,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
+                        subtitle: Text(
+                          '${design.capacityLabel} · ${design.panelsLabel}\n${design.energyLabel}',
+                        ),
+                        isThreeLine: true,
                       ),
-                      enabled: !busy,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _deleteDesign(design);
-                      },
-                    ),
-                  const SizedBox(height: 8),
-                ],
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.architecture_outlined),
+                        title: const Text('Open designer'),
+                        subtitle:
+                            const Text('Draw roof, place panels, 3D tools'),
+                        enabled: !busy,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _openDesigner(design);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.view_in_ar_outlined),
+                        title: const Text('Customer 3D preview'),
+                        subtitle: const Text('Public share view'),
+                        enabled: !busy,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _openPreview(design);
+                        },
+                      ),
+                      if (canUpdate) ...[
+                        ListTile(
+                          leading: const Icon(Icons.terrain_outlined),
+                          title: const Text('Load 3D surroundings'),
+                          subtitle: Text(
+                            surroundingsLoaded
+                                ? 'Refresh Google Solar height map for shading'
+                                : 'Fetch nearby buildings & trees (Google Solar)',
+                          ),
+                          enabled: !busy,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _loadSurroundings(design);
+                          },
+                        ),
+                        if (surroundingsLoaded)
+                          ListTile(
+                            leading: const Icon(Icons.layers_clear_outlined),
+                            title: const Text('Clear 3D surroundings'),
+                            subtitle: const Text(
+                              'Remove stored height / sunlight grid',
+                            ),
+                            enabled: !busy,
+                            onTap: () {
+                              Navigator.pop(context);
+                              _clearSurroundings(design);
+                            },
+                          ),
+                        ListTile(
+                          leading: const Icon(Icons.link),
+                          title: const Text('Copy preview link'),
+                          enabled: !busy,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _copyLink(design);
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.chat),
+                          title: const Text('Share on WhatsApp'),
+                          enabled: !busy,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _shareWhatsApp(design);
+                          },
+                        ),
+                        ListTile(
+                          leading: Icon(
+                            design.shareEnabled
+                                ? Icons.link_off_outlined
+                                : Icons.link_outlined,
+                          ),
+                          title: Text(
+                            design.shareEnabled
+                                ? 'Turn share link off'
+                                : 'Turn share link on',
+                          ),
+                          enabled: !busy,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _toggleShare(design);
+                          },
+                        ),
+                      ],
+                      ListTile(
+                        leading: const Icon(Icons.picture_as_pdf_outlined),
+                        title: const Text('Download PDF report'),
+                        enabled: !busy,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _downloadPdf(design);
+                        },
+                      ),
+                      if (canUpdate)
+                        ListTile(
+                          leading: Icon(
+                            Icons.delete_outline,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          title: Text(
+                            'Delete design',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                          enabled: !busy,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _deleteDesign(design);
+                          },
+                        ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -583,6 +691,8 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
                             return _DesignCard(
                               design: design,
                               busy: _busyIds.contains(design.id),
+                              hasSurroundings:
+                                  _hasSurroundings[design.id] == true,
                               onOpen: () => _openDesigner(design),
                               onMore: () => _showActions(design),
                             );
@@ -597,12 +707,14 @@ class _DesignCard extends StatelessWidget {
   const _DesignCard({
     required this.design,
     required this.busy,
+    required this.hasSurroundings,
     required this.onOpen,
     required this.onMore,
   });
 
   final SolarDesignSummary design;
   final bool busy;
+  final bool hasSurroundings;
   final VoidCallback onOpen;
   final VoidCallback onMore;
 
@@ -669,23 +781,49 @@ class _DesignCard extends StatelessWidget {
                             ),
                       ),
                     ],
-                    if (design.shareEnabled) ...[
+                    if (design.shareEnabled || hasSurroundings) ...[
                       const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: scheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'Shared · ${design.shareViews} view${design.shareViews == 1 ? '' : 's'}',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (design.shareEnabled)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
                               ),
-                        ),
+                              decoration: BoxDecoration(
+                                color: scheme.secondaryContainer,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'Shared · ${design.shareViews} view${design.shareViews == 1 ? '' : 's'}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          if (hasSurroundings)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: scheme.tertiaryContainer,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'Surroundings',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ],

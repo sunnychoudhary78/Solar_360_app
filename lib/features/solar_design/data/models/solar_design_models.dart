@@ -205,6 +205,82 @@ class SolarDesignListResult {
   }
 }
 
+/// Google Solar API height / sunlight grid stored on a design (`surroundings`).
+class SolarSurroundings {
+  final String source;
+  final String? fetchedAt;
+  final String? imageryDate;
+  final String? imageryQuality;
+  final double? groundElevationM;
+  final double? cellM;
+  final int cols;
+  final int rows;
+  final double? originLat;
+  final double? originLng;
+  final bool hasHeights;
+  final bool hasFlux;
+  final bool hasMask;
+  final bool hasVegetation;
+
+  const SolarSurroundings({
+    this.source = '',
+    this.fetchedAt,
+    this.imageryDate,
+    this.imageryQuality,
+    this.groundElevationM,
+    this.cellM,
+    this.cols = 0,
+    this.rows = 0,
+    this.originLat,
+    this.originLng,
+    this.hasHeights = false,
+    this.hasFlux = false,
+    this.hasMask = false,
+    this.hasVegetation = false,
+  });
+
+  factory SolarSurroundings.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const SolarSurroundings();
+    final origin = json['origin'];
+    double? oLat;
+    double? oLng;
+    if (origin is Map) {
+      oLat = _numOrNull(origin['lat']);
+      oLng = _numOrNull(origin['lng']);
+    }
+    return SolarSurroundings(
+      source: _str(json['source']),
+      fetchedAt: _nullableStr(json['fetched_at']),
+      imageryDate: _nullableStr(json['imagery_date']),
+      imageryQuality: _nullableStr(json['imagery_quality']),
+      groundElevationM: _numOrNull(json['ground_elevation_m']),
+      cellM: _numOrNull(json['cell_m']),
+      cols: _int(json['cols']),
+      rows: _int(json['rows']),
+      originLat: oLat,
+      originLng: oLng,
+      hasHeights: json['heights_dm'] != null,
+      hasFlux: json['flux_10'] != null,
+      hasMask: json['mask'] != null,
+      hasVegetation: json['veg'] != null,
+    );
+  }
+
+  bool get isLoaded => hasHeights || hasFlux || hasMask || cols > 0;
+
+  String get statusLabel {
+    if (!isLoaded) return 'Not loaded';
+    final quality = imageryQuality?.trim();
+    final date = imageryDate?.trim();
+    if (quality != null && quality.isNotEmpty && date != null && date.isNotEmpty) {
+      return 'Loaded · $quality · $date';
+    }
+    if (date != null && date.isNotEmpty) return 'Loaded · $date';
+    if (quality != null && quality.isNotEmpty) return 'Loaded · $quality';
+    return 'Loaded';
+  }
+}
+
 /// Full design from `GET /solar-designs/:id`.
 class SolarDesignDetail extends SolarDesignSummary {
   final double? centerLat;
@@ -212,6 +288,7 @@ class SolarDesignDetail extends SolarDesignSummary {
   final int mapZoom;
   final String? solarPanelId;
   final Map<String, dynamic> design;
+  final SolarSurroundings? surroundings;
   final SolarDesignLeadInfo? lead;
 
   const SolarDesignDetail({
@@ -235,11 +312,19 @@ class SolarDesignDetail extends SolarDesignSummary {
     this.mapZoom = 20,
     this.solarPanelId,
     this.design = const {},
+    this.surroundings,
     this.lead,
   });
 
   factory SolarDesignDetail.fromJson(Map<String, dynamic> json) {
     final summary = SolarDesignSummary.fromJson(json);
+    SolarSurroundings? surroundings;
+    if (json['surroundings'] is Map) {
+      surroundings = SolarSurroundings.fromJson(
+        Map<String, dynamic>.from(json['surroundings'] as Map),
+      );
+      if (!surroundings.isLoaded) surroundings = null;
+    }
     return SolarDesignDetail(
       id: summary.id,
       leadId: summary.leadId,
@@ -263,12 +348,20 @@ class SolarDesignDetail extends SolarDesignSummary {
       design: json['design'] is Map
           ? Map<String, dynamic>.from(json['design'] as Map)
           : const {},
+      surroundings: surroundings,
       lead: json['lead'] is Map
           ? SolarDesignLeadInfo.fromJson(
               Map<String, dynamic>.from(json['lead'] as Map),
             )
           : null,
     );
+  }
+
+  /// `design.analysis.surroundings_at` when shading used surroundings data.
+  String? get analysisSurroundingsAt {
+    final analysis = design['analysis'];
+    if (analysis is! Map) return null;
+    return _nullableStr(analysis['surroundings_at']);
   }
 
   SolarDesignSummary toSummary() => SolarDesignSummary(
@@ -291,32 +384,84 @@ class SolarDesignDetail extends SolarDesignSummary {
 }
 
 /// Place hit from `/solar-designs/geocode` or `/geocode/suggest`.
+/// Google autocomplete may return [placeId] with null [lat]/[lng] — resolve via `/geocode/place`.
 class SolarGeocodeHit {
-  final double lat;
-  final double lng;
+  final double? lat;
+  final double? lng;
   final String label;
   final String name;
   final String detail;
   final String type;
+  final String? placeId;
+  final String? provider;
 
   const SolarGeocodeHit({
-    required this.lat,
-    required this.lng,
+    this.lat,
+    this.lng,
     this.label = '',
     this.name = '',
     this.detail = '',
     this.type = '',
+    this.placeId,
+    this.provider,
   });
 
   factory SolarGeocodeHit.fromJson(Map<String, dynamic> json) {
     return SolarGeocodeHit(
-      lat: _num(json['lat']),
-      lng: _num(json['lng']),
+      lat: _numOrNull(json['lat']),
+      lng: _numOrNull(json['lng']),
       label: _str(json['label']),
       name: _str(json['name']),
       detail: _str(json['detail']),
       type: _str(json['type']),
+      placeId: _nullableStr(json['place_id']),
+      provider: _nullableStr(json['provider']),
     );
+  }
+
+  bool get hasCoords {
+    final la = lat;
+    final ln = lng;
+    if (la == null || ln == null) return false;
+    if (la == 0 && ln == 0) return false;
+    return la.abs() <= 85 && ln.abs() <= 180;
+  }
+
+  String get displayLabel {
+    if (label.isNotEmpty) return label;
+    return [name, detail].where((s) => s.trim().isNotEmpty).join(', ');
+  }
+}
+
+/// Result of `GET /solar-designs/geocode/place`.
+class SolarPlaceLocation {
+  final double? lat;
+  final double? lng;
+  final String label;
+  final String? provider;
+
+  const SolarPlaceLocation({
+    this.lat,
+    this.lng,
+    this.label = '',
+    this.provider,
+  });
+
+  factory SolarPlaceLocation.fromJson(Map<String, dynamic> json) {
+    return SolarPlaceLocation(
+      lat: _numOrNull(json['lat']),
+      lng: _numOrNull(json['lng']),
+      label: _str(json['label']),
+      provider: _nullableStr(json['provider']),
+    );
+  }
+
+  bool get hasCoords {
+    final la = lat;
+    final ln = lng;
+    if (la == null || ln == null) return false;
+    if (la == 0 && ln == 0) return false;
+    return la.abs() <= 85 && ln.abs() <= 180;
   }
 }
 

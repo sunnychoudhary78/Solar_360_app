@@ -185,7 +185,10 @@ class ApiEndpoints {
       'solar-designs/$id/deactivate';
   static const solarDesignGeocode = 'solar-designs/geocode';
   static const solarDesignGeocodeSuggest = 'solar-designs/geocode/suggest';
+  static const solarDesignGeocodePlace = 'solar-designs/geocode/place';
   static const solarDesignEnergyEstimate = 'solar-designs/energy-estimate';
+  static String solarDesignSurroundings(String id) =>
+      'solar-designs/$id/surroundings';
   static String publicSolarDesign(String code) =>
       'public/solar-designs/$code';
 }
