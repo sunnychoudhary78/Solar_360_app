@@ -14,6 +14,8 @@ import 'package:solar_sales/features/solar_design/presentation/providers/solar_d
 import 'package:solar_sales/features/solar_design/presentation/screens/solar_design_preview_screen.dart';
 import 'package:solar_sales/features/solar_design/presentation/screens/solar_designer_screen.dart';
 import 'package:solar_sales/features/solar_design/presentation/solar_design_access.dart';
+import 'package:solar_sales/features/solar_design/presentation/widgets/solar_design_plan_snapshot.dart';
+import 'package:solar_sales/features/solar_design/presentation/widgets/solar_design_report_capture.dart';
 import 'package:solar_sales/shared/utils/app_snackbar.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/utils/pdf_helper.dart';
@@ -73,8 +75,14 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
     return lat.abs() <= 85 && lng.abs() <= 180;
   }
 
-  /// Same starting-point rules as web `SolarDesignPanel.startingPoint`:
-  /// lead GPS → pasted lat,lng → geocoded address (incl. place_id) → device GPS → India centre.
+  ({double lat, double lng, int zoom}) _fromDesign(SolarDesignSummary d) {
+    final zoom = d.mapZoom.clamp(19, 21);
+    return (lat: d.centerLat!, lng: d.centerLng!, zoom: zoom);
+  }
+
+  /// Same rules as web `SolarDesignPanel.startingPoint`:
+  /// lead GPS → prior design with roofs → geocode (`placeZoom`) → prior zoomed-in
+  /// design → pasted lat/lng → device GPS → India.
   Future<({double lat, double lng, int zoom})?> _resolveMapCenter() async {
     final leadLat = double.tryParse(widget.lead.latitude.trim());
     final leadLng = double.tryParse(widget.lead.longitude.trim());
@@ -87,7 +95,12 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
       return (lat: fromApi!.latitude!, lng: fromApi.longitude!, zoom: 20);
     }
 
-    // Pasted "lat, lng" in address (same as web PlaceSearch).
+    final designs = _result?.designs ?? const <SolarDesignSummary>[];
+    final placed = designs.where((d) => d.hasMapCenter).toList();
+    final drawn = placed.where((d) => d.roofCount > 0).toList();
+    if (drawn.isNotEmpty) return _fromDesign(drawn.first);
+
+    // Pasted "lat, lng" in address (mobile + web PlaceSearch).
     final pasted = SolarDesignApiService.parseLatLngPair(widget.lead.address) ??
         SolarDesignApiService.parseLatLngPair(
           [
@@ -97,10 +110,9 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
             widget.lead.pincode,
           ].where((p) => p.trim().isNotEmpty).join(', '),
         );
-    if (pasted != null && _validCoords(pasted.lat, pasted.lng)) {
-      return (lat: pasted.lat, lng: pasted.lng, zoom: 19);
-    }
 
+    SolarGeocodeHit? geoHit;
+    ({double lat, double lng, String label})? geoResolved;
     final address = [
       widget.lead.address,
       widget.lead.city,
@@ -115,12 +127,49 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
           final resolved = await api.resolveGeocodeHit(hit);
           if (resolved != null &&
               _validCoords(resolved.lat, resolved.lng)) {
-            return (lat: resolved.lat, lng: resolved.lng, zoom: 19);
+            geoHit = hit;
+            geoResolved = resolved;
+            break;
           }
         }
       } catch (_) {
         // Fall through — designer has its own place search.
       }
+    }
+
+    final hitZoom = geoHit != null
+        ? SolarDesignApiService.placeZoom(geoHit.type)
+        : null;
+
+    // Designs made before the address was resolved precisely sit zoomed in on
+    // the area centroid; skip those when geocode is only city/state level.
+    final zoomedIn = placed.where((d) {
+      if (d.mapZoom < SolarDesignApiService.buildingZoom) return false;
+      if (geoResolved != null &&
+          hitZoom != null &&
+          hitZoom < SolarDesignApiService.buildingZoom) {
+        final dist = SolarDesignApiService.distanceM(
+          lat1: d.centerLat!,
+          lng1: d.centerLng!,
+          lat2: geoResolved.lat,
+          lng2: geoResolved.lng,
+        );
+        if (dist < 100) return false;
+      }
+      return true;
+    }).toList();
+    if (zoomedIn.isNotEmpty) return _fromDesign(zoomedIn.first);
+
+    if (geoResolved != null) {
+      return (
+        lat: geoResolved.lat,
+        lng: geoResolved.lng,
+        zoom: hitZoom ?? 19,
+      );
+    }
+
+    if (pasted != null && _validCoords(pasted.lat, pasted.lng)) {
+      return (lat: pasted.lat, lng: pasted.lng, zoom: 19);
     }
 
     try {
@@ -147,7 +196,6 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
       // Fall through to India centre.
     }
 
-    // Web fallback (INDIA_CENTER) so create never fails without a pin.
     return (lat: 20.5937, lng: 78.9629, zoom: 5);
   }
 
@@ -222,9 +270,40 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
     return ApiConstants.publicSolarDesignUrl(code);
   }
 
+  /// Soft confirm when analysis is missing/stale (same copy as web ShareDialog).
+  Future<bool> _confirmShareIfNeeded(SolarDesignSummary design) async {
+    try {
+      final detail =
+          await ref.read(solarDesignApiProvider).getById(design.id);
+      final warning = detail.shareWarning;
+      if (warning == null || !mounted) return true;
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Share anyway?'),
+          content: Text(warning),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Share anyway'),
+            ),
+          ],
+        ),
+      );
+      return go == true;
+    } catch (_) {
+      return true;
+    }
+  }
+
   Future<void> _openPreview(SolarDesignSummary design) async {
     await _withBusy(design.id, () async {
       try {
+        if (!await _confirmShareIfNeeded(design)) return;
         final shared = await _ensureShareEnabled(design);
         final url = _shareUrlFor(shared.toSummary());
         if (url.isEmpty) {
@@ -250,6 +329,7 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
   Future<void> _copyLink(SolarDesignSummary design) async {
     await _withBusy(design.id, () async {
       try {
+        if (!await _confirmShareIfNeeded(design)) return;
         final shared = await _ensureShareEnabled(design);
         final url = _shareUrlFor(shared.toSummary());
         if (url.isEmpty) {
@@ -269,6 +349,7 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
   Future<void> _shareWhatsApp(SolarDesignSummary design) async {
     await _withBusy(design.id, () async {
       try {
+        if (!await _confirmShareIfNeeded(design)) return;
         final shared = await _ensureShareEnabled(design);
         final url = _shareUrlFor(shared.toSummary());
         if (url.isEmpty) {
@@ -317,14 +398,16 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
   Future<void> _toggleShare(SolarDesignSummary design) async {
     await _withBusy(design.id, () async {
       try {
+        final enabling = !design.shareEnabled;
+        if (enabling && !await _confirmShareIfNeeded(design)) return;
         await ref.read(solarDesignApiProvider).setSharing(
               id: design.id,
-              enabled: !design.shareEnabled,
+              enabled: enabling,
             );
         if (!mounted) return;
         showAppSnackBar(
           context,
-          design.shareEnabled ? 'Share link turned off' : 'Share link turned on',
+          enabling ? 'Share link turned on' : 'Share link turned off',
         );
         await _load();
       } catch (e) {
@@ -337,14 +420,54 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
   Future<void> _downloadPdf(SolarDesignSummary design) async {
     await _withBusy(design.id, () async {
       try {
-        final bytes =
-            await ref.read(solarDesignApiProvider).downloadReport(design.id);
+        // Web Report: 3D canvas JPEG. Mobile often captures black too early —
+        // reject black frames and fall back to a clear rooftop plan image.
+        String? snapshot;
+        var usedLive3d = false;
+        final token =
+            (await ref.read(authRepositoryProvider).getStoredToken())?.trim();
+        if (token != null && token.isNotEmpty && mounted) {
+          final live = await captureSolarDesignSnapshot(
+            context,
+            designId: design.id,
+            token: token,
+          );
+          if (live != null &&
+              live.isNotEmpty &&
+              !(await isMostlyBlackDataUrl(live))) {
+            snapshot = live;
+            usedLive3d = true;
+          }
+        }
+        if ((snapshot == null || snapshot.isEmpty) && mounted) {
+          try {
+            final detail =
+                await ref.read(solarDesignApiProvider).getById(design.id);
+            snapshot = await buildSolarDesignPlanSnapshot(detail);
+          } catch (_) {
+            // Fall through — PDF still downloads without an image.
+          }
+        }
+
+        final bytes = await ref.read(solarDesignApiProvider).downloadReport(
+              design.id,
+              snapshot: snapshot,
+              // Only credit Google when we actually captured a live 3D frame.
+              imagery: usedLive3d ? 'google' : 'esri',
+            );
         final safe = design.name
             .replaceAll(RegExp(r'[^\w.-]+'), '-')
             .replaceAll(RegExp(r'^-+|-+$'), '');
         final filename =
             'Solar-Design-${safe.isEmpty ? 'design' : safe}.pdf';
         await PdfHelper.saveAndOpen(bytes, filename: filename);
+        if (!mounted) return;
+        if (snapshot == null || snapshot.isEmpty) {
+          showAppSnackBar(
+            context,
+            'PDF downloaded. Rooftop image could not be captured — try again on Wi‑Fi.',
+          );
+        }
       } catch (e) {
         if (!mounted) return;
         showAppSnackBar(context, cleanError(e), isError: true);
@@ -355,15 +478,39 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
   Future<void> _loadSurroundings(SolarDesignSummary design) async {
     await _withBusy(design.id, () async {
       try {
-        final detail = await ref.read(solarDesignApiProvider).loadSurroundings(
-              id: design.id,
-            );
+        final api = ref.read(solarDesignApiProvider);
+        // Match web: radius = roof reach + 22 m (clamped 25–60).
+        final existing = await api.getById(design.id);
+        final lat = existing.centerLat;
+        final lng = existing.centerLng;
+        double? radius;
+        if (lat != null && lng != null) {
+          final reach = SolarDesignApiService.roofReachMeters(
+            design: existing.design,
+            centerLat: lat,
+            centerLng: lng,
+          );
+          radius = SolarDesignApiService.surroundingsRadiusM(reach);
+        }
+        final detail = await api.loadSurroundings(
+          id: design.id,
+          lat: lat,
+          lng: lng,
+          radius: radius,
+        );
         if (!mounted) return;
         setState(() {
           _hasSurroundings[design.id] = detail.surroundings?.isLoaded == true;
         });
-        final status = detail.surroundings?.statusLabel ?? 'Loaded';
-        showAppSnackBar(context, '3D surroundings $status');
+        final hasPanels = detail.panelCount > 0 ||
+            (detail.design['panels'] is List &&
+                (detail.design['panels'] as List).isNotEmpty);
+        showAppSnackBar(
+          context,
+          hasPanels
+              ? 'Real surroundings loaded. Re-run sun & energy analysis in the designer to include their shade.'
+              : 'Real surroundings loaded',
+        );
       } catch (e) {
         if (!mounted) return;
         showAppSnackBar(context, cleanError(e), isError: true);
@@ -372,6 +519,27 @@ class _SolarDesignsScreenState extends ConsumerState<SolarDesignsScreen> {
   }
 
   Future<void> _clearSurroundings(SolarDesignSummary design) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear surroundings?'),
+        content: const Text(
+          'Remove the real surroundings from this design? The 3D view and shading analysis will no longer include neighbouring buildings and trees.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     await _withBusy(design.id, () async {
       try {
         await ref.read(solarDesignApiProvider).clearSurroundings(design.id);
@@ -788,22 +956,35 @@ class _DesignCard extends StatelessWidget {
                         runSpacing: 4,
                         children: [
                           if (design.shareEnabled)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: scheme.secondaryContainer,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                'Shared · ${design.shareViews} view${design.shareViews == 1 ? '' : 's'}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
+                            Builder(
+                              builder: (context) {
+                                var label =
+                                    'Shared · ${design.shareViews} view${design.shareViews == 1 ? '' : 's'}';
+                                final last = design.shareLastViewedAt;
+                                if (last != null && last.isNotEmpty) {
+                                  final when = formatDate(parseDate(last));
+                                  if (when != '—') {
+                                    label = '$label · last $when';
+                                  }
+                                }
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: scheme.secondaryContainer,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    label,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                );
+                              },
                             ),
                           if (hasSurroundings)
                             Container(

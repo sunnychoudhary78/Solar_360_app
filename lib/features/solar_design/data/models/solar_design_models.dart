@@ -76,6 +76,10 @@ class SolarDesignSummary {
   final double capacityKw;
   final int panelWatts;
   final double? annualKwh;
+  final double? centerLat;
+  final double? centerLng;
+  final int mapZoom;
+  final int roofCount;
   final String? shareCode;
   final bool shareEnabled;
   final int shareViews;
@@ -93,6 +97,10 @@ class SolarDesignSummary {
     this.capacityKw = 0,
     this.panelWatts = 0,
     this.annualKwh,
+    this.centerLat,
+    this.centerLng,
+    this.mapZoom = 20,
+    this.roofCount = 0,
     this.shareCode,
     this.shareEnabled = false,
     this.shareViews = 0,
@@ -112,6 +120,10 @@ class SolarDesignSummary {
       capacityKw: _num(json['capacity_kw']),
       panelWatts: _int(json['panel_watts']),
       annualKwh: _numOrNull(json['annual_kwh']),
+      centerLat: _numOrNull(json['center_lat']),
+      centerLng: _numOrNull(json['center_lng']),
+      mapZoom: _int(json['map_zoom'], fallback: 20),
+      roofCount: _int(json['roof_count']),
       shareCode: _nullableStr(json['share_code']),
       shareEnabled: json['share_enabled'] == true,
       shareViews: _int(json['share_views']),
@@ -131,12 +143,24 @@ class SolarDesignSummary {
     );
   }
 
+  bool get hasMapCenter {
+    final la = centerLat;
+    final ln = centerLng;
+    if (la == null || ln == null) return false;
+    if (la == 0 && ln == 0) return false;
+    return la.abs() <= 85 && ln.abs() <= 180;
+  }
+
   SolarDesignSummary copyWith({
     String? name,
     String? shareCode,
     bool? shareEnabled,
     int? shareViews,
     String? shareLastViewedAt,
+    double? centerLat,
+    double? centerLng,
+    int? mapZoom,
+    int? roofCount,
   }) {
     return SolarDesignSummary(
       id: id,
@@ -146,6 +170,10 @@ class SolarDesignSummary {
       capacityKw: capacityKw,
       panelWatts: panelWatts,
       annualKwh: annualKwh,
+      centerLat: centerLat ?? this.centerLat,
+      centerLng: centerLng ?? this.centerLng,
+      mapZoom: mapZoom ?? this.mapZoom,
+      roofCount: roofCount ?? this.roofCount,
       shareCode: shareCode ?? this.shareCode,
       shareEnabled: shareEnabled ?? this.shareEnabled,
       shareViews: shareViews ?? this.shareViews,
@@ -283,9 +311,6 @@ class SolarSurroundings {
 
 /// Full design from `GET /solar-designs/:id`.
 class SolarDesignDetail extends SolarDesignSummary {
-  final double? centerLat;
-  final double? centerLng;
-  final int mapZoom;
   final String? solarPanelId;
   final Map<String, dynamic> design;
   final SolarSurroundings? surroundings;
@@ -299,6 +324,10 @@ class SolarDesignDetail extends SolarDesignSummary {
     super.capacityKw,
     super.panelWatts,
     super.annualKwh,
+    super.centerLat,
+    super.centerLng,
+    super.mapZoom,
+    super.roofCount,
     super.shareCode,
     super.shareEnabled,
     super.shareViews,
@@ -307,9 +336,6 @@ class SolarDesignDetail extends SolarDesignSummary {
     super.updater,
     super.createdAt,
     super.updatedAt,
-    this.centerLat,
-    this.centerLng,
-    this.mapZoom = 20,
     this.solarPanelId,
     this.design = const {},
     this.surroundings,
@@ -325,6 +351,11 @@ class SolarDesignDetail extends SolarDesignSummary {
       );
       if (!surroundings.isLoaded) surroundings = null;
     }
+    final designMap = json['design'] is Map
+        ? Map<String, dynamic>.from(json['design'] as Map)
+        : const <String, dynamic>{};
+    final roofs = designMap['roofs'];
+    final roofsLen = roofs is List ? roofs.length : 0;
     return SolarDesignDetail(
       id: summary.id,
       leadId: summary.leadId,
@@ -333,6 +364,10 @@ class SolarDesignDetail extends SolarDesignSummary {
       capacityKw: summary.capacityKw,
       panelWatts: summary.panelWatts,
       annualKwh: summary.annualKwh,
+      centerLat: summary.centerLat,
+      centerLng: summary.centerLng,
+      mapZoom: summary.mapZoom,
+      roofCount: summary.roofCount > 0 ? summary.roofCount : roofsLen,
       shareCode: summary.shareCode,
       shareEnabled: summary.shareEnabled,
       shareViews: summary.shareViews,
@@ -341,13 +376,8 @@ class SolarDesignDetail extends SolarDesignSummary {
       updater: summary.updater,
       createdAt: summary.createdAt,
       updatedAt: summary.updatedAt,
-      centerLat: _numOrNull(json['center_lat']),
-      centerLng: _numOrNull(json['center_lng']),
-      mapZoom: _int(json['map_zoom'], fallback: 20),
       solarPanelId: _nullableStr(json['solar_panel_id']),
-      design: json['design'] is Map
-          ? Map<String, dynamic>.from(json['design'] as Map)
-          : const {},
+      design: designMap,
       surroundings: surroundings,
       lead: json['lead'] is Map
           ? SolarDesignLeadInfo.fromJson(
@@ -372,6 +402,12 @@ class SolarDesignDetail extends SolarDesignSummary {
         capacityKw: capacityKw,
         panelWatts: panelWatts,
         annualKwh: annualKwh,
+        centerLat: centerLat,
+        centerLng: centerLng,
+        mapZoom: mapZoom,
+        roofCount: roofCount > 0
+            ? roofCount
+            : (design['roofs'] is List ? (design['roofs'] as List).length : 0),
         shareCode: shareCode,
         shareEnabled: shareEnabled,
         shareViews: shareViews,
@@ -381,6 +417,31 @@ class SolarDesignDetail extends SolarDesignSummary {
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
+
+  /// Soft share warning (same messages as web ShareDialog; signature recompute stays in web).
+  String? get shareWarning {
+    final analysis = design['analysis'];
+    if (analysis is! Map) {
+      return 'Run the sun & energy analysis and save, so customers also see generation and savings.';
+    }
+    final surroundingsAt = analysis['surroundings_at']?.toString();
+    final fetched = surroundings?.fetchedAt;
+    if (surroundings?.isLoaded == true &&
+        (surroundingsAt ?? '') != (fetched ?? '')) {
+      return 'The analysis is out of date. Re-run it and save before sharing.';
+    }
+    final computed = analysis['computed_at']?.toString();
+    if (computed != null &&
+        computed.isNotEmpty &&
+        updatedAt.isNotEmpty) {
+      final c = DateTime.tryParse(computed);
+      final u = DateTime.tryParse(updatedAt);
+      if (c != null && u != null && u.isAfter(c.add(const Duration(seconds: 2)))) {
+        return 'The analysis is out of date. Re-run it and save before sharing.';
+      }
+    }
+    return null;
+  }
 }
 
 /// Place hit from `/solar-designs/geocode` or `/geocode/suggest`.

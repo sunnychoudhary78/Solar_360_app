@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:solar_sales/core/network/api_constants.dart';
@@ -177,7 +177,7 @@ class SolarDesignApiService {
   static String newPlacesSessionToken() {
     const alphabet =
         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
-    final rnd = Random.secure();
+    final rnd = math.Random.secure();
     final buf = StringBuffer();
     for (var i = 0; i < 24; i++) {
       buf.write(alphabet[rnd.nextInt(alphabet.length)]);
@@ -199,6 +199,88 @@ class SolarDesignApiService {
     if (lat.abs() > 85 || lng.abs() > 180) return null;
     if (lat == 0 && lng == 0) return null;
     return (lat: lat, lng: lng);
+  }
+
+  /// Same as web `BUILDING_ZOOM` — below this the map is an area, not a building.
+  static const buildingZoom = 17;
+
+  /// Same as web `placeZoom(type)` — zoom for geocode result precision.
+  static int placeZoom(String? type) {
+    final t = (type ?? '').toLowerCase();
+    if (t.isEmpty) return 19;
+    if (RegExp(r'^country$').hasMatch(t)) return 5;
+    if (RegExp(
+      r'administrative_area_level_1|^state$|^region$|^province$',
+    ).hasMatch(t)) {
+      return 7;
+    }
+    if (RegExp(
+      r'administrative_area_level_[2-4]|^county$|^district$|^state_district$',
+    ).hasMatch(t)) {
+      return 10;
+    }
+    if (RegExp(
+      r'locality|^city$|^town$|^municipality$|postal_code|^postcode$|^administrative$',
+    ).hasMatch(t)) {
+      return 13;
+    }
+    if (RegExp(
+      r'^village$|sublocality|neighbou?rhood|^suburb$|^quarter$|^hamlet$|^route$|^road$|^street$|^residential$',
+    ).hasMatch(t)) {
+      return 16;
+    }
+    return 19;
+  }
+
+  /// Rough ground distance in metres (web `distanceM`).
+  static double distanceM({
+    required double lat1,
+    required double lng1,
+    required double lat2,
+    required double lng2,
+  }) {
+    const rad = 3.141592653589793 / 180;
+    final x = (lng2 - lng1) * rad * math.cos(((lat1 + lat2) / 2) * rad);
+    final y = (lat2 - lat1) * rad;
+    return math.sqrt(x * x + y * y) * 6371000;
+  }
+
+  /// Roof reach in metres from design center (web surroundings `reach + 22`).
+  static double roofReachMeters({
+    required Map<String, dynamic> design,
+    required double centerLat,
+    required double centerLng,
+  }) {
+    final roofs = design['roofs'];
+    if (roofs is! List) return 0;
+    final cosLat = math.cos(centerLat * math.pi / 180);
+    var reach = 0.0;
+    for (final roof in roofs.whereType<Map>()) {
+      final pts = roof['points'];
+      if (pts is! List) continue;
+      for (final p in pts) {
+        if (p is! List || p.length < 2) continue;
+        final lat = p[0] is num
+            ? (p[0] as num).toDouble()
+            : double.tryParse('${p[0]}');
+        final lng = p[1] is num
+            ? (p[1] as num).toDouble()
+            : double.tryParse('${p[1]}');
+        if (lat == null || lng == null) continue;
+        final dx = ((lng - centerLng) * 111320 * cosLat).abs();
+        final dy = ((lat - centerLat) * 111320).abs();
+        reach = math.max(reach, math.max(dx, dy));
+      }
+    }
+    return reach;
+  }
+
+  /// Clamp radius like backend Google Solar layers (25–60 m).
+  static double surroundingsRadiusM(double roofReach) {
+    final r = roofReach + 22;
+    if (r < 25) return 25;
+    if (r > 60) return 60;
+    return r;
   }
 
   List<SolarGeocodeHit> _parseGeocode(dynamic res) {
