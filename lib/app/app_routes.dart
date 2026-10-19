@@ -7,6 +7,7 @@ import 'package:solar_sales/features/customers/presentation/screens/customer_for
 import 'package:solar_sales/features/customers/presentation/screens/customers_screen.dart';
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_detail_screen.dart';
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_form_screen.dart';
+import 'package:solar_sales/features/costing/presentation/costing_screen.dart';
 import 'package:solar_sales/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/inventory_hub_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/low_stock_screen.dart';
@@ -102,6 +103,7 @@ class AppRoutes {
       return SupportTicketDetailScreen(ticketId: id);
     },
     '/customers': (_) => const CustomersScreen(),
+    '/costing': (_) => const CostingScreen(),
     '/customers/form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
       final id = args is String ? args : null;

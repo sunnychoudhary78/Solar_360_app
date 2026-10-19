@@ -118,6 +118,18 @@ class NavDestinations {
       quickActionSubtitle: 'Manage parties',
     ),
     AppDestination(
+      id: 'bb_costing',
+      label: 'Costing',
+      icon: Icons.calculate_outlined,
+      selectedIcon: Icons.calculate_rounded,
+      section: NavSection.main,
+      kind: NavKind.route,
+      permission: 'costing.read',
+      route: '/costing',
+      quickAction: true,
+      quickActionSubtitle: 'Build customer costings',
+    ),
+    AppDestination(
       id: 'bb_quotes',
       label: 'Quotes',
       icon: Icons.request_quote_outlined,

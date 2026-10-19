@@ -65,6 +65,16 @@ class ApiEndpoints {
   static String itemApprove(String id) => 'items/$id/approve';
   static String itemReject(String id) => 'items/$id/reject';
 
+  // Costing
+  static String customerCosting(String customerId) =>
+      'costings/customer/$customerId';
+  static String customerCostingLines(String customerId) =>
+      'costings/customer/$customerId/lines';
+  static String costingLine(String costingId, String lineId) =>
+      'costings/$costingId/lines/$lineId';
+  static String costingClear(String costingId) => 'costings/$costingId/clear';
+  static String costingPdf(String costingId) => 'costings/$costingId/pdf';
+
   // Warehouses
   static const warehouses = 'warehouses';
   static String warehouse(String id) => 'warehouses/$id';
