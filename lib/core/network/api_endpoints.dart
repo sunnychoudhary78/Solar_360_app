@@ -188,6 +188,8 @@ class ApiEndpoints {
   // 3D Solar Design (staff + public preview helpers)
   static String solarDesignsForLead(String leadId) =>
       'solar-designs/lead/$leadId';
+  static String solarDesignsForCustomer(String customerId) =>
+      'solar-designs/customer/$customerId';
   static String solarDesign(String id) => 'solar-designs/$id';
   static String solarDesignShare(String id) => 'solar-designs/$id/share';
   static String solarDesignReport(String id) => 'solar-designs/$id/report';

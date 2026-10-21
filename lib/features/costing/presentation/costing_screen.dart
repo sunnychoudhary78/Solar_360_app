@@ -24,6 +24,8 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   String _kind = 'catalog';
   String? _selectedItemId;
   bool _isDownloading = false;
+  String? _removingLineId;
+  bool _isClearing = false;
 
   @override
   void dispose() {
@@ -108,11 +110,14 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   }
 
   Future<void> _removeLine(CostingLine line) async {
+    setState(() => _removingLineId = line.id);
     try {
       await ref.read(costingProvider.notifier).removeLine(line.id);
       _showMessage('Item removed');
     } catch (error) {
       _showMessage(cleanError(error), isError: true);
+    } finally {
+      if (mounted) setState(() => _removingLineId = null);
     }
   }
 
@@ -137,11 +142,14 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    setState(() => _isClearing = true);
     try {
       await ref.read(costingProvider.notifier).clearLines();
       _showMessage('All items cleared');
     } catch (error) {
       _showMessage(cleanError(error), isError: true);
+    } finally {
+      if (mounted) setState(() => _isClearing = false);
     }
   }
 
@@ -177,6 +185,12 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(costingProvider);
     final auth = ref.watch(authProvider);
+    final missingReadPermissions = [
+      if (!auth.hasPermission('costing.read')) 'costing.read',
+      if (!auth.hasPermission('customer.read')) 'customer.read',
+      if (!auth.hasPermission('item.read')) 'item.read',
+    ];
+    final canRead = missingReadPermissions.isEmpty;
     final canCreate = auth.hasPermission('costing.create');
     final sheet = state.sheet;
     final selectedCustomer = state.customers
@@ -239,44 +253,52 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                 ),
               ),
             ),
-          _sectionCard(
-            context,
-            title: 'Customer',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CustomerDropdown(
-                  customers: state.customers,
-                  selectedCustomerId: state.selectedCustomerId,
-                  isLoading: state.isLoadingCatalogs,
-                  enabled: !state.isLoadingSheet && !state.isMutating,
-                  onChanged: _selectCustomer,
-                ),
-                if (selectedCustomer != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    [
-                      if (selectedCustomer.email?.isNotEmpty == true)
-                        selectedCustomer.email!,
-                      if (selectedCustomer.phone?.isNotEmpty == true)
-                        selectedCustomer.phone!,
-                      if (selectedCustomer.city?.isNotEmpty == true)
-                        selectedCustomer.city!,
-                    ].join(' · '),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ],
+          if (!canRead)
+            _HintCard(
+              icon: Icons.lock_outline,
+              message:
+                  'You need ${missingReadPermissions.join(', ')} permission'
+                  '${missingReadPermissions.length == 1 ? '' : 's'} to view costing.',
             ),
-          ),
-          if (state.selectedCustomerId == null)
+          if (canRead)
+            _sectionCard(
+              context,
+              title: 'Customer',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CustomerDropdown(
+                    customers: state.customers,
+                    selectedCustomerId: state.selectedCustomerId,
+                    isLoading: state.isLoadingCatalogs,
+                    enabled: !state.isLoadingSheet && !state.isMutating,
+                    onChanged: _selectCustomer,
+                  ),
+                  if (selectedCustomer != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      [
+                        if (selectedCustomer.email?.isNotEmpty == true)
+                          selectedCustomer.email!,
+                        if (selectedCustomer.phone?.isNotEmpty == true)
+                          selectedCustomer.phone!,
+                        if (selectedCustomer.city?.isNotEmpty == true)
+                          selectedCustomer.city!,
+                      ].join(' · '),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          if (canRead && state.selectedCustomerId == null)
             const _HintCard(
               icon: Icons.person_search_outlined,
               message: 'Select a customer to view or add costing.',
             )
-          else ...[
+          else if (canRead) ...[
             if (state.isLoadingSheet)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 30),
@@ -356,6 +378,8 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                               line: sheet.items[index],
                               index: index,
                               enabled: canCreate && !state.isMutating,
+                              isRemoving:
+                                  _removingLineId == sheet.items[index].id,
                               onRemove: () => _removeLine(sheet.items[index]),
                             ),
                           ],
@@ -378,8 +402,16 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: state.isMutating ? null : _clearLines,
-                          icon: const Icon(Icons.delete_sweep_outlined),
-                          label: const Text('Clear all'),
+                          icon: _isClearing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.delete_sweep_outlined),
+                          label: Text(_isClearing ? 'Clearing…' : 'Clear all'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: scheme.error,
                           ),

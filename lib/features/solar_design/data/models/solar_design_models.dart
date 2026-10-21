@@ -205,6 +205,125 @@ class SolarDesignSummary {
   }
 }
 
+/// Row from `GET /solar-designs/customer/:customerId` (quotation design picker).
+class CustomerSolarDesignLead {
+  final String id;
+  final String leadCode;
+  final String fullName;
+  final bool hasDesign;
+
+  const CustomerSolarDesignLead({
+    this.id = '',
+    this.leadCode = '',
+    this.fullName = '',
+    this.hasDesign = false,
+  });
+
+  factory CustomerSolarDesignLead.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const CustomerSolarDesignLead();
+    return CustomerSolarDesignLead(
+      id: _str(json['id']),
+      leadCode: _str(json['lead_code'] ?? json['leadCode']),
+      fullName: _str(json['full_name'] ?? json['fullName']),
+      hasDesign: json['has_design'] == true || json['hasDesign'] == true,
+    );
+  }
+
+  String get displayLabel {
+    final code = leadCode.trim();
+    final name = fullName.trim();
+    if (code.isNotEmpty && name.isNotEmpty) return '$code · $name';
+    if (name.isNotEmpty) return name;
+    if (code.isNotEmpty) return code;
+    return id;
+  }
+}
+
+class CustomerSolarDesignRow {
+  final String id;
+  final String name;
+  final double capacityKw;
+  final int panelCount;
+  final String leadId;
+  final CustomerSolarDesignLead? lead;
+
+  const CustomerSolarDesignRow({
+    required this.id,
+    this.name = '',
+    this.capacityKw = 0,
+    this.panelCount = 0,
+    this.leadId = '',
+    this.lead,
+  });
+
+  factory CustomerSolarDesignRow.fromJson(Map<String, dynamic> json) {
+    CustomerSolarDesignLead? lead;
+    if (json['lead'] is Map) {
+      lead = CustomerSolarDesignLead.fromJson(
+        Map<String, dynamic>.from(json['lead'] as Map),
+      );
+    }
+    return CustomerSolarDesignRow(
+      id: _str(json['id']),
+      name: _str(json['name'], fallback: 'Design'),
+      capacityKw: _num(json['capacity_kw'] ?? json['capacityKw']),
+      panelCount: _int(json['panel_count'] ?? json['panelCount']),
+      leadId: _str(json['lead_id'] ?? json['leadId'] ?? lead?.id),
+      lead: lead,
+    );
+  }
+
+  String get pickerLabel {
+    final cap = capacityKw <= 0
+        ? ''
+        : ' · ${capacityKw == capacityKw.roundToDouble() ? capacityKw.toStringAsFixed(0) : capacityKw.toStringAsFixed(2)} kW';
+    final panels = panelCount > 0 ? ' · $panelCount panels' : '';
+    final leadName = lead?.fullName.trim() ?? '';
+    final suffix = leadName.isEmpty ? '' : ' ($leadName)';
+    return '$name$cap$panels$suffix';
+  }
+}
+
+class CustomerSolarDesignsResult {
+  final String companyId;
+  final List<CustomerSolarDesignRow> designs;
+  final List<CustomerSolarDesignLead> leads;
+
+  const CustomerSolarDesignsResult({
+    this.companyId = '',
+    this.designs = const [],
+    this.leads = const [],
+  });
+
+  factory CustomerSolarDesignsResult.fromJson(Map<String, dynamic> json) {
+    final designsRaw = json['designs'];
+    final leadsRaw = json['leads'];
+    return CustomerSolarDesignsResult(
+      companyId: _str(json['companyId'] ?? json['company_id']),
+      designs: designsRaw is List
+          ? designsRaw
+              .whereType<Map>()
+              .map(
+                (e) => CustomerSolarDesignRow.fromJson(
+                  Map<String, dynamic>.from(e),
+                ),
+              )
+              .toList()
+          : const [],
+      leads: leadsRaw is List
+          ? leadsRaw
+              .whereType<Map>()
+              .map(
+                (e) => CustomerSolarDesignLead.fromJson(
+                  Map<String, dynamic>.from(e),
+                ),
+              )
+              .toList()
+          : const [],
+    );
+  }
+}
+
 class SolarDesignListResult {
   final SolarDesignLeadInfo lead;
   final List<SolarDesignSummary> designs;

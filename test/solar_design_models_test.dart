@@ -97,6 +97,40 @@ void main() {
     });
   });
 
+  group('CustomerSolarDesignsResult', () {
+    test('parses GET /solar-designs/customer/:id picker payload', () {
+      final result = CustomerSolarDesignsResult.fromJson({
+        'companyId': 'co1',
+        'designs': [
+          {
+            'id': 'd1',
+            'name': 'Option A 5 kW',
+            'capacity_kw': 5,
+            'panel_count': 10,
+            'lead_id': 'l1',
+            'lead': {
+              'id': 'l1',
+              'lead_code': 'LD-1',
+              'full_name': 'Ravi',
+            },
+          },
+        ],
+        'leads': [
+          {
+            'id': 'l1',
+            'lead_code': 'LD-1',
+            'full_name': 'Ravi',
+            'has_design': true,
+          },
+        ],
+      });
+      expect(result.companyId, 'co1');
+      expect(result.designs, hasLength(1));
+      expect(result.designs.first.pickerLabel, contains('5 kW'));
+      expect(result.leads.single.hasDesign, isTrue);
+    });
+  });
+
   group('SolarPlaceLocation', () {
     test('parses place details response', () {
       final place = SolarPlaceLocation.fromJson({

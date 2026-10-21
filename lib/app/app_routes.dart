@@ -124,6 +124,13 @@ class AppRoutes {
     '/quotations': (_) => const QuotationsScreen(),
     '/quotations/form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map) {
+        return QuotationFormScreen(
+          quotationId: args['quotationId']?.toString() ??
+              args['id']?.toString(),
+          initialCustomerId: args['customerId']?.toString(),
+        );
+      }
       final id = args is String ? args : null;
       return QuotationFormScreen(quotationId: id);
     },

@@ -6,6 +6,7 @@ class CostingLineTile extends StatelessWidget {
   final CostingLine line;
   final int index;
   final bool enabled;
+  final bool isRemoving;
   final VoidCallback onRemove;
 
   const CostingLineTile({
@@ -13,6 +14,7 @@ class CostingLineTile extends StatelessWidget {
     required this.line,
     required this.index,
     required this.enabled,
+    this.isRemoving = false,
     required this.onRemove,
   });
 
@@ -47,7 +49,13 @@ class CostingLineTile extends StatelessWidget {
           IconButton(
             tooltip: 'Remove item',
             onPressed: enabled ? onRemove : null,
-            icon: const Icon(Icons.delete_outline_rounded),
+            icon: isRemoving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_outline_rounded),
             color: scheme.error,
           ),
         ],

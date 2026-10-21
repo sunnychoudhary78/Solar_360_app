@@ -1,8 +1,65 @@
+import 'package:solar_sales/core/network/api_constants.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/items/data/models/item_model.dart';
 import 'package:solar_sales/shared/models/party_address_model.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
+
+/// Flattened `solarDesign` on quotation list/detail (not the nested `designLink`).
+class QuotationSolarDesign {
+  final String id;
+  final String name;
+  final double capacityKw;
+  final int panelCount;
+  final String? shareCode;
+  final bool shareEnabled;
+
+  const QuotationSolarDesign({
+    required this.id,
+    this.name = '',
+    this.capacityKw = 0,
+    this.panelCount = 0,
+    this.shareCode,
+    this.shareEnabled = false,
+  });
+
+  factory QuotationSolarDesign.fromJson(Map<String, dynamic> json) {
+    final share = json['share_code'] ?? json['shareCode'];
+    final shareText = share?.toString().trim() ?? '';
+    return QuotationSolarDesign(
+      id: asString(json['id']),
+      name: asString(json['name'], 'Design'),
+      capacityKw: asDouble(json['capacity_kw'] ?? json['capacityKw']),
+      panelCount: asInt(json['panel_count'] ?? json['panelCount']),
+      shareCode: shareText.isEmpty ? null : shareText,
+      shareEnabled: json['share_enabled'] == true || json['shareEnabled'] == true,
+    );
+  }
+
+  String get capacityLabel {
+    if (capacityKw <= 0) return '';
+    final text = capacityKw == capacityKw.roundToDouble()
+        ? capacityKw.toStringAsFixed(0)
+        : capacityKw.toStringAsFixed(2);
+    return '$text kW';
+  }
+
+  String get summaryLabel {
+    final cap = capacityLabel;
+    final panels = panelCount > 0 ? '$panelCount panels' : '';
+    return [
+      name.isEmpty ? '3D solar design' : name,
+      if (cap.isNotEmpty) cap,
+      if (panels.isNotEmpty) panels,
+    ].join(' · ');
+  }
+
+  String? get previewUrl {
+    final code = shareCode?.trim() ?? '';
+    if (code.isEmpty) return null;
+    return ApiConstants.publicSolarDesignUrl(code);
+  }
+}
 
 class QuotationItemModel {
   final String? id;
@@ -88,6 +145,8 @@ class QuotationModel {
   final String? fromBranchId;
   final String? marketingTemplateId;
   final MarketingTemplate? marketingTemplate;
+  final String? solarDesignId;
+  final QuotationSolarDesign? solarDesign;
 
   const QuotationModel({
     required this.id,
@@ -110,6 +169,8 @@ class QuotationModel {
     this.fromBranchId,
     this.marketingTemplateId,
     this.marketingTemplate,
+    this.solarDesignId,
+    this.solarDesign,
   });
 
   factory QuotationModel.fromJson(Map<String, dynamic> json) {
@@ -165,8 +226,34 @@ class QuotationModel {
           : null,
       marketingTemplateId: marketingTemplateIdFromJson(json),
       marketingTemplate: nestedTemplate,
+      solarDesignId: _solarDesignIdFromJson(json),
+      solarDesign: _solarDesignFromJson(json),
     );
   }
 
   String get customerName => customer?.name ?? 'Customer';
+
+  bool get hasSolarDesign =>
+      (solarDesignId != null && solarDesignId!.isNotEmpty) ||
+      (solarDesign != null && solarDesign!.id.isNotEmpty);
+}
+
+String? _solarDesignIdFromJson(Map<String, dynamic> json) {
+  final nested = json['solarDesign'] ?? json['solar_design'];
+  if (nested is Map) {
+    final id = nested['id']?.toString().trim();
+    if (id != null && id.isNotEmpty) return id;
+  }
+  final raw = json['solar_design_id'] ?? json['solarDesignId'];
+  final id = raw?.toString().trim() ?? '';
+  return id.isEmpty ? null : id;
+}
+
+QuotationSolarDesign? _solarDesignFromJson(Map<String, dynamic> json) {
+  final nested = json['solarDesign'] ?? json['solar_design'];
+  if (nested is! Map) return null;
+  final design = QuotationSolarDesign.fromJson(
+    Map<String, dynamic>.from(nested),
+  );
+  return design.id.isEmpty ? null : design;
 }

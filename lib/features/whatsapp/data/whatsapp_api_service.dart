@@ -1,3 +1,4 @@
+import 'package:solar_sales/core/network/api_constants.dart';
 import 'package:solar_sales/core/network/api_endpoints.dart';
 import 'package:solar_sales/core/network/api_service.dart';
 
@@ -16,6 +17,7 @@ class WhatsappApiService {
     final res = await _api.post(ApiEndpoints.whatsappCompose, {
       'entityType': entityType,
       'entityId': entityId,
+      'origin': ApiConstants.webAppBaseUrl,
       if (templateKey != null && templateKey.isNotEmpty)
         'templateKey': templateKey,
     });

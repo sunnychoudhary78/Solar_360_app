@@ -34,11 +34,16 @@ class CostingApiService {
   }
 
   Future<CostingSheet> clear(String costingId) async {
-    final response = await _api.post(ApiEndpoints.costingClear(costingId));
+    final response = await _api.postWithoutBody(
+      ApiEndpoints.costingClear(costingId),
+    );
     return CostingSheet.fromJson(response);
   }
 
   Future<Uint8List> downloadPdf(String costingId) {
-    return _api.getBytes(ApiEndpoints.costingPdf(costingId));
+    return _api.getBytes(
+      ApiEndpoints.costingPdf(costingId),
+      headers: {'Accept': 'application/pdf'},
+    );
   }
 }

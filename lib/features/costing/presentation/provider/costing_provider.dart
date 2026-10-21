@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/providers/network_providers.dart';
+import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/customers/data/customer_repository.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
@@ -82,8 +83,15 @@ class CostingNotifier extends Notifier<CostingState> {
 
   @override
   CostingState build() {
-    Future.microtask(loadCatalogs);
-    return const CostingState();
+    final auth = ref.watch(authProvider);
+    final canLoadCatalogs =
+        auth.hasPermission('costing.read') &&
+        auth.hasPermission('customer.read') &&
+        auth.hasPermission('item.read');
+    if (canLoadCatalogs) {
+      Future.microtask(loadCatalogs);
+    }
+    return CostingState(isLoadingCatalogs: canLoadCatalogs);
   }
 
   Future<void> loadCatalogs() async {
