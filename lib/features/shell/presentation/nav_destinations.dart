@@ -124,7 +124,7 @@ class NavDestinations {
       selectedIcon: Icons.calculate_rounded,
       section: NavSection.main,
       kind: NavKind.route,
-      permission: 'costing.read',
+      anyOf: ['costing.read', 'costing.create'],
       route: '/costing',
       quickAction: true,
       quickActionSubtitle: 'Build customer costings',
@@ -328,6 +328,18 @@ class NavDestinations {
       route: '/customers',
     ),
     AppDestination(
+      id: 'ge_costing',
+      label: 'Costing',
+      icon: Icons.calculate_outlined,
+      selectedIcon: Icons.calculate_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      anyOf: ['costing.read', 'costing.create'],
+      route: '/solar/costing',
+      quickAction: true,
+      quickActionSubtitle: 'Build customer or lead costings',
+    ),
+    AppDestination(
       id: 'ge_completed',
       label: 'Completed Leads',
       icon: Icons.task_alt_outlined,
@@ -397,12 +409,7 @@ class NavDestinations {
       selectedIcon: Icons.checklist_rounded,
       section: NavSection.solarCrm,
       kind: NavKind.route,
-      anyOf: [
-        'task.read',
-        'task.create',
-        'task.update',
-        'task.delete',
-      ],
+      anyOf: ['task.read', 'task.create', 'task.update', 'task.delete'],
       route: '/solar/task-management',
       quickAction: true,
       quickActionSubtitle: 'Project tasks & assignees',
@@ -454,7 +461,10 @@ class NavDestinations {
   }) {
     return forModule(moduleId).where((d) {
       if (d.section != section) return false;
-      return d.shownTo(hasPermission: hasPermission, companyAdmin: companyAdmin);
+      return d.shownTo(
+        hasPermission: hasPermission,
+        companyAdmin: companyAdmin,
+      );
     }).toList();
   }
 
@@ -466,7 +476,10 @@ class NavDestinations {
   }) {
     return forModule(moduleId).where((d) {
       if (!d.quickAction) return false;
-      return d.shownTo(hasPermission: hasPermission, companyAdmin: companyAdmin);
+      return d.shownTo(
+        hasPermission: hasPermission,
+        companyAdmin: companyAdmin,
+      );
     }).toList();
   }
 

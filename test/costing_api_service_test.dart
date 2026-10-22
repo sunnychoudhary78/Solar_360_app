@@ -98,5 +98,109 @@ void main() {
         'application/pdf',
       );
     });
+
+    test('uses lead costing and vendor management routes', () async {
+      final pair = createTestApi();
+      final leadSheet = {
+        'id': 'costing-lead-1',
+        'customer_id': null,
+        'lead_id': 'lead-1',
+        'vendor_id': 'vendor-1',
+        'total_amount': '0.00',
+        'lead': {
+          'id': 'lead-1',
+          'lead_code': 'LD-1',
+          'full_name': 'Ravi Sharma',
+        },
+        'vendor': {
+          'id': 'vendor-1',
+          'name': 'SunPower Traders',
+          'contact_number': '9822000000',
+        },
+        'items': <Map<String, dynamic>>[],
+      };
+      final vendor = {
+        'id': 'vendor-1',
+        'name': 'SunPower Traders',
+        'address': 'Warehouse 4, Pune',
+        'contact_number': '9822000000',
+        'is_active': true,
+      };
+      pair.adapter
+        ..on('GET', 'costings/lead/lead-1', (_) => leadSheet)
+        ..on('POST', 'costings/lead/lead-1/lines', (request) {
+          expect(request.data, {
+            'kind': 'custom',
+            'name': 'Site scaffolding hire',
+            'unit_price': 1500.0,
+            'quantity': 3.0,
+          });
+          return leadSheet;
+        })
+        ..on('PUT', 'costings/costing-lead-1/vendor', (request) {
+          expect(request.data, {'vendor_id': 'vendor-1'});
+          return leadSheet;
+        })
+        ..on('GET', 'vendors', (_) => [vendor])
+        ..on('POST', 'vendors', (request) {
+          expect(request.data, {
+            'name': 'SunPower Traders',
+            'contact_number': '9822000000',
+          });
+          return vendor;
+        })
+        ..on('PUT', 'vendors/vendor-1', (request) {
+          expect(request.data, {'name': 'SunPower Traders'});
+          return vendor;
+        })
+        ..on('DELETE', 'vendors/vendor-1', (_) => {'success': true})
+        ..on(
+          'GET',
+          'leads',
+          (_) => {
+            'success': true,
+            'count': 1,
+            'data': [
+              {'id': 'lead-1', 'lead_code': 'LD-1', 'full_name': 'Ravi Sharma'},
+            ],
+          },
+        );
+
+      final service = CostingApiService(ApiService(pair.dio));
+      final loadedLead = await service.getForLead('lead-1');
+      expect(loadedLead.leadId, 'lead-1');
+      expect(loadedLead.lead?.fullName, 'Ravi Sharma');
+      expect(loadedLead.vendorId, 'vendor-1');
+      expect((await service.listLeads()).single.leadCode, 'LD-1');
+      expect((await service.listVendors()).single.name, 'SunPower Traders');
+      await service.createVendor({
+        'name': 'SunPower Traders',
+        'contact_number': '9822000000',
+      });
+      await service.updateVendor('vendor-1', {'name': 'SunPower Traders'});
+      await service.deleteVendor('vendor-1');
+      await service.setVendor('costing-lead-1', 'vendor-1');
+      await service.addLeadLine('lead-1', {
+        'kind': 'custom',
+        'name': 'Site scaffolding hire',
+        'unit_price': 1500.0,
+        'quantity': 3.0,
+      });
+
+      expect(pair.adapter.of('GET', 'costings/lead/lead-1'), hasLength(1));
+      expect(
+        pair.adapter.of('POST', 'costings/lead/lead-1/lines'),
+        hasLength(1),
+      );
+      expect(
+        pair.adapter.of('PUT', 'costings/costing-lead-1/vendor'),
+        hasLength(1),
+      );
+      expect(pair.adapter.of('GET', 'vendors'), hasLength(1));
+      expect(pair.adapter.of('POST', 'vendors'), hasLength(1));
+      expect(pair.adapter.of('PUT', 'vendors/vendor-1'), hasLength(1));
+      expect(pair.adapter.of('DELETE', 'vendors/vendor-1'), hasLength(1));
+      expect(pair.adapter.of('GET', 'leads'), hasLength(1));
+    });
   });
 }

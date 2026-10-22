@@ -104,6 +104,7 @@ class AppRoutes {
     },
     '/customers': (_) => const CustomersScreen(),
     '/costing': (_) => const CostingScreen(),
+    '/solar/costing': (_) => const CostingScreen(isGreenEnergy: true),
     '/customers/form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
       final id = args is String ? args : null;

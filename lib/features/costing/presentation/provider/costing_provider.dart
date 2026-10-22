@@ -24,9 +24,20 @@ final costingRepositoryProvider = Provider<CostingRepository>((ref) {
 
 class CostingState {
   final List<CustomerModel> customers;
+  final List<CostingLead> leads;
   final List<ItemModel> items;
-  final String? selectedCustomerId;
+  final List<CostingVendor> vendors;
+  final String? selectedPartyId;
   final CostingSheet? sheet;
+  final String? pendingVendorId;
+  final bool isGreenEnergyScreen;
+  final bool canBillbook;
+  final bool canSolar;
+  final bool canReadCosting;
+  final bool canCreateCosting;
+  final bool canUseCatalog;
+  final bool canSelectVendor;
+  final bool useLeadParty;
   final bool isLoadingCatalogs;
   final bool isLoadingSheet;
   final bool isMutating;
@@ -34,9 +45,20 @@ class CostingState {
 
   const CostingState({
     this.customers = const [],
+    this.leads = const [],
     this.items = const [],
-    this.selectedCustomerId,
+    this.vendors = const [],
+    this.selectedPartyId,
     this.sheet,
+    this.pendingVendorId,
+    this.isGreenEnergyScreen = false,
+    this.canBillbook = false,
+    this.canSolar = false,
+    this.canReadCosting = false,
+    this.canCreateCosting = false,
+    this.canUseCatalog = false,
+    this.canSelectVendor = false,
+    this.useLeadParty = false,
     this.isLoadingCatalogs = true,
     this.isLoadingSheet = false,
     this.isMutating = false,
@@ -45,24 +67,49 @@ class CostingState {
 
   CostingState copyWith({
     List<CustomerModel>? customers,
+    List<CostingLead>? leads,
     List<ItemModel>? items,
-    String? selectedCustomerId,
+    List<CostingVendor>? vendors,
+    String? selectedPartyId,
     CostingSheet? sheet,
+    String? pendingVendorId,
+    bool? isGreenEnergyScreen,
+    bool? canBillbook,
+    bool? canSolar,
+    bool? canReadCosting,
+    bool? canCreateCosting,
+    bool? canUseCatalog,
+    bool? canSelectVendor,
+    bool? useLeadParty,
     bool? isLoadingCatalogs,
     bool? isLoadingSheet,
     bool? isMutating,
     String? catalogError,
-    bool clearCustomer = false,
+    bool clearParty = false,
     bool clearSheet = false,
+    bool clearPendingVendor = false,
     bool clearCatalogError = false,
   }) {
     return CostingState(
       customers: customers ?? this.customers,
+      leads: leads ?? this.leads,
       items: items ?? this.items,
-      selectedCustomerId: clearCustomer
+      vendors: vendors ?? this.vendors,
+      selectedPartyId: clearParty
           ? null
-          : (selectedCustomerId ?? this.selectedCustomerId),
+          : (selectedPartyId ?? this.selectedPartyId),
       sheet: clearSheet ? null : (sheet ?? this.sheet),
+      pendingVendorId: clearPendingVendor
+          ? null
+          : (pendingVendorId ?? this.pendingVendorId),
+      isGreenEnergyScreen: isGreenEnergyScreen ?? this.isGreenEnergyScreen,
+      canBillbook: canBillbook ?? this.canBillbook,
+      canSolar: canSolar ?? this.canSolar,
+      canReadCosting: canReadCosting ?? this.canReadCosting,
+      canCreateCosting: canCreateCosting ?? this.canCreateCosting,
+      canUseCatalog: canUseCatalog ?? this.canUseCatalog,
+      canSelectVendor: canSelectVendor ?? this.canSelectVendor,
+      useLeadParty: useLeadParty ?? this.useLeadParty,
       isLoadingCatalogs: isLoadingCatalogs ?? this.isLoadingCatalogs,
       isLoadingSheet: isLoadingSheet ?? this.isLoadingSheet,
       isMutating: isMutating ?? this.isMutating,
@@ -74,6 +121,9 @@ class CostingState {
 }
 
 class CostingNotifier extends Notifier<CostingState> {
+  CostingNotifier(this.isGreenEnergyScreen);
+
+  final bool isGreenEnergyScreen;
   int _selectionVersion = 0;
 
   CustomerRepository get _customerRepository =>
@@ -84,26 +134,110 @@ class CostingNotifier extends Notifier<CostingState> {
   @override
   CostingState build() {
     final auth = ref.watch(authProvider);
-    final canLoadCatalogs =
-        auth.hasPermission('costing.read') &&
-        auth.hasPermission('customer.read') &&
-        auth.hasPermission('item.read');
-    if (canLoadCatalogs) {
-      Future.microtask(loadCatalogs);
-    }
-    return CostingState(isLoadingCatalogs: canLoadCatalogs);
+    final canBillbook =
+        auth.companyModules.billbook &&
+        (auth.isCompanyAdmin ||
+            _hasAnyRole(auth.roles, _billbookRoles) ||
+            auth.hasAny(_billbookPermissions));
+    final canSolar =
+        auth.companyModules.solar &&
+        (auth.isCompanyAdmin ||
+            _hasAnyRole(auth.roles, _solarRoles) ||
+            auth.hasAny(_solarPermissions));
+    final canReadCosting =
+        auth.hasPermission('costing.read') ||
+        auth.hasPermission('costing.create');
+    final canCreateCosting = auth.hasPermission('costing.create');
+    final useLeadParty = isGreenEnergyScreen && !canBillbook;
+    final canUseCatalog = canBillbook && auth.hasPermission('item.read');
+    final canSelectVendor = canBillbook;
+
+    final initial = CostingState(
+      isGreenEnergyScreen: isGreenEnergyScreen,
+      canBillbook: canBillbook,
+      canSolar: canSolar,
+      canReadCosting: canReadCosting,
+      canCreateCosting: canCreateCosting,
+      canUseCatalog: canUseCatalog,
+      canSelectVendor: canSelectVendor,
+      useLeadParty: useLeadParty,
+      isLoadingCatalogs: canReadCosting,
+    );
+    if (canReadCosting) Future.microtask(loadCatalogs);
+    return initial;
+  }
+
+  static const _billbookRoles = {
+    'salesexecutive',
+    'saleshead',
+    'financeexecutive',
+    'financehead',
+    'procurementexecutive',
+    'procurementhod',
+  };
+  static const _solarRoles = {
+    'sales',
+    'solarsales',
+    'sales manager',
+    'finance manager',
+    'document administrator',
+    'bank process',
+    'finance user',
+    'installation manager',
+    'installation team',
+    'material engineer',
+    'electrical engineer',
+  };
+  static const List<String> _billbookPermissions = [
+    'module.billbook.access',
+    'item.read',
+    'inventory.read',
+    'quotation.read',
+    'invoice.read',
+    'report.read',
+    'stats.read',
+  ];
+  static const List<String> _solarPermissions = [
+    'module.solar.access',
+    'lead.read',
+    'leads.read',
+    'closedlead.read',
+    'installation.read',
+    'dashboard.read',
+  ];
+
+  static bool _hasAnyRole(List<String> userRoles, Set<String> allowed) {
+    return userRoles.any((role) => allowed.contains(role.trim().toLowerCase()));
   }
 
   Future<void> loadCatalogs() async {
+    final snapshot = state;
     state = state.copyWith(isLoadingCatalogs: true, clearCatalogError: true);
     try {
-      final customersFuture = _customerRepository.list(limit: 100);
-      final itemsFuture = _itemRepository.listApproved();
-      final customers = await customersFuture;
-      final items = await itemsFuture;
+      final customersFuture =
+          !snapshot.useLeadParty && snapshot.canReadCosting && _canReadParty
+          ? _customerRepository.list(limit: 100)
+          : null;
+      final leadsFuture =
+          snapshot.useLeadParty && snapshot.canReadCosting && _canReadParty
+          ? _repository.listLeads()
+          : null;
+      final itemsFuture = snapshot.canUseCatalog
+          ? _itemRepository.listApproved()
+          : null;
+      final vendorsFuture = snapshot.canReadCosting
+          ? _repository.listVendors()
+          : null;
+
+      final customers = customersFuture == null ? null : await customersFuture;
+      final leads = leadsFuture == null ? null : await leadsFuture;
+      final items = itemsFuture == null ? null : await itemsFuture;
+      final vendors = vendorsFuture == null ? null : await vendorsFuture;
       state = state.copyWith(
-        customers: customers.data,
-        items: items.where((item) => item.isActive).toList(),
+        customers: customers?.data,
+        leads: leads,
+        items: items?.where((item) => item.isActive).toList(),
+        vendors: vendors?.where((vendor) => vendor.isActive).toList(),
         isLoadingCatalogs: false,
         clearCatalogError: true,
       );
@@ -115,24 +249,35 @@ class CostingNotifier extends Notifier<CostingState> {
     }
   }
 
-  Future<void> selectCustomer(String? customerId) async {
+  bool get _canReadParty {
+    final auth = ref.read(authProvider);
+    return state.useLeadParty
+        ? auth.hasPermission('lead.read')
+        : auth.hasPermission('customer.read');
+  }
+
+  Future<void> selectParty(String? partyId) async {
     final version = ++_selectionVersion;
-    if (customerId == null || customerId.isEmpty) {
+    if (partyId == null || partyId.isEmpty) {
       state = state.copyWith(
-        clearCustomer: true,
+        clearParty: true,
         clearSheet: true,
+        clearPendingVendor: true,
         isLoadingSheet: false,
       );
       return;
     }
 
     state = state.copyWith(
-      selectedCustomerId: customerId,
+      selectedPartyId: partyId,
       clearSheet: true,
+      clearPendingVendor: true,
       isLoadingSheet: true,
     );
     try {
-      final sheet = await _repository.getForCustomer(customerId);
+      final sheet = state.useLeadParty
+          ? await _repository.getForLead(partyId)
+          : await _repository.getForCustomer(partyId);
       if (version == _selectionVersion) {
         state = state.copyWith(sheet: sheet, isLoadingSheet: false);
       }
@@ -149,19 +294,12 @@ class CostingNotifier extends Notifier<CostingState> {
     required double unitPrice,
     required double quantity,
   }) async {
-    final customerId = state.selectedCustomerId;
-    if (customerId == null || customerId.isEmpty) {
-      throw StateError('Select a customer first');
-    }
-    await _mutate(
-      customerId,
-      () => _repository.addLine(customerId, {
-        'kind': 'catalog',
-        'item_id': itemId,
-        'unit_price': unitPrice,
-        'quantity': quantity,
-      }),
-    );
+    await _addLine({
+      'kind': 'catalog',
+      'item_id': itemId,
+      'unit_price': unitPrice,
+      'quantity': quantity,
+    });
   }
 
   Future<void> addCustomLine({
@@ -169,34 +307,124 @@ class CostingNotifier extends Notifier<CostingState> {
     required double unitPrice,
     required double quantity,
   }) async {
-    final customerId = state.selectedCustomerId;
-    if (customerId == null || customerId.isEmpty) {
-      throw StateError('Select a customer first');
+    await _addLine({
+      'kind': 'custom',
+      'name': name,
+      'unit_price': unitPrice,
+      'quantity': quantity,
+    });
+  }
+
+  Future<void> _addLine(Map<String, dynamic> body) async {
+    final partyId = state.selectedPartyId;
+    if (partyId == null || partyId.isEmpty) {
+      throw StateError('Select a customer or lead first');
     }
-    await _mutate(
-      customerId,
-      () => _repository.addLine(customerId, {
-        'kind': 'custom',
-        'name': name,
-        'unit_price': unitPrice,
-        'quantity': quantity,
-      }),
-    );
+    await _mutate(partyId, () async {
+      final updated = state.useLeadParty
+          ? await _repository.addLeadLine(partyId, body)
+          : await _repository.addLine(partyId, body);
+      final pendingVendorId = state.pendingVendorId;
+      if (pendingVendorId == null || pendingVendorId.isEmpty) return updated;
+      return _repository.setVendor(updated.id, pendingVendorId);
+    }, clearPendingVendor: true);
   }
 
   Future<void> removeLine(String lineId) async {
     final sheet = state.sheet;
-    if (sheet == null) return;
-    await _mutate(
-      sheet.customerId,
-      () => _repository.removeLine(sheet.id, lineId),
-    );
+    final partyId = state.selectedPartyId;
+    if (sheet == null || partyId == null) return;
+    await _mutate(partyId, () => _repository.removeLine(sheet.id, lineId));
   }
 
   Future<void> clearLines() async {
     final sheet = state.sheet;
-    if (sheet == null) return;
-    await _mutate(sheet.customerId, () => _repository.clear(sheet.id));
+    final partyId = state.selectedPartyId;
+    if (sheet == null || partyId == null) return;
+    await _mutate(partyId, () => _repository.clear(sheet.id));
+  }
+
+  Future<void> setVendor(String? vendorId) async {
+    final sheet = state.sheet;
+    if (sheet == null) {
+      state = state.copyWith(
+        pendingVendorId: vendorId,
+        clearPendingVendor: vendorId == null,
+      );
+      return;
+    }
+    final partyId = state.selectedPartyId;
+    if (partyId == null) return;
+    await _mutate(
+      partyId,
+      () => _repository.setVendor(sheet.id, vendorId),
+      pendingVendorId: vendorId,
+      clearPendingVendor: vendorId == null,
+    );
+  }
+
+  Future<String> findOrCreateVendor({
+    required String name,
+    String? address,
+    String? contactNumber,
+  }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      await setVendor(null);
+      return '';
+    }
+    final matched = state.vendors.where(
+      (vendor) =>
+          vendor.name.trim().toLowerCase() == normalizedName.toLowerCase(),
+    );
+    final createdVendor = matched.isEmpty
+        ? await _repository.createVendor({
+            'name': normalizedName,
+            if (address?.trim().isNotEmpty == true) 'address': address!.trim(),
+            if (contactNumber?.trim().isNotEmpty == true)
+              'contact_number': contactNumber!.trim(),
+          })
+        : null;
+    final vendorId = matched.isNotEmpty ? matched.first.id : createdVendor!.id;
+    if (createdVendor != null) {
+      state = state.copyWith(vendors: [...state.vendors, createdVendor]);
+    }
+    await setVendor(vendorId);
+    return vendorId;
+  }
+
+  Future<CostingVendor> saveVendor({
+    String? vendorId,
+    required String name,
+    String? address,
+    String? contactNumber,
+  }) async {
+    final body = {
+      'name': name.trim(),
+      'address': address?.trim() ?? '',
+      'contact_number': contactNumber?.trim() ?? '',
+    };
+    final saved = vendorId == null
+        ? await _repository.createVendor(body)
+        : await _repository.updateVendor(vendorId, body);
+    final vendors = [
+      for (final vendor in state.vendors)
+        if (vendor.id != saved.id) vendor,
+      saved,
+    ];
+    state = state.copyWith(vendors: vendors);
+    return saved;
+  }
+
+  Future<void> deleteVendor(String vendorId) async {
+    await _repository.deleteVendor(vendorId);
+    state = state.copyWith(
+      vendors: state.vendors.where((vendor) => vendor.id != vendorId).toList(),
+    );
+    if (state.sheet?.vendorId == vendorId ||
+        state.pendingVendorId == vendorId) {
+      await setVendor(null);
+    }
   }
 
   Future<Uint8List> downloadPdf() async {
@@ -208,17 +436,23 @@ class CostingNotifier extends Notifier<CostingState> {
   }
 
   Future<void> _mutate(
-    String customerId,
-    Future<CostingSheet> Function() operation,
-  ) async {
+    String partyId,
+    Future<CostingSheet> Function() operation, {
+    String? pendingVendorId,
+    bool clearPendingVendor = false,
+  }) async {
     if (state.isMutating) {
       throw StateError('A costing update is already in progress');
     }
     state = state.copyWith(isMutating: true);
     try {
       final updatedSheet = await operation();
-      if (state.selectedCustomerId == customerId) {
-        state = state.copyWith(sheet: updatedSheet);
+      if (state.selectedPartyId == partyId) {
+        state = state.copyWith(
+          sheet: updatedSheet,
+          pendingVendorId: pendingVendorId,
+          clearPendingVendor: clearPendingVendor,
+        );
       }
     } finally {
       state = state.copyWith(isMutating: false);
@@ -226,6 +460,7 @@ class CostingNotifier extends Notifier<CostingState> {
   }
 }
 
-final costingProvider = NotifierProvider<CostingNotifier, CostingState>(
-  CostingNotifier.new,
-);
+final costingProvider =
+    NotifierProvider.family<CostingNotifier, CostingState, bool>(
+      CostingNotifier.new,
+    );

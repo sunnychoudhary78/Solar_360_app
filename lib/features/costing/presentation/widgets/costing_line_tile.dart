@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:solar_sales/features/costing/data/models/costing_model.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 
@@ -34,10 +35,20 @@ class CostingLineTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
-      subtitle: Text(
-        '${line.kind == 'catalog' ? 'System' : 'Custom'}'
-        '${line.unit == null || line.unit!.isEmpty ? '' : ' · ${line.unit}'}'
-        ' · ${formatInr(line.unitPrice)} × ${line.quantity}',
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${line.kind == 'catalog' ? 'System' : 'Custom'}'
+            '${line.unit == null || line.unit!.isEmpty ? '' : ' · ${line.unit}'}'
+            ' · ${formatInr(line.unitPrice)} × ${line.quantity}',
+          ),
+          if (line.createdAt != null)
+            Text(
+              'Added ${DateFormat('d MMM yyyy, h:mm a').format(line.createdAt!.toLocal())}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+        ],
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

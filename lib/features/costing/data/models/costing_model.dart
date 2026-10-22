@@ -20,13 +20,76 @@ class CostingCustomer {
   factory CostingCustomer.fromJson(Map<String, dynamic> json) {
     return CostingCustomer(
       id: asString(json['id']),
-      name: asString(json['name']),
+      name: asString(json['name'], asString(json['full_name'])),
       email: json['email']?.toString(),
       phone: json['phone']?.toString(),
       city: json['city']?.toString(),
       state: json['state']?.toString(),
     );
   }
+}
+
+class CostingLead {
+  final String id;
+  final String leadCode;
+  final String fullName;
+  final String? email;
+  final String? mobile;
+  final String? address;
+  final String? city;
+  final String? state;
+
+  const CostingLead({
+    required this.id,
+    required this.fullName,
+    this.leadCode = '',
+    this.email,
+    this.mobile,
+    this.address,
+    this.city,
+    this.state,
+  });
+
+  factory CostingLead.fromJson(Map<String, dynamic> json) => CostingLead(
+    id: asString(json['id']),
+    leadCode: asString(json['lead_code']),
+    fullName: asString(json['full_name'], asString(json['name'])),
+    email: json['email']?.toString(),
+    mobile: (json['mobile'] ?? json['phone'])?.toString(),
+    address: json['address']?.toString(),
+    city: json['city']?.toString(),
+    state: json['state']?.toString(),
+  );
+}
+
+class CostingVendor {
+  final String id;
+  final String name;
+  final String? address;
+  final String? contactNumber;
+  final bool isActive;
+
+  const CostingVendor({
+    required this.id,
+    required this.name,
+    this.address,
+    this.contactNumber,
+    this.isActive = true,
+  });
+
+  factory CostingVendor.fromJson(Map<String, dynamic> json) => CostingVendor(
+    id: asString(json['id']),
+    name: asString(json['name']),
+    address: json['address']?.toString(),
+    contactNumber: json['contact_number']?.toString(),
+    isActive: json['is_active'] != false,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'address': address,
+    'contact_number': contactNumber,
+  };
 }
 
 class CostingLine {
@@ -38,6 +101,7 @@ class CostingLine {
   final double unitPrice;
   final double quantity;
   final double amount;
+  final DateTime? createdAt;
 
   const CostingLine({
     required this.id,
@@ -46,6 +110,7 @@ class CostingLine {
     required this.unitPrice,
     required this.quantity,
     required this.amount,
+    this.createdAt,
     this.itemId,
     this.unit,
   });
@@ -66,24 +131,35 @@ class CostingLine {
         json['amount'],
         asDouble(json['unit_price']) * asDouble(json['quantity']),
       ),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
     );
   }
 }
 
 class CostingSheet {
   final String id;
-  final String customerId;
+  final String? customerId;
+  final String? leadId;
+  final String? vendorId;
   final double totalAmount;
   final CostingCustomer? customer;
+  final CostingLead? lead;
+  final CostingVendor? vendor;
   final List<CostingLine> items;
 
   const CostingSheet({
     required this.id,
-    required this.customerId,
+    this.customerId,
+    this.leadId,
+    this.vendorId,
     required this.totalAmount,
     required this.items,
     this.customer,
+    this.lead,
+    this.vendor,
   });
+
+  String? get partyId => customerId ?? leadId;
 
   factory CostingSheet.fromJson(dynamic json) {
     if (json is! Map) {
@@ -93,14 +169,24 @@ class CostingSheet {
     final data = source['data'];
     final map = data is Map ? Map<String, dynamic>.from(data) : source;
     final customer = map['customer'];
+    final lead = map['lead'];
+    final vendor = map['vendor'];
     final items = map['items'];
 
     return CostingSheet(
       id: asString(map['id']),
-      customerId: asString(map['customer_id']),
+      customerId: map['customer_id']?.toString(),
+      leadId: map['lead_id']?.toString(),
+      vendorId: map['vendor_id']?.toString(),
       totalAmount: asDouble(map['total_amount']),
       customer: customer is Map
           ? CostingCustomer.fromJson(Map<String, dynamic>.from(customer))
+          : null,
+      lead: lead is Map
+          ? CostingLead.fromJson(Map<String, dynamic>.from(lead))
+          : null,
+      vendor: vendor is Map
+          ? CostingVendor.fromJson(Map<String, dynamic>.from(vendor))
           : null,
       items: items is List
           ? items

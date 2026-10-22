@@ -70,6 +70,13 @@ class ApiEndpoints {
       'costings/customer/$customerId';
   static String customerCostingLines(String customerId) =>
       'costings/customer/$customerId/lines';
+  static String leadCosting(String leadId) => 'costings/lead/$leadId';
+  static String leadCostingLines(String leadId) =>
+      'costings/lead/$leadId/lines';
+  static const vendors = 'vendors';
+  static String vendor(String id) => 'vendors/$id';
+  static String costingVendor(String costingId) =>
+      'costings/$costingId/vendor';
   static String costingLine(String costingId, String lineId) =>
       'costings/$costingId/lines/$lineId';
   static String costingClear(String costingId) => 'costings/$costingId/clear';

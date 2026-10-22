@@ -5,6 +5,7 @@ import 'package:solar_sales/shared/utils/formatters.dart';
 
 class CostingItemForm extends StatelessWidget {
   final List<ItemModel> items;
+  final bool canUseCatalog;
   final String kind;
   final String? selectedItemId;
   final TextEditingController nameController;
@@ -21,6 +22,7 @@ class CostingItemForm extends StatelessWidget {
   const CostingItemForm({
     super.key,
     required this.items,
+    required this.canUseCatalog,
     required this.kind,
     required this.selectedItemId,
     required this.nameController,
@@ -41,25 +43,27 @@ class CostingItemForm extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(
-              value: 'catalog',
-              label: Text('System item'),
-              icon: Icon(Icons.inventory_2_outlined),
-            ),
-            ButtonSegment(
-              value: 'custom',
-              label: Text('Custom item'),
-              icon: Icon(Icons.edit_outlined),
-            ),
-          ],
-          selected: {kind},
-          onSelectionChanged: enabled
-              ? (selection) => onKindChanged(selection.first)
-              : null,
-        ),
-        const SizedBox(height: 16),
+        if (canUseCatalog) ...[
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'catalog',
+                label: Text('Select'),
+                icon: Icon(Icons.inventory_2_outlined),
+              ),
+              ButtonSegment(
+                value: 'custom',
+                label: Text('Type'),
+                icon: Icon(Icons.edit_outlined),
+              ),
+            ],
+            selected: {kind},
+            onSelectionChanged: enabled
+                ? (selection) => onKindChanged(selection.first)
+                : null,
+          ),
+          const SizedBox(height: 16),
+        ],
         if (kind == 'catalog')
           DropdownButtonFormField<String>(
             key: ValueKey(selectedItemId),
