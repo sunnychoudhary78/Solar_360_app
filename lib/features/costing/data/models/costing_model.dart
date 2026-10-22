@@ -200,3 +200,93 @@ class CostingSheet {
     );
   }
 }
+
+/// One row of the All Costings table (`GET /costings`).
+///
+/// List rows never include `items`; use [itemCount] and [totalAmount].
+class CostingListRow {
+  final String id;
+  final String? customerId;
+  final String? leadId;
+  final String? vendorId;
+  final double totalAmount;
+  final int itemCount;
+  final String? notes;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final CostingCustomer? customer;
+  final CostingLead? lead;
+  final CostingVendor? vendor;
+  final String creatorName;
+  final String? creatorEmail;
+  final bool isActive;
+
+  const CostingListRow({
+    required this.id,
+    this.customerId,
+    this.leadId,
+    this.vendorId,
+    this.totalAmount = 0,
+    this.itemCount = 0,
+    this.notes,
+    this.createdAt,
+    this.updatedAt,
+    this.customer,
+    this.lead,
+    this.vendor,
+    this.creatorName = '',
+    this.creatorEmail,
+    this.isActive = true,
+  });
+
+  bool get isLead => customerId == null && leadId != null;
+
+  String? get partyId => customerId ?? leadId;
+
+  String get partyName {
+    final name = (customer?.name ?? lead?.fullName ?? '').trim();
+    return name.isEmpty ? 'Unknown party' : name;
+  }
+
+  String? get partyEmail => customer?.email ?? lead?.email;
+
+  String? get partyPhone => customer?.phone ?? lead?.mobile;
+
+  /// `phone · email` line for the row subtitle.
+  String get partyContact {
+    final parts = [partyPhone, partyEmail]
+        .whereType<String>()
+        .where((value) => value.trim().isNotEmpty);
+    return parts.join(' · ');
+  }
+
+  factory CostingListRow.fromJson(Map<String, dynamic> json) {
+    final customer = json['customer'];
+    final lead = json['lead'];
+    final vendor = json['vendor'];
+    final creator = json['creator'];
+    return CostingListRow(
+      id: asString(json['id']),
+      customerId: json['customer_id']?.toString(),
+      leadId: json['lead_id']?.toString(),
+      vendorId: json['vendor_id']?.toString(),
+      totalAmount: asDouble(json['total_amount']),
+      itemCount: asInt(json['item_count']),
+      notes: json['notes']?.toString(),
+      createdAt: parseDate(json['created_at']),
+      updatedAt: parseDate(json['updated_at']),
+      customer: customer is Map
+          ? CostingCustomer.fromJson(Map<String, dynamic>.from(customer))
+          : null,
+      lead: lead is Map
+          ? CostingLead.fromJson(Map<String, dynamic>.from(lead))
+          : null,
+      vendor: vendor is Map
+          ? CostingVendor.fromJson(Map<String, dynamic>.from(vendor))
+          : null,
+      creatorName: creator is Map ? asString(creator['name']) : '',
+      creatorEmail: creator is Map ? creator['email']?.toString() : null,
+      isActive: json['is_active'] != false,
+    );
+  }
+}

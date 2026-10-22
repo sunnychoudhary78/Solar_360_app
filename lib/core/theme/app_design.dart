@@ -149,6 +149,17 @@ class AppStatusColors {
       case 'sent':
       case 'dispatched':
         return scheme.primary;
+      // Collections (payment schedules + invoice roll-up)
+      case 'paid':
+        return const Color(0xFF059669); // emerald-600
+      case 'partial':
+        return const Color(0xFF0EA5E9); // sky-500
+      case 'overdue':
+        return scheme.error;
+      case 'unpaid':
+        return const Color(0xFFD97706); // amber-600
+      case 'waived':
+        return scheme.outline;
       case 'rejected':
       case 'rejected by sales manager':
       case 'cancelled':

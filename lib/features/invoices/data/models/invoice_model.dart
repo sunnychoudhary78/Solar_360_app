@@ -1,5 +1,6 @@
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/items/data/models/item_model.dart';
+import 'package:solar_sales/features/payments/data/models/payment_models.dart';
 import 'package:solar_sales/shared/models/party_address_model.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/marketing_template_picker.dart';
@@ -94,6 +95,9 @@ class InvoiceModel {
   final String? marketingTemplateId;
   final MarketingTemplate? marketingTemplate;
 
+  /// Collections roll-up — null on drafts / never-approved invoices (§8).
+  final InvoicePaymentSummaryModel? payment;
+
   const InvoiceModel({
     required this.id,
     required this.invoiceNumber,
@@ -120,6 +124,7 @@ class InvoiceModel {
     this.fromBranchId,
     this.marketingTemplateId,
     this.marketingTemplate,
+    this.payment,
   });
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -187,6 +192,11 @@ class InvoiceModel {
           : null,
       marketingTemplateId: marketingTemplateIdFromJson(json),
       marketingTemplate: nestedTemplate,
+      payment: json['payment'] is Map
+          ? InvoicePaymentSummaryModel.fromJson(
+              Map<String, dynamic>.from(json['payment'] as Map),
+            )
+          : null,
     );
   }
 

@@ -66,6 +66,8 @@ class ApiEndpoints {
   static String itemReject(String id) => 'items/$id/reject';
 
   // Costing
+  static const costings = 'costings';
+  static String costing(String id) => 'costings/$id';
   static String customerCosting(String customerId) =>
       'costings/customer/$customerId';
   static String customerCostingLines(String customerId) =>
@@ -119,6 +121,15 @@ class ApiEndpoints {
   static String invoiceStockCheck(String id) => 'invoices/$id/stock-check';
   static String invoicePdf(String id) => 'invoices/$id/pdf';
   static String invoiceEmail(String id) => 'invoices/$id/send-email';
+
+  // Payments / collections (accounts receivable on invoices)
+  static const payments = 'payments';
+  static const paymentsDashboard = 'payments/dashboard';
+  static const paymentSchedules = 'payments/schedules';
+  static String paymentSchedule(String id) => 'payments/schedules/$id';
+  static String paymentScheduleRemind(String id) =>
+      'payments/schedules/$id/remind';
+  static String paymentReceipt(String id) => 'payments/$id';
 
   // WhatsApp share (same routes as the web app)
   static const whatsappCompose = 'whatsapp/compose';

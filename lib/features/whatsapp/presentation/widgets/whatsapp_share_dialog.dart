@@ -16,6 +16,7 @@ Future<void> showWhatsAppShareDialog(
   required String entityType,
   required String entityId,
   String title = 'Send on WhatsApp',
+  String? initialTemplateKey,
 }) {
   return showDialog<void>(
     context: context,
@@ -23,6 +24,7 @@ Future<void> showWhatsAppShareDialog(
       entityType: entityType,
       entityId: entityId,
       title: title,
+      initialTemplateKey: initialTemplateKey,
     ),
   );
 }
@@ -32,11 +34,15 @@ class WhatsAppShareDialog extends ConsumerStatefulWidget {
   final String entityId;
   final String title;
 
+  /// Preselects a template (e.g. `invoice_payment_reminder`).
+  final String? initialTemplateKey;
+
   const WhatsAppShareDialog({
     super.key,
     required this.entityType,
     required this.entityId,
     required this.title,
+    this.initialTemplateKey,
   });
 
   @override
@@ -61,7 +67,9 @@ class _WhatsAppShareDialogState extends ConsumerState<WhatsAppShareDialog> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _load(templateKey: widget.initialTemplateKey),
+    );
   }
 
   @override

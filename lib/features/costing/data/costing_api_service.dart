@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:solar_sales/core/network/api_endpoints.dart';
 import 'package:solar_sales/core/network/api_service.dart';
+import 'package:solar_sales/shared/models/paginated_result.dart';
 
 import 'models/costing_model.dart';
 
@@ -9,6 +10,37 @@ class CostingApiService {
   final ApiService _api;
 
   CostingApiService(this._api);
+
+  /// All Costings table. `party` is `customer` or `lead`.
+  Future<PaginatedResult<CostingListRow>> listCostings({
+    required String party,
+    String? search,
+    String? vendorId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final response = await _api.get(
+      ApiEndpoints.costings,
+      queryParams: {
+        'party': party,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        if (vendorId != null && vendorId.isNotEmpty) 'vendorId': vendorId,
+        if (dateFrom != null) 'dateFrom': _dateParam(dateFrom),
+        if (dateTo != null) 'dateTo': _dateParam(dateTo),
+        'page': page,
+        'limit': limit,
+      },
+    );
+    return PaginatedResult.fromJson(response, CostingListRow.fromJson);
+  }
+
+  /// Full sheet for the bill dialog. Does **not** create a sheet.
+  Future<CostingSheet> getById(String costingId) async {
+    final response = await _api.get(ApiEndpoints.costing(costingId));
+    return CostingSheet.fromJson(response);
+  }
 
   Future<CostingSheet> getForCustomer(String customerId) async {
     final response = await _api.get(ApiEndpoints.customerCosting(customerId));
@@ -120,5 +152,12 @@ class CostingApiService {
         .whereType<Map>()
         .map((lead) => CostingLead.fromJson(Map<String, dynamic>.from(lead)))
         .toList();
+  }
+
+  /// `YYYY-MM-DD` for the `dateFrom` / `dateTo` list filters.
+  static String _dateParam(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year.toString().padLeft(4, '0')}-$month-$day';
   }
 }

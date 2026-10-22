@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:solar_sales/shared/models/paginated_result.dart';
+
 import 'models/costing_model.dart';
 import 'costing_api_service.dart';
 
@@ -7,6 +9,26 @@ class CostingRepository {
   final CostingApiService _api;
 
   CostingRepository(this._api);
+
+  Future<PaginatedResult<CostingListRow>> listCostings({
+    required String party,
+    String? search,
+    String? vendorId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    int page = 1,
+    int limit = 20,
+  }) => _api.listCostings(
+    party: party,
+    search: search,
+    vendorId: vendorId,
+    dateFrom: dateFrom,
+    dateTo: dateTo,
+    page: page,
+    limit: limit,
+  );
+
+  Future<CostingSheet> getById(String costingId) => _api.getById(costingId);
 
   Future<CostingSheet> getForCustomer(String customerId) =>
       _api.getForCustomer(customerId);

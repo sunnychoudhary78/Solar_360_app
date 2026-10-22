@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'package:solar_sales/features/customers/presentation/providers/customer_p
 import 'package:solar_sales/features/items/data/item_repository.dart';
 import 'package:solar_sales/features/items/data/models/item_model.dart';
 import 'package:solar_sales/features/items/presentation/providers/item_providers.dart';
+import 'package:solar_sales/shared/utils/formatters.dart';
 
 import '../../data/costing_api_service.dart';
 import '../../data/costing_repositry.dart';
@@ -464,3 +466,196 @@ final costingProvider =
     NotifierProvider.family<CostingNotifier, CostingState, bool>(
       CostingNotifier.new,
     );
+
+/// All Costings tab state (`GET /costings`).
+class CostingListState {
+  final List<CostingListRow> items;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMore;
+  final String search;
+  /// Vendor uuid, or `none` for sheets without a vendor.
+  final String? vendorId;
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
+  final int page;
+  final int total;
+  final String? error;
+
+  const CostingListState({
+    this.items = const [],
+    this.isLoading = false,
+    this.isLoadingMore = false,
+    this.hasMore = true,
+    this.search = '',
+    this.vendorId,
+    this.dateFrom,
+    this.dateTo,
+    this.page = 0,
+    this.total = 0,
+    this.error,
+  });
+
+  bool get hasFilters =>
+      search.trim().isNotEmpty ||
+      vendorId != null ||
+      dateFrom != null ||
+      dateTo != null;
+
+  CostingListState copyWith({
+    List<CostingListRow>? items,
+    bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMore,
+    String? search,
+    String? vendorId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    int? page,
+    int? total,
+    String? error,
+    bool clearError = false,
+    bool clearVendor = false,
+    bool clearDateFrom = false,
+    bool clearDateTo = false,
+  }) {
+    return CostingListState(
+      items: items ?? this.items,
+      isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasMore: hasMore ?? this.hasMore,
+      search: search ?? this.search,
+      vendorId: clearVendor ? null : (vendorId ?? this.vendorId),
+      dateFrom: clearDateFrom ? null : (dateFrom ?? this.dateFrom),
+      dateTo: clearDateTo ? null : (dateTo ?? this.dateTo),
+      page: page ?? this.page,
+      total: total ?? this.total,
+      error: clearError ? null : (error ?? this.error),
+    );
+  }
+}
+
+class CostingListNotifier extends Notifier<CostingListState> {
+  CostingListNotifier(this.isGreenEnergy);
+
+  final bool isGreenEnergy;
+  static const int pageSize = 20;
+  Timer? _debounce;
+
+  @override
+  CostingListState build() {
+    ref.onDispose(() => _debounce?.cancel());
+    Future.microtask(refresh);
+    return const CostingListState(isLoading: true);
+  }
+
+  CostingRepository get _repo => ref.read(costingRepositoryProvider);
+
+  /// `party` query: customers unless this is the Green Energy screen with
+  /// Billbook turned off, in which case the sheets are saved against leads.
+  String get _party {
+    if (!isGreenEnergy) return 'customer';
+    final auth = ref.read(authProvider);
+    final canBillbook =
+        auth.companyModules.billbook &&
+        (auth.isCompanyAdmin ||
+            CostingNotifier._hasAnyRole(
+              auth.roles,
+              CostingNotifier._billbookRoles,
+            ) ||
+            auth.hasAny(CostingNotifier._billbookPermissions));
+    return canBillbook ? 'customer' : 'lead';
+  }
+
+  Future<void> refresh() async {
+    state = state.copyWith(isLoading: true, clearError: true, page: 0);
+    try {
+      final result = await _repo.listCostings(
+        party: _party,
+        search: state.search,
+        vendorId: state.vendorId,
+        dateFrom: state.dateFrom,
+        dateTo: state.dateTo,
+        page: 1,
+        limit: pageSize,
+      );
+      state = state.copyWith(
+        items: result.data,
+        total: result.total,
+        isLoading: false,
+        hasMore: result.hasMore,
+        page: result.page,
+        clearError: true,
+      );
+    } catch (error) {
+      state = state.copyWith(isLoading: false, error: cleanError(error));
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (state.isLoadingMore || !state.hasMore || state.isLoading) return;
+    state = state.copyWith(isLoadingMore: true);
+    try {
+      final result = await _repo.listCostings(
+        party: _party,
+        search: state.search,
+        vendorId: state.vendorId,
+        dateFrom: state.dateFrom,
+        dateTo: state.dateTo,
+        page: state.page + 1,
+        limit: pageSize,
+      );
+      state = state.copyWith(
+        items: [...state.items, ...result.data],
+        total: result.total,
+        isLoadingMore: false,
+        hasMore: result.hasMore,
+        page: result.page,
+      );
+    } catch (error) {
+      state = state.copyWith(isLoadingMore: false, error: cleanError(error));
+    }
+  }
+
+  void setSearch(String value) {
+    state = state.copyWith(search: value);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), refresh);
+  }
+
+  void setVendor(String? vendorId) {
+    state = state.copyWith(vendorId: vendorId, clearVendor: vendorId == null);
+    refresh();
+  }
+
+  void setDateRange({DateTime? from, DateTime? to}) {
+    state = state.copyWith(
+      dateFrom: from,
+      dateTo: to,
+      clearDateFrom: from == null,
+      clearDateTo: to == null,
+    );
+    refresh();
+  }
+
+  void clearFilters() {
+    state = state.copyWith(
+      search: '',
+      clearVendor: true,
+      clearDateFrom: true,
+      clearDateTo: true,
+    );
+    refresh();
+  }
+}
+
+final costingListProvider =
+    NotifierProvider.family<CostingListNotifier, CostingListState, bool>(
+      CostingListNotifier.new,
+    );
+
+/// Full sheet for the bill dialog (`GET /costings/:id`).
+final costingDetailProvider =
+    FutureProvider.autoDispose.family<CostingSheet, String>((ref, id) {
+      return ref.watch(costingRepositoryProvider).getById(id);
+    });

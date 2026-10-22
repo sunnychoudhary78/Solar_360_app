@@ -166,6 +166,18 @@ class NavDestinations {
       quickActionSubtitle: 'Billing & dispatch',
     ),
     AppDestination(
+      id: 'bb_payments',
+      label: 'Payments',
+      icon: Icons.payments_outlined,
+      selectedIcon: Icons.payments_rounded,
+      section: NavSection.main,
+      kind: NavKind.route,
+      anyOf: ['payment.read', 'invoice.read', 'module.billbook.access'],
+      route: '/payments',
+      quickAction: true,
+      quickActionSubtitle: 'Collections & dues',
+    ),
+    AppDestination(
       id: 'bb_notifications',
       label: 'Notifications',
       icon: Icons.notifications_outlined,

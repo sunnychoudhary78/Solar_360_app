@@ -9,6 +9,7 @@ import 'package:solar_sales/shared/utils/formatters.dart';
 import 'provider/costing_provider.dart';
 import 'widgets/costing_item_form.dart';
 import 'widgets/costing_line_tile.dart';
+import 'widgets/costing_list_tab.dart';
 
 class CostingScreen extends ConsumerStatefulWidget {
   final bool isGreenEnergy;
@@ -36,7 +37,6 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   bool _isDeletingVendor = false;
   String? _removingLineId;
   bool _isClearing = false;
-  bool _showVendors = false;
   bool _vendorHadFocus = false;
 
   @override
@@ -82,6 +82,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
 
     try {
       await _notifier.setVendor(vendorId);
+      _refreshList();
     } catch (error) {
       _showMessage(cleanError(error), isError: true);
     }
@@ -102,6 +103,12 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   CostingNotifier get _notifier =>
       ref.read(costingProvider(widget.isGreenEnergy).notifier);
 
+  CostingListNotifier get _listNotifier =>
+      ref.read(costingListProvider(widget.isGreenEnergy).notifier);
+
+  /// Keeps the All Costings table in sync after a create / edit.
+  void _refreshList() => _listNotifier.refresh();
+
   Future<void> _selectParty(String? partyId) async {
     try {
       await _notifier.selectParty(partyId);
@@ -116,13 +123,17 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     }
   }
 
-  // Future<void> _setVendor(String? vendorId) async {
-  //   try {
-  //     await _notifier.setVendor(vendorId);
-  //   } catch (error) {
-  //     _showMessage(cleanError(error), isError: true);
-  //   }
-  // }
+  /// Create New Costing: open the Costing tab with the party cleared.
+  void _startNewCosting(TabController controller) {
+    controller.animateTo(1);
+    _selectParty(null);
+  }
+
+  /// Edit / View a row: open the Costing tab with that party's sheet loaded.
+  void _editCosting(TabController controller, CostingListRow row) {
+    controller.animateTo(1);
+    _selectParty(row.partyId);
+  }
 
   Future<void> _saveTypedVendor() {
     final activeSave = _vendorSaveTask;
@@ -201,6 +212,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
         );
       }
       _clearDraft();
+      _refreshList();
       _showMessage('Item saved');
     } catch (error) {
       _showMessage(cleanError(error), isError: true);
@@ -236,6 +248,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     setState(() => _removingLineId = line.id);
     try {
       await _notifier.removeLine(line.id);
+      _refreshList();
       _showMessage('Item removed');
     } catch (error) {
       _showMessage(cleanError(error), isError: true);
@@ -268,6 +281,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     setState(() => _isClearing = true);
     try {
       await _notifier.clearLines();
+      _refreshList();
       _showMessage('All items cleared');
     } catch (error) {
       _showMessage(cleanError(error), isError: true);
@@ -394,6 +408,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     setState(() => _isDeletingVendor = true);
     try {
       await _notifier.deleteVendor(vendor.id);
+      _refreshList();
       _showMessage('Vendor deleted');
     } catch (error) {
       _showMessage(cleanError(error), isError: true);
@@ -406,10 +421,93 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(costingProvider(widget.isGreenEnergy));
     final auth = ref.watch(authProvider);
-    final partyPermission = state.useLeadParty ? 'lead.read' : 'customer.read';
-    final canReadParty = auth.hasPermission(partyPermission);
-    final canRead = state.canReadCosting && canReadParty;
+    final hasModuleAccess = widget.isGreenEnergy
+        ? state.canSolar
+        : state.canBillbook;
+
+    if (!hasModuleAccess) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Costing')),
+        body: const _HintCard(
+          icon: Icons.lock_outline,
+          message: 'You do not have access to this costing module.',
+        ),
+      );
+    }
+
+    final sheet = state.sheet;
     final canCreate = state.canCreateCosting;
+    final tabs = <Tab>[
+      const Tab(text: 'All Costings'),
+      const Tab(text: 'Costing'),
+      if (state.canSelectVendor) const Tab(text: 'Vendors'),
+    ];
+
+    return DefaultTabController(
+      length: tabs.length,
+      child: Builder(
+        builder: (tabContext) {
+          final controller = DefaultTabController.of(tabContext);
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Costing'),
+              actions: [
+                IconButton(
+                  tooltip: 'Download PDF',
+                  onPressed:
+                      sheet != null &&
+                          sheet.items.isNotEmpty &&
+                          !_isDownloading &&
+                          !state.isLoadingSheet
+                      ? () => _downloadPdf(sheet, state)
+                      : null,
+                  icon: _isDownloading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.picture_as_pdf_outlined),
+                ),
+                if (canCreate)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: TextButton.icon(
+                      onPressed: () => _startNewCosting(controller),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('New'),
+                    ),
+                  ),
+              ],
+              bottom: TabBar(tabs: tabs),
+            ),
+            body: TabBarView(
+              children: [
+                CostingListTab(
+                  isGreenEnergy: widget.isGreenEnergy,
+                  canSelectVendor: state.canSelectVendor,
+                  canCreateCosting: canCreate,
+                  vendors: state.vendors,
+                  onEdit: (row) => _editCosting(controller, row),
+                ),
+                _formTab(state, auth, canCreate),
+                if (state.canSelectVendor)
+                  ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [_vendorsList(state)],
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _formTab(CostingState state, dynamic auth, bool canCreate) {
+    final partyPermission = state.useLeadParty ? 'lead.read' : 'customer.read';
+    final canReadParty = auth.hasPermission(partyPermission) as bool;
+    final canRead = state.canReadCosting && canReadParty;
     final sheet = state.sheet;
     final selectedCustomer = state.customers
         .where((customer) => customer.id == state.selectedPartyId)
@@ -421,240 +519,180 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
         (double.tryParse(_priceController.text) ?? 0) *
         (double.tryParse(_quantityController.text) ?? 0);
     final scheme = Theme.of(context).colorScheme;
-    final hasModuleAccess = widget.isGreenEnergy
-        ? state.canSolar
-        : state.canBillbook;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Costing'),
-        actions: [
-          if (!_showVendors)
-            IconButton(
-              tooltip: 'Download PDF',
-              onPressed:
-                  sheet != null &&
-                      sheet.items.isNotEmpty &&
-                      !_isDownloading &&
-                      !state.isLoadingSheet
-                  ? () => _downloadPdf(sheet, state)
-                  : null,
-              icon: _isDownloading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.picture_as_pdf_outlined),
-            ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: !hasModuleAccess
-          ? const _HintCard(
-              icon: Icons.lock_outline,
-              message: 'You do not have access to this costing module.',
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(
-                  widget.isGreenEnergy
-                      ? 'Green Energy / Costing'
-                      : 'Sales / Costing',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.isGreenEnergy
-                      ? state.canBillbook
-                            ? 'Uses Billbook customers — select or type vendors and items'
-                            : 'Select a lead — type vendors and items (Billbook is not on this subscription)'
-                      : 'Items are saved per customer — switch customers anytime to continue',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          widget.isGreenEnergy ? 'Green Energy / Costing' : 'Sales / Costing',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          widget.isGreenEnergy
+              ? state.canBillbook
+                    ? 'Uses Billbook customers — select or type vendors and items'
+                    : 'Select a lead — type vendors and items (Billbook is not on this subscription)'
+              : 'Items are saved per customer — switch customers anytime to continue',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (state.catalogError != null)
+          Card(
+            color: scheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      state.catalogError!,
+                      style: TextStyle(color: scheme.onErrorContainer),
+                    ),
                   ),
-                ),
-                if (state.canSelectVendor) ...[
-                  const SizedBox(height: 16),
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('Costing')),
-                      ButtonSegment(value: true, label: Text('Vendors')),
-                    ],
-                    selected: {_showVendors},
-                    onSelectionChanged: (selection) =>
-                        setState(() => _showVendors = selection.first),
+                  TextButton(
+                    onPressed: state.isLoadingCatalogs
+                        ? null
+                        : _notifier.loadCatalogs,
+                    child: const Text('Retry'),
                   ),
                 ],
-                if (state.catalogError != null)
-                  Card(
-                    color: scheme.errorContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              state.catalogError!,
-                              style: TextStyle(color: scheme.onErrorContainer),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: state.isLoadingCatalogs
-                                ? null
-                                : _notifier.loadCatalogs,
-                            child: const Text('Retry'),
+              ),
+            ),
+          ),
+        if (!canRead)
+          _HintCard(
+            icon: Icons.lock_outline,
+            message:
+                'You need ${!state.canReadCosting ? 'costing.read or costing.create' : partyPermission} permission to view costing.',
+          ),
+        if (canRead) _partyCard(state, selectedCustomer, selectedLead),
+        if (canRead && !canReadParty)
+          _HintCard(
+            icon: Icons.lock_outline,
+            message: 'You need $partyPermission permission to list parties.',
+          )
+        else if (canRead && state.selectedPartyId == null)
+          _HintCard(
+            icon: Icons.person_search_outlined,
+            message:
+                'Select a ${state.useLeadParty ? 'lead' : 'customer'} to view or add costing.',
+          )
+        else if (canRead && state.selectedPartyId != null) ...[
+          if (state.isLoadingSheet)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 30),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (sheet != null) ...[
+            _vendorCard(state, canCreate),
+            if (canCreate)
+              _sectionCard(
+                context,
+                title: 'Add item',
+                child: CostingItemForm(
+                  items: state.items,
+                  canUseCatalog: state.canUseCatalog,
+                  kind: state.canUseCatalog ? _kind : 'custom',
+                  selectedItemId: _selectedItemId,
+                  nameController: _nameController,
+                  priceController: _priceController,
+                  quantityController: _quantityController,
+                  enabled: !state.isMutating,
+                  isSaving: state.isMutating,
+                  lineTotal: lineTotal,
+                  onKindChanged: (kind) => setState(() {
+                    _kind = kind;
+                    _selectedItemId = null;
+                    _nameController.clear();
+                    _priceController.clear();
+                  }),
+                  onItemChanged: (itemId) {
+                    final chosen = state.items
+                        .where((item) => item.id == itemId)
+                        .firstOrNull;
+                    setState(() {
+                      _selectedItemId = itemId;
+                      _priceController.text =
+                          chosen?.sellingPrice.toStringAsFixed(2) ?? '';
+                    });
+                  },
+                  onDraftChanged: (_) => setState(() {}),
+                  onSubmit: () => _submitLine(state),
+                ),
+              )
+            else
+              const _HintCard(
+                icon: Icons.lock_outline,
+                message: 'You have view-only access to costing.',
+              ),
+            _sectionCard(
+              context,
+              title: 'Costing list',
+              trailing: Text('${sheet.items.length} items'),
+              child: sheet.items.isEmpty
+                  ? const _HintCard(
+                      icon: Icons.receipt_long_outlined,
+                      message: 'No items saved for this party yet.',
+                    )
+                  : Column(
+                      children: [
+                        for (
+                          var index = 0;
+                          index < sheet.items.length;
+                          index++
+                        ) ...[
+                          if (index > 0) const Divider(height: 1),
+                          CostingLineTile(
+                            line: sheet.items[index],
+                            index: index,
+                            enabled: canCreate && !state.isMutating,
+                            isRemoving:
+                                _removingLineId == sheet.items[index].id,
+                            onRemove: () => _removeLine(sheet.items[index]),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                  ),
-                if (_showVendors && state.canSelectVendor)
-                  _vendorsList(state)
-                else ...[
-                  if (!canRead)
-                    _HintCard(
-                      icon: Icons.lock_outline,
-                      message:
-                          'You need ${!state.canReadCosting ? 'costing.read or costing.create' : partyPermission} permission to view costing.',
-                    ),
-                  if (canRead)
-                    _partyCard(state, selectedCustomer, selectedLead),
-                  if (canRead && !canReadParty)
-                    _HintCard(
-                      icon: Icons.lock_outline,
-                      message:
-                          'You need $partyPermission permission to list parties.',
-                    )
-                  else if (canRead && state.selectedPartyId == null)
-                    _HintCard(
-                      icon: Icons.person_search_outlined,
-                      message:
-                          'Select a ${state.useLeadParty ? 'lead' : 'customer'} to view or add costing.',
-                    )
-                  else if (canRead && state.selectedPartyId != null) ...[
-                    if (state.isLoadingSheet)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 30),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (sheet != null) ...[
-                      _vendorCard(state, canCreate),
-                      if (canCreate)
-                        _sectionCard(
-                          context,
-                          title: 'Add item',
-                          child: CostingItemForm(
-                            items: state.items,
-                            canUseCatalog: state.canUseCatalog,
-                            kind: state.canUseCatalog ? _kind : 'custom',
-                            selectedItemId: _selectedItemId,
-                            nameController: _nameController,
-                            priceController: _priceController,
-                            quantityController: _quantityController,
-                            enabled: !state.isMutating,
-                            isSaving: state.isMutating,
-                            lineTotal: lineTotal,
-                            onKindChanged: (kind) => setState(() {
-                              _kind = kind;
-                              _selectedItemId = null;
-                              _nameController.clear();
-                              _priceController.clear();
-                            }),
-                            onItemChanged: (itemId) {
-                              final chosen = state.items
-                                  .where((item) => item.id == itemId)
-                                  .firstOrNull;
-                              setState(() {
-                                _selectedItemId = itemId;
-                                _priceController.text =
-                                    chosen?.sellingPrice.toStringAsFixed(2) ??
-                                    '';
-                              });
-                            },
-                            onDraftChanged: (_) => setState(() {}),
-                            onSubmit: () => _submitLine(state),
-                          ),
-                        )
-                      else
-                        const _HintCard(
-                          icon: Icons.lock_outline,
-                          message: 'You have view-only access to costing.',
-                        ),
-                      _sectionCard(
-                        context,
-                        title: 'Costing list',
-                        trailing: Text('${sheet.items.length} items'),
-                        child: sheet.items.isEmpty
-                            ? const _HintCard(
-                                icon: Icons.receipt_long_outlined,
-                                message: 'No items saved for this party yet.',
-                              )
-                            : Column(
-                                children: [
-                                  for (
-                                    var index = 0;
-                                    index < sheet.items.length;
-                                    index++
-                                  ) ...[
-                                    if (index > 0) const Divider(height: 1),
-                                    CostingLineTile(
-                                      line: sheet.items[index],
-                                      index: index,
-                                      enabled: canCreate && !state.isMutating,
-                                      isRemoving:
-                                          _removingLineId ==
-                                          sheet.items[index].id,
-                                      onRemove: () =>
-                                          _removeLine(sheet.items[index]),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                      ),
-                      _sectionCard(
-                        context,
-                        title: 'Total price',
-                        trailing: Text(
-                          formatInr(sheet.totalAmount),
-                          style: TextStyle(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                          ),
-                        ),
-                        child: canCreate && sheet.items.isNotEmpty
-                            ? SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: state.isMutating
-                                      ? null
-                                      : _clearLines,
-                                  icon: _isClearing
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(Icons.delete_sweep_outlined),
-                                  label: Text(
-                                    _isClearing ? 'Clearing…' : 'Clear all',
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: scheme.error,
-                                  ),
+            ),
+            _sectionCard(
+              context,
+              title: 'Total price',
+              trailing: Text(
+                formatInr(sheet.totalAmount),
+                style: TextStyle(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+              child: canCreate && sheet.items.isNotEmpty
+                  ? SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: state.isMutating ? null : _clearLines,
+                        icon: _isClearing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
                               )
-                            : const SizedBox.shrink(),
+                            : const Icon(Icons.delete_sweep_outlined),
+                        label: Text(_isClearing ? 'Clearing…' : 'Clear all'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: scheme.error,
+                        ),
                       ),
-                    ],
-                  ],
-                ],
-              ],
+                    )
+                  : const SizedBox.shrink(),
             ),
+          ],
+        ],
+      ],
     );
   }
 
