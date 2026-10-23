@@ -6,6 +6,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:solar_sales/core/network/api_endpoints.dart';
 import 'package:solar_sales/core/network/api_service.dart';
 
+import 'models/electricity_bill_model.dart';
 import 'models/lead_model.dart';
 
 class LeadApiService {
@@ -13,14 +14,17 @@ class LeadApiService {
   final Dio _dio;
   final String _leadsPath;
   final String Function(String id) _leadPath;
+  final String _parseBillPath;
 
   LeadApiService(
     this._api,
     this._dio, {
     String leadsPath = ApiEndpoints.leads,
     String Function(String id)? leadPath,
+    String parseBillPath = ApiEndpoints.parseElectricityBill,
   })  : _leadsPath = leadsPath,
-        _leadPath = leadPath ?? ApiEndpoints.lead;
+        _leadPath = leadPath ?? ApiEndpoints.lead,
+        _parseBillPath = parseBillPath;
 
   String _fileName(String path) {
     final parts = path.split(RegExp(r'[\\/]'));
@@ -231,6 +235,36 @@ class LeadApiService {
       leadField: 'additional_documents',
       entries: additionalDocumentEntries,
     );
+  }
+
+  /// Reads an electricity bill (photo or PDF, max 5 MB, 60 s timeout).
+  ///
+  /// Multipart with a single `electricity_bill` file. This call is stateless
+  /// and does **not** create a lead — the same file must be sent again on
+  /// create/update. Never send JSON on this route.
+  Future<ElectricityBillParseResult> parseElectricityBill({
+    required String filePath,
+  }) async {
+    final form = FormData.fromMap({
+      'electricity_bill': await _multipartFromPath(filePath),
+    });
+
+    try {
+      final res = await _dio.post(
+        _parseBillPath,
+        data: form,
+        options: Options(
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      return ElectricityBillParseResult.fromJson(res.data);
+    } on DioException catch (e) {
+      throw ElectricityBillParseException(
+        _handleDioError(e),
+        statusCode: e.response?.statusCode,
+      );
+    }
   }
 
   Future<List<LeadModel>> getAllLeads() async {

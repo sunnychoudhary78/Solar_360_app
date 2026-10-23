@@ -18,6 +18,7 @@ final customerLeadApiServiceProvider = Provider<LeadApiService>((ref) {
     ref.watch(dioClientProvider).dio,
     leadsPath: ApiEndpoints.customerLeads,
     leadPath: ApiEndpoints.customerLead,
+    parseBillPath: ApiEndpoints.customerParseElectricityBill,
   );
 });
 

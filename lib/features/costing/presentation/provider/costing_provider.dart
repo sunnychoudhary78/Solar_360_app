@@ -36,6 +36,10 @@ class CostingState {
   final List<CostingLine> lines;
   final bool dirty;
   final String? pendingVendorId;
+
+  /// One-off vendor typed by the user that is NOT in the vendor list.
+  /// Applies to this costing only and is never added to the Vendors tab.
+  final CostingVendor? customVendor;
   final bool isGreenEnergyScreen;
   final bool canBillbook;
   final bool canSolar;
@@ -62,6 +66,7 @@ class CostingState {
     this.lines = const [],
     this.dirty = false,
     this.pendingVendorId,
+    this.customVendor,
     this.isGreenEnergyScreen = false,
     this.canBillbook = false,
     this.canSolar = false,
@@ -96,6 +101,7 @@ class CostingState {
     List<CostingLine>? lines,
     bool? dirty,
     String? pendingVendorId,
+    CostingVendor? customVendor,
     bool? isGreenEnergyScreen,
     bool? canBillbook,
     bool? canSolar,
@@ -114,6 +120,7 @@ class CostingState {
     bool clearParty = false,
     bool clearSheet = false,
     bool clearPendingVendor = false,
+    bool clearCustomVendor = false,
     bool clearCatalogError = false,
   }) {
     return CostingState(
@@ -130,6 +137,9 @@ class CostingState {
       pendingVendorId: clearPendingVendor
           ? null
           : (pendingVendorId ?? this.pendingVendorId),
+      customVendor: clearCustomVendor
+          ? null
+          : (customVendor ?? this.customVendor),
       isGreenEnergyScreen: isGreenEnergyScreen ?? this.isGreenEnergyScreen,
       canBillbook: canBillbook ?? this.canBillbook,
       canSolar: canSolar ?? this.canSolar,
@@ -304,6 +314,7 @@ class CostingNotifier extends Notifier<CostingState> {
         lines: const [],
         dirty: false,
         clearPendingVendor: true,
+        clearCustomVendor: true,
         isLoadingSheet: false,
       );
       return;
@@ -315,6 +326,7 @@ class CostingNotifier extends Notifier<CostingState> {
       lines: const [],
       dirty: false,
       clearPendingVendor: true,
+      clearCustomVendor: true,
       isLoadingSheet: true,
     );
     try {
@@ -361,11 +373,42 @@ class CostingNotifier extends Notifier<CostingState> {
     state = state.copyWith(lines: const [], dirty: true);
   }
 
-  /// Sets the draft vendor (persisted on the next [saveSheet]).
+  /// Sets the draft vendor from the saved vendor list
+  /// (persisted on the next [saveSheet]).
   void setVendor(String? vendorId) {
     state = state.copyWith(
       pendingVendorId: vendorId,
       clearPendingVendor: vendorId == null,
+      clearCustomVendor: true, // a real vendor replaces any custom one
+      dirty: true,
+    );
+  }
+
+  /// One-off vendor for THIS costing only. It is never added to the vendor
+  /// list — only the Vendors tab creates real vendors.
+  void setCustomVendor({
+    required String name,
+    String address = '',
+    String contactNumber = '',
+  }) {
+    state = state.copyWith(
+      clearPendingVendor: true, // not a saved vendor
+      customVendor: CostingVendor(
+        id: '', // empty id = not in vendor list
+        name: name,
+        address: address,
+        contactNumber: contactNumber,
+        isActive: true, // remove if CostingVendor has no such parameter
+      ),
+      dirty: true,
+    );
+  }
+
+  /// Clears both the saved-vendor selection and any custom vendor.
+  void clearVendor() {
+    state = state.copyWith(
+      clearPendingVendor: true,
+      clearCustomVendor: true,
       dirty: true,
     );
   }
@@ -377,8 +420,16 @@ class CostingNotifier extends Notifier<CostingState> {
       throw StateError('Select a customer or lead first');
     }
     if (state.isMutating) return;
+    final custom = state.customVendor;
     final body = <String, dynamic>{
       'vendor_id': state.pendingVendorId,
+      // Free-text vendor, not in the vendor list. Rename keys to match
+      // your backend.
+      if (custom != null) ...{
+        'vendor_name': custom.name,
+        'vendor_address': custom.address,
+        'vendor_contact_number': custom.contactNumber,
+      },
       'items': [for (final line in state.lines) line.toPayload()],
     };
     state = state.copyWith(isMutating: true);
@@ -396,36 +447,6 @@ class CostingNotifier extends Notifier<CostingState> {
     } finally {
       state = state.copyWith(isMutating: false);
     }
-  }
-
-  Future<String> findOrCreateVendor({
-    required String name,
-    String? address,
-    String? contactNumber,
-  }) async {
-    final normalizedName = name.trim();
-    if (normalizedName.isEmpty) {
-      setVendor(null);
-      return '';
-    }
-    final matched = state.vendors.where(
-      (vendor) =>
-          vendor.name.trim().toLowerCase() == normalizedName.toLowerCase(),
-    );
-    final createdVendor = matched.isEmpty
-        ? await _repository.createVendor({
-            'name': normalizedName,
-            if (address?.trim().isNotEmpty == true) 'address': address!.trim(),
-            if (contactNumber?.trim().isNotEmpty == true)
-              'contact_number': contactNumber!.trim(),
-          })
-        : null;
-    final vendorId = matched.isNotEmpty ? matched.first.id : createdVendor!.id;
-    if (createdVendor != null) {
-      state = state.copyWith(vendors: [...state.vendors, createdVendor]);
-    }
-    setVendor(vendorId);
-    return vendorId;
   }
 
   Future<CostingVendor> saveVendor({
@@ -487,6 +508,7 @@ class CostingListState {
   final bool isLoadingMore;
   final bool hasMore;
   final String search;
+
   /// Vendor uuid, or `none` for sheets without a vendor.
   final String? vendorId;
   final DateTime? dateFrom;
@@ -580,20 +602,48 @@ class CostingListNotifier extends Notifier<CostingListState> {
     return canBillbook ? 'customer' : 'lead';
   }
 
-  Future<void> refresh() async {
-    state = state.copyWith(isLoading: true, clearError: true, page: 0);
-    try {
+  /// Selecting a party can make the server create an empty sheet before
+  /// anything is saved. Only costings with at least one saved item belong
+  /// in the Overview.
+  static bool _isSaved(CostingListRow row) => row.itemCount > 0;
+
+  /// Fetches pages starting at [startPage] until a page's worth of visible
+  /// rows is collected (or the server runs out), so hiding empty sheets
+  /// never leaves a short list that can't scroll to trigger [loadMore].
+  Future<({List<CostingListRow> rows, int total, bool hasMore, int page})>
+  _fetchVisible(int startPage) async {
+    final rows = <CostingListRow>[];
+    var next = startPage;
+    var lastPage = startPage - 1;
+    var hasMore = true;
+    var total = 0;
+    var requests = 0;
+    while (hasMore && rows.length < pageSize && requests < 10) {
       final result = await _repo.listCostings(
         party: _party,
         search: state.search,
         vendorId: state.vendorId,
         dateFrom: state.dateFrom,
         dateTo: state.dateTo,
-        page: 1,
+        page: next,
         limit: pageSize,
       );
+      rows.addAll(result.data.where(_isSaved));
+      total = result.total;
+      hasMore = result.hasMore;
+      lastPage = result.page;
+      next = lastPage + 1;
+      requests++;
+    }
+    return (rows: rows, total: total, hasMore: hasMore, page: lastPage);
+  }
+
+  Future<void> refresh() async {
+    state = state.copyWith(isLoading: true, clearError: true, page: 0);
+    try {
+      final result = await _fetchVisible(1);
       state = state.copyWith(
-        items: result.data,
+        items: result.rows,
         total: result.total,
         isLoading: false,
         hasMore: result.hasMore,
@@ -609,17 +659,9 @@ class CostingListNotifier extends Notifier<CostingListState> {
     if (state.isLoadingMore || !state.hasMore || state.isLoading) return;
     state = state.copyWith(isLoadingMore: true);
     try {
-      final result = await _repo.listCostings(
-        party: _party,
-        search: state.search,
-        vendorId: state.vendorId,
-        dateFrom: state.dateFrom,
-        dateTo: state.dateTo,
-        page: state.page + 1,
-        limit: pageSize,
-      );
+      final result = await _fetchVisible(state.page + 1);
       state = state.copyWith(
-        items: [...state.items, ...result.data],
+        items: [...state.items, ...result.rows],
         total: result.total,
         isLoadingMore: false,
         hasMore: result.hasMore,

@@ -212,7 +212,7 @@ class _BomTabState extends ConsumerState<BomTab> {
                         (project) => DropdownMenuItem(
                           value: project.id,
                           child: Text(
-                            '${project.projectName} · ${project.customerName}',
+                            project.projectName,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),

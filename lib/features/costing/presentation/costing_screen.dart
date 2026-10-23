@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/utils/file_download.dart';
 import 'package:solar_sales/features/costing/presentation/widgets/costing_section.dart';
@@ -36,8 +37,6 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   String? _selectedItemId;
   String _vendorKind = 'select';
   bool _isDownloading = false;
-  bool _isSavingVendor = false;
-  Future<void>? _vendorSaveTask;
   bool _isDeletingVendor = false;
   bool _isSaving = false;
   bool _vendorHadFocus = false;
@@ -68,11 +67,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     _vendorHadFocus = hasFocus;
     if (!lostFocus) return;
 
-    if (_vendorNameController.text.trim().isNotEmpty) {
-      _saveTypedVendor();
-    } else {
-      _setVendor(null);
-    }
+    _resolveTypedVendor();
   }
 
   /// Vendor is part of the local draft — persisted on Save costing.
@@ -135,39 +130,78 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     }
   }
 
-  Future<void> _saveTypedVendor() {
-    final activeSave = _vendorSaveTask;
-    if (activeSave != null) return activeSave;
+  /// Resolves the typed vendor name:
+  /// - Matches an existing vendor -> uses that vendor (by id).
+  /// - No match                   -> kept as a one-off custom vendor on THIS
+  ///                                 costing only. It is NEVER added to the
+  ///                                 vendor list (use the Vendors tab for that).
+  /// - Empty                      -> clears the vendor.
+  /// Always returns true so Save / Add item are never blocked by the vendor.
+  ///
+  /// With [validate] = true (Save / Add item), a partly filled vendor is
+  /// rejected: name and a 10-digit contact number are both mandatory.
+  bool _resolveTypedVendor({bool validate = false}) {
+    final state = ref.read(costingProvider(widget.isGreenEnergy));
+    final typingVendor = !state.canSelectVendor || _vendorKind == 'custom';
+    if (!typingVendor) return true; // vendor chosen via dropdown
+
     final name = _vendorNameController.text.trim();
+    final contact = _vendorContactController.text.trim();
     if (name.isEmpty) {
-      _setVendor(null);
-      return Future.value();
+      if (validate && (contact.isNotEmpty ||
+          _vendorAddressController.text.trim().isNotEmpty)) {
+        _showMessage('Vendor name is required', isError: true);
+        return false;
+      }
+      _notifier.clearVendor();
+      return true;
     }
-    final task = _performTypedVendorSave(name);
-    final trackedTask = task.whenComplete(() => _vendorSaveTask = null);
-    _vendorSaveTask = trackedTask;
-    return trackedTask;
+
+    final match = state.vendors
+        .where((v) => v.name.trim().toLowerCase() == name.toLowerCase())
+        .firstOrNull;
+
+    if (match != null) {
+      _setVendor(match.id);
+      _syncVendorControllers(match);
+    } else {
+      if (validate) {
+        if (contact.isEmpty) {
+          _showMessage('Contact number is required', isError: true);
+          return false;
+        }
+        if (contact.length != 10) {
+          _showMessage('Contact number must be exactly 10 digits',
+              isError: true);
+          return false;
+        }
+      }
+      _notifier.setCustomVendor(
+        name: name,
+        address: _vendorAddressController.text.trim(),
+        contactNumber: contact,
+      );
+    }
+    return true;
   }
+
+  /// Shared validator: mandatory, digits only, exactly 10 digits.
+  static String? _validatePhone(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Contact number is required';
+    if (v.length != 10) return 'Enter a valid 10-digit number';
+    return null;
+  }
+
+  static final List<TextInputFormatter> _phoneFormatters = [
+    FilteringTextInputFormatter.digitsOnly,
+    LengthLimitingTextInputFormatter(10),
+  ];
 
   void _syncVendorControllers(CostingVendor? vendor) {
     _vendorNameController.text = vendor?.name ?? '';
     _vendorAddressController.text = vendor?.address ?? '';
     _vendorContactController.text = vendor?.contactNumber ?? '';
-  }
-
-  Future<void> _performTypedVendorSave(String name) async {
-    if (mounted) setState(() => _isSavingVendor = true);
-    try {
-      await _notifier.findOrCreateVendor(
-        name: name,
-        address: _vendorAddressController.text,
-        contactNumber: _vendorContactController.text,
-      );
-    } catch (error) {
-      _showMessage(cleanError(error), isError: true);
-    } finally {
-      if (mounted) setState(() => _isSavingVendor = false);
-    }
   }
 
   /// Adds the typed line to the local draft (no server call until Save).
@@ -196,9 +230,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
       return;
     }
 
-    if (_vendorNameController.text.trim().isNotEmpty) {
-      await _saveTypedVendor();
-    }
+    if (!_resolveTypedVendor(validate: true)) return;
     final chosen = state.items
         .where((item) => item.id == _selectedItemId)
         .firstOrNull;
@@ -227,9 +259,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   }
 
   Future<void> _saveCosting() async {
-    if (_vendorNameController.text.trim().isNotEmpty) {
-      await _saveTypedVendor();
-    }
+    if (!_resolveTypedVendor(validate: true)) return;
     setState(() => _isSaving = true);
     try {
       await _notifier.saveSheet();
@@ -332,16 +362,23 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                   controller: name,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(labelText: 'Name *'),
-                  validator: (value) =>
-                      value == null || value.trim().isEmpty ? 'Required' : null,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Name is required'
+                      : null,
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: contact,
                   decoration: const InputDecoration(
-                    labelText: 'Contact number',
+                    labelText: 'Contact number *',
+                    counterText: '',
                   ),
                   keyboardType: TextInputType.phone,
+                  inputFormatters: _phoneFormatters,
+                  maxLength: 10,
+                  validator: _validatePhone,
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: address,
                   decoration: const InputDecoration(labelText: 'Address'),
@@ -536,7 +573,8 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
               ? state.canBillbook
                     ? 'Priced project sheet — select or type vendors and items'
                     : 'Select a lead — type vendors and items (Billbook is not on this subscription)'
-              : 'Priced project sheet — select a customer, add items, then Save.',
+              : 'Priced project sheet — select a customer, add items, then Save. '
+                    'A typed vendor that is not in the list applies to this costing only.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -833,7 +871,11 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                   ? (selection) => setState(() {
                       _vendorKind = selection.first;
                       if (_vendorKind == 'custom') {
-                        _syncVendorControllers(matchedVendor);
+                        // Fall back to the one-off custom vendor so a typed
+                        // vendor reappears when toggling Select -> Type.
+                        _syncVendorControllers(
+                          matchedVendor ?? state.customVendor,
+                        );
                       }
                     })
                   : null,
@@ -846,27 +888,24 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
               enabled: canCreate,
               readOnly: state.isMutating,
               textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: 'Vendor name',
-                suffixIcon: _isSavingVendor
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : null,
+              decoration: const InputDecoration(
+                labelText: 'Vendor name *',
+                helperText:
+                    'Not in the vendor list? It will apply to this costing only.',
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: _vendorContactController,
               enabled: canCreate,
               readOnly: state.isMutating,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Contact number'),
+              inputFormatters: _phoneFormatters,
+              maxLength: 10,
+              decoration: const InputDecoration(
+                labelText: 'Contact number *',
+                counterText: '',
+              ),
             ),
             const SizedBox(height: 8),
             TextField(

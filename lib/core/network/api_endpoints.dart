@@ -154,6 +154,11 @@ class ApiEndpoints {
 
   // Solar CRM — leads
   static const leads = 'leads';
+  /// AI electricity-bill reader (staff). Multipart, field `electricity_bill`.
+  static const parseElectricityBill = 'leads/parse-electricity-bill';
+  /// AI electricity-bill reader for the customer portal (customer JWT).
+  static const customerParseElectricityBill =
+      'customers/leads/parse-electricity-bill';
   static String lead(String id) => 'leads/$id';
   static String leadAssign(String id) => 'leads/$id/assign';
   static String leadStatus(String id) => 'leads/$id/status';

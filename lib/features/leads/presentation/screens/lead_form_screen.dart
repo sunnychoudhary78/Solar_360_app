@@ -17,11 +17,14 @@ import 'package:solar_sales/features/customer_portal/data/customer_lead_rules.da
 import 'package:solar_sales/features/customer_portal/presentation/providers/customer_portal_providers.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/customers/presentation/providers/customer_providers.dart';
+import 'package:solar_sales/features/leads/data/electricity_bill_autofill.dart';
 import 'package:solar_sales/features/leads/data/india_cities.dart';
 import 'package:solar_sales/features/leads/data/india_states.dart';
 import 'package:solar_sales/features/leads/data/lead_files.dart';
 import 'package:solar_sales/features/leads/data/lead_repository.dart';
+import 'package:solar_sales/features/leads/data/models/electricity_bill_model.dart';
 import 'package:solar_sales/features/leads/data/models/lead_model.dart';
+import 'package:solar_sales/features/leads/data/postal_pincode_lookup.dart';
 import 'package:solar_sales/features/leads/presentation/providers/lead_providers.dart';
 import 'package:solar_sales/shared/utils/validators.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
@@ -167,6 +170,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   final latitude = TextEditingController();
   final longitude = TextEditingController();
 
+  final bankAccountName = TextEditingController();
   final bankName = TextEditingController();
   final accountNumber = TextEditingController();
   final ifscCode = TextEditingController();
@@ -210,6 +214,23 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   bool _isClosing = false;
   bool _mediaSectionReady = false;
   String? _lastPickError;
+
+  /// AI electricity-bill autofill state (parse is stateless, no lead created).
+  bool isParsingBill = false;
+  bool _billAutofillActive = false;
+  String _billParseMessage = '';
+  final List<String> _billWarnings = [];
+  final Set<String> _billFilledKeys = {};
+  final Set<String> _billReviewKeys = {};
+  final Set<String> _billMaskedKeys = {};
+
+  /// Anchors used by the "Still needed" chips to jump to a section.
+  final _basicSectionKey = GlobalKey();
+  final _connectionSectionKey = GlobalKey();
+  final _bankSectionKey = GlobalKey();
+  final _projectSectionKey = GlobalKey();
+  final _siteSectionKey = GlobalKey();
+  final _documentsSectionKey = GlobalKey();
 
   late final List<DropdownMenuItem<String>> _discomMenuItems = discomOptions
       .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
@@ -380,6 +401,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     latitude.text = lead.latitude;
     longitude.text = lead.longitude;
 
+    bankAccountName.text = lead.bankAccountName;
     bankName.text = lead.bankName;
     accountNumber.text = lead.accountNumber;
     ifscCode.text = lead.ifscCode;
@@ -454,6 +476,422 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     return [value, ...options];
   }
 
+  // ---------------------------------------------------------------------------
+  // AI electricity-bill autofill
+  // ---------------------------------------------------------------------------
+
+  /// Current value of a bill key, so a typed value is never overwritten.
+  String? _billCurrentValue(String key) {
+    switch (key) {
+      case 'full_name':
+        return fullName.text;
+      case 'mobile':
+        return mobile.text;
+      case 'email':
+        return email.text;
+      case 'address':
+        return address.text;
+      case 'city':
+        return city.text;
+      case 'state':
+        return state.text;
+      case 'pincode':
+        return pincode.text;
+      case 'load_section_kw':
+        return kw.text;
+      case 'ca_number':
+        return caNumber.text;
+      case 'k_number':
+        return kNumber.text;
+      case 'reference_number':
+        return referenceNumber.text;
+      case 'discom':
+        return discom.text;
+      case 'project_type':
+        return projectType;
+      case 'bank_account_name':
+        return bankAccountName.text;
+      case 'bank_name':
+        return bankName.text;
+      case 'account_number':
+        return accountNumber.text;
+      case 'account_type':
+        return bankAccountType;
+      case 'ifsc_code':
+        return ifscCode.text;
+      case 'available_shadow_free_area':
+        return availableShadowFreeArea.text;
+      case 'quotation_amount':
+        return quotationAmount.text;
+      case 'visited_employee_name':
+        return visitedEmployeeName.text;
+      case 'visited_employee_contact':
+        return visitedEmployeeContact.text;
+      case 'electricity_bill':
+        return predefinedDocPaths['Electricity Bill'];
+      case 'aadhaar_front':
+        return predefinedDocPaths['Aadhaar Front'];
+      case 'aadhaar_back':
+        return predefinedDocPaths['Aadhaar Back'];
+      case 'pan_card':
+        return predefinedDocPaths['PAN Card'];
+      case 'cheque_passbook':
+        return chequePassbookPath;
+      default:
+        return null;
+    }
+  }
+
+  /// Staff: `POST /leads/parse-electricity-bill`. Customer portal:
+  /// `POST /customers/leads/parse-electricity-bill`. Parse never saves.
+  Future<void> _parseElectricityBill(String path) async {
+    final filePath = path.trim();
+    if (filePath.isEmpty || isParsingBill || isLoading) return;
+
+    final rejection = _billFileRejection(filePath);
+    if (rejection != null) {
+      showAppMessage(context, rejection, isError: true);
+      return;
+    }
+
+    setState(() {
+      isParsingBill = true;
+      _billAutofillActive = false;
+    });
+
+    final repo = widget.customerPortal
+        ? ref.read(customerLeadRepositoryProvider)
+        : ref.read(leadRepositoryProvider);
+
+    try {
+      final result = await repo.parseElectricityBill(filePath);
+      if (!mounted || _isClosing) return;
+      await _applyBillAutofill(result);
+    } on ElectricityBillParseException catch (e) {
+      // Parse failure never blocks the form — keep the file, let the user type.
+      if (!mounted) return;
+      setState(() => isParsingBill = false);
+      showAppMessage(
+        context,
+        e.message.isEmpty ? 'Could not read the electricity bill.' : e.message,
+        isError: true,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => isParsingBill = false);
+      showAppMessage(
+        context,
+        'Could not read the electricity bill. Fill the form manually.',
+        isError: true,
+      );
+    }
+  }
+
+  String? _billFileRejection(String path) {
+    int? size;
+    try {
+      final file = File(path);
+      if (file.existsSync()) size = file.lengthSync();
+    } catch (_) {}
+    return billUploadRejection(
+      sizeBytes: size ?? 0,
+      filename: fileDisplayName(path),
+    );
+  }
+
+  /// Applies the parse JSON on device: empty fields only, masked values
+  /// skipped, `confidence < 0.75` flagged for review, and the name copied to
+  /// the account holder when that is still empty.
+  Future<void> _applyBillAutofill(ElectricityBillParseResult result) async {
+    final outcome = planBillAutofill(
+      result: result,
+      typedValue: _billCurrentValue,
+    );
+
+    void setText(TextEditingController controller, String key) {
+      final value = outcome.values[key];
+      if (value != null && value.isNotEmpty) controller.text = value;
+    }
+
+    setText(fullName, 'full_name');
+    setText(mobile, 'mobile');
+    setText(email, 'email');
+    setText(caNumber, 'ca_number');
+    setText(kNumber, 'k_number');
+    setText(referenceNumber, 'reference_number');
+    setText(discom, 'discom');
+    setText(kw, 'load_section_kw');
+    setText(address, 'address');
+    setText(pincode, 'pincode');
+    setText(bankAccountName, 'bank_account_name');
+    setText(state, 'state');
+    setText(city, 'city');
+
+    final nextProjectType = outcome.values['project_type'];
+    final filledCity = outcome.values['city'];
+    final filledState = outcome.values['state'];
+
+    setState(() {
+      if (nextProjectType != null && nextProjectType.isNotEmpty) {
+        projectType = nextProjectType;
+      }
+      _billFilledKeys
+        ..clear()
+        ..addAll(outcome.filledKeys);
+      _billReviewKeys
+        ..clear()
+        ..addAll(outcome.reviewKeys);
+      _billMaskedKeys
+        ..clear()
+        ..addAll({...result.maskedKeys, ...outcome.maskedKeys});
+      _billWarnings
+        ..clear()
+        ..addAll(result.warnings);
+      _billParseMessage = result.message;
+      _billAutofillActive = true;
+      isParsingBill = false;
+    });
+
+    // Jump to Electricity Details so the user can check the read values.
+    _scrollToAnchor(_connectionSectionKey);
+
+    // Optional public pincode lookup — fills state/city only when still empty.
+    if (outcome.filledKeys.contains('pincode') &&
+        RegExp(r'^\d{6}$').hasMatch(pincode.text.trim()) &&
+        (filledState == null || filledCity == null)) {
+      final lookup = await lookupPostalPincode(pincode.text);
+      if (!mounted || lookup == null) return;
+      setState(() {
+        if (state.text.trim().isEmpty && lookup.state.isNotEmpty) {
+          state.text = lookup.state;
+        }
+        if (city.text.trim().isEmpty && lookup.city.isNotEmpty) {
+          city.text = lookup.city;
+        }
+      });
+    }
+  }
+
+  void _resetBillAutofill() {
+    if (!_billAutofillActive && !isParsingBill) return;
+    setState(() {
+      isParsingBill = false;
+      _billAutofillActive = false;
+      _billParseMessage = '';
+      _billWarnings.clear();
+      _billFilledKeys.clear();
+      _billReviewKeys.clear();
+      _billMaskedKeys.clear();
+    });
+  }
+
+  void _scrollToAnchor(GlobalKey key) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = key.currentContext;
+      if (target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+        alignment: 0.05,
+      );
+    });
+  }
+
+  GlobalKey _anchorForBillSection(String section) {
+    switch (section) {
+      case 'electricity':
+        return _connectionSectionKey;
+      case 'bank':
+        return _bankSectionKey;
+      case 'documents':
+        return _documentsSectionKey;
+      case 'site':
+        return _siteSectionKey;
+      case 'source':
+        return _projectSectionKey;
+      default:
+        return _basicSectionKey;
+    }
+  }
+
+  List<String> _billLabelsFor(Set<String> keys) {
+    final labels = <String>[];
+    for (final key in kBillFieldOrder) {
+      if (keys.contains(key)) labels.add(billFieldLabel(key));
+    }
+    for (final key in keys) {
+      if (!kBillFieldOrder.contains(key)) labels.add(billFieldLabel(key));
+    }
+    return labels;
+  }
+
+  Widget? _billTag(String key) {
+    if (!_billAutofillActive) return null;
+    if (_billMaskedKeys.contains(key)) {
+      return _billTagChip('Masked on the bill', const Color(0xFF6D4C41));
+    }
+    if (_billReviewKeys.contains(key)) {
+      return _billTagChip('Review from bill', const Color(0xFFEF6C00));
+    }
+    if (_billFilledKeys.contains(key)) {
+      return _billTagChip('From bill', const Color(0xFF2E7D32));
+    }
+    return null;
+  }
+
+  Widget _billTagChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: .35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _billAutofillBanner() {
+    if (!isParsingBill && !_billAutofillActive) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+
+    if (isParsingBill) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer.withValues(alpha: .5),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Reading electricity bill…',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final stillNeeded = stillNeededBillKeys(
+      fullForm: !_isBasicCreate,
+      typedValue: _billCurrentValue,
+    );
+    final reviewLabels = _billLabelsFor(_billReviewKeys);
+    final maskedLabels = _billLabelsFor(_billMaskedKeys);
+    final filledCount = _billFilledKeys.length;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: scheme.primary.withValues(alpha: .35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 18, color: scheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _billParseMessage.isNotEmpty
+                      ? _billParseMessage
+                      : '$filledCount fields read from the bill',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Hide summary',
+                onPressed: _resetBillAutofill,
+                icon: const Icon(Icons.close, size: 18),
+              ),
+            ],
+          ),
+          if (_billWarnings.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            for (final warning in _billWarnings)
+              Text(
+                '• $warning',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _billTagChip('From bill: $filledCount', const Color(0xFF2E7D32)),
+              if (reviewLabels.isNotEmpty)
+                _billTagChip(
+                  'Review from bill: ${reviewLabels.join(', ')}',
+                  const Color(0xFFEF6C00),
+                ),
+              if (maskedLabels.isNotEmpty)
+                _billTagChip(
+                  'Masked on the bill: ${maskedLabels.join(', ')}',
+                  const Color(0xFF6D4C41),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Still needed',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: scheme.onSurface,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (stillNeeded.isEmpty)
+            Text(
+              'All required fields are filled. Review and save.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final key in stillNeeded)
+                  ActionChip(
+                    label: Text(billFieldLabel(key)),
+                    onPressed: () => _scrollToAnchor(
+                      _anchorForBillSection(billFieldSection(key)),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     fullName.dispose();
@@ -474,6 +912,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     latitude.dispose();
     longitude.dispose();
 
+    bankAccountName.dispose();
     bankName.dispose();
     accountNumber.dispose();
     ifscCode.dispose();
@@ -1012,7 +1451,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       'geo_location': _textOrNull(geoLocation),
       'latitude': _textOrNull(latitude),
       'longitude': _textOrNull(longitude),
-      'bank_account_name': bankAccountType,
+      'bank_account_name': _textOrNull(bankAccountName) ?? _textOrNull(fullName),
       'account_type': bankAccountType,
       'bank_name': _textOrNull(bankName),
       'account_number': _textOrNull(accountNumber),
@@ -1219,6 +1658,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     ValueChanged<String>? onFieldSubmitted,
     FocusNode? focusNode,
     bool isRequired = false,
+    Widget? tag,
   }) {
     final scheme = Theme.of(context).colorScheme;
     final resolvedKeyboardType =
@@ -1229,8 +1669,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         ? (String? value) => _requiredThen(value, label, validator)
         : validator;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md - 2),
+    final field = Padding(
+      padding: EdgeInsets.only(bottom: tag == null ? AppSpacing.md - 2 : 4),
       child: TextFormField(
         controller: controller,
         focusNode: focusNode,
@@ -1258,6 +1698,22 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         ),
       ),
     );
+
+    if (tag == null) return field;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        field,
+        Padding(
+          padding: const EdgeInsets.only(
+            left: 4,
+            bottom: AppSpacing.md - 2,
+          ),
+          child: Align(alignment: Alignment.centerLeft, child: tag),
+        ),
+      ],
+    );
   }
 
   Widget controllerDropdown({
@@ -1267,6 +1723,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required String hintText,
     List<DropdownMenuItem<String>>? menuItems,
     bool isRequired = false,
+    Widget? tag,
   }) {
     final textValue = controller.text.trim();
     final resolvedItems = _menuItemsWithCurrent(items, textValue);
@@ -1300,8 +1757,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 )
                 .toList(growable: false);
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md - 2),
+    final field = Padding(
+      padding: EdgeInsets.only(bottom: tag == null ? AppSpacing.md - 2 : 4),
       child: DropdownButtonFormField<String>(
         value: currentValue,
         isExpanded: true,
@@ -1326,6 +1783,22 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 controller.text = value;
               },
       ),
+    );
+
+    if (tag == null) return field;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        field,
+        Padding(
+          padding: const EdgeInsets.only(
+            left: 4,
+            bottom: AppSpacing.md - 2,
+          ),
+          child: Align(alignment: Alignment.centerLeft, child: tag),
+        ),
+      ],
     );
   }
 
@@ -1362,10 +1835,11 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
   }
 
-  Widget sectionTitle(String title) {
+  Widget sectionTitle(String title, {GlobalKey? anchor}) {
     final scheme = Theme.of(context).colorScheme;
 
     return Padding(
+      key: anchor,
       padding: const EdgeInsets.only(
         top: AppSpacing.md + 4,
         bottom: AppSpacing.md - 4,
@@ -1954,6 +2428,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     required String title,
     required List<_PredefinedLeadFile> items,
     required Map<String, String?> values,
+    void Function(String itemTitle, String? path)? onFileChanged,
   }) {
     final scheme = Theme.of(context).colorScheme;
 
@@ -2022,7 +2497,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: isLoading
+                          onPressed: isLoading || isParsingBill
                               ? null
                               : () async {
                                   final picked = await _pickSingleFile(
@@ -2030,6 +2505,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                                   );
                                   if (picked == null || !mounted) return;
                                   setState(() => values[item.title] = picked);
+                                  onFileChanged?.call(item.title, picked);
                                 },
                           icon: Icon(
                             item.imageOnly
@@ -2044,10 +2520,12 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                         const SizedBox(width: 8),
                         IconButton(
                           tooltip: 'Remove file',
-                          onPressed: isLoading
+                          onPressed: isLoading || isParsingBill
                               ? null
-                              : () =>
-                                  setState(() => values[item.title] = null),
+                              : () {
+                                  setState(() => values[item.title] = null);
+                                  onFileChanged?.call(item.title, null);
+                                },
                           icon: const Icon(Icons.close),
                         ),
                       ],
@@ -2441,6 +2919,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           padding: const EdgeInsets.all(18),
           child: formCard(
             children: [
+              _billAutofillBanner(),
               if (!widget.customerPortal && _isBasicCreate) ...[
                 sectionTitle('Customer'),
                 _linkedCustomerSection(
@@ -2448,7 +2927,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   allowAddCustomer: canCreateCustomer,
                 ),
               ],
-              sectionTitle('Basic Details'),
+              sectionTitle('Basic Details', anchor: _basicSectionKey),
               if (!widget.customerPortal && !_isBasicCreate)
                 _linkedCustomerSection(
                   customerOptions: customerOptions,
@@ -2465,6 +2944,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       textCapitalization: TextCapitalization.words,
                       autofillHints: const [AutofillHints.name],
                       textInputAction: TextInputAction.next,
+                      tag: _billTag('full_name'),
                     ),
                     input(
                       'Mobile Number',
@@ -2478,6 +2958,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       ],
                       autofillHints: const [AutofillHints.telephoneNumber],
                       textInputAction: TextInputAction.next,
+                      tag: _billTag('mobile'),
                     ),
                     input(
                       'Email Address',
@@ -2486,6 +2967,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       validator: _validateEmail,
                       autofillHints: const [AutofillHints.email],
                       textInputAction: TextInputAction.next,
+                      tag: _billTag('email'),
                     ),
                     input(
                       'Address',
@@ -2493,6 +2975,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                       isRequired: _isCompleteDetails,
                       autofillHints: const [AutofillHints.streetAddressLine1],
                       textInputAction: TextInputAction.next,
+                      tag: _billTag('address'),
                     ),
                   ],
                 ),
@@ -2509,6 +2992,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 pincode,
                 isRequired: _isCompleteDetails,
                 keyboardType: TextInputType.number,
+                tag: _billTag('pincode'),
               ),
               input(
                 'Load Section (kW)',
@@ -2517,21 +3001,25 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
+                tag: _billTag('load_section_kw'),
               ),
               if (!_isBasicCreate) ...[
-                sectionTitle('Connection Details'),
+                sectionTitle('Connection Details', anchor: _connectionSectionKey),
                 input(
                   'CA Number',
                   caNumber,
                   isRequired: true,
+                  tag: _billTag('ca_number'),
                 ),
                 input(
                   'K Number',
                   kNumber,
+                  tag: _billTag('k_number'),
                 ),
                 input(
                   'Reference Number',
                   referenceNumber,
+                  tag: _billTag('reference_number'),
                 ),
                 controllerDropdown(
                   label: 'DISCOM',
@@ -2540,6 +3028,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   menuItems: _discomMenuItems,
                   hintText: 'Select DISCOM',
                   isRequired: true,
+                  tag: _billTag('discom'),
                 ),
                 sectionTitle('Location'),
                 locationStatusBox(),
@@ -2580,7 +3069,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     label: const Text('Use Current Location'),
                   ),
                 ),
-                sectionTitle('Bank Details'),
+                sectionTitle('Bank Details', anchor: _bankSectionKey),
+                input(
+                  'Account Holder Name',
+                  bankAccountName,
+                  isRequired: true,
+                  textCapitalization: TextCapitalization.words,
+                  tag: _billTag('bank_account_name'),
+                ),
                 dropdown(
                   label: 'Bank Account Type',
                   value: bankAccountType,
@@ -2604,7 +3100,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   isRequired: true,
                   textCapitalization: TextCapitalization.characters,
                 ),
-                sectionTitle('Project Details'),
+                sectionTitle('Project Details', anchor: _projectSectionKey),
                 dropdown(
                   label: 'Project Type',
                   value: projectType,
@@ -2632,7 +3128,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                     priority = value;
                   },
                 ),
-                sectionTitle('Site Checklist'),
+                sectionTitle('Site Checklist', anchor: _siteSectionKey),
                 input(
                   'Available Shadow Free Area',
                   availableShadowFreeArea,
@@ -2683,7 +3179,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ),
                 sectionTitle('Notes'),
                 input('Notes', notes, maxLines: 4),
-                sectionTitle('Images & Documents'),
+                sectionTitle('Images & Documents', anchor: _documentsSectionKey),
                 if (!_mediaSectionReady)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
@@ -2723,6 +3219,23 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                           title: 'KYC & Agreement Documents',
                           items: predefinedDocumentSlots,
                           values: predefinedDocPaths,
+                          onFileChanged: (itemTitle, path) {
+                            if (itemTitle != 'Electricity Bill') return;
+                            if (path == null) {
+                              _resetBillAutofill();
+                              return;
+                            }
+                            // 5 MB / jpg-pdf check before the parse upload.
+                            final rejection = _billFileRejection(path);
+                            if (rejection != null) {
+                              setState(
+                                () => predefinedDocPaths[itemTitle] = null,
+                              );
+                              showAppMessage(context, rejection, isError: true);
+                              return;
+                            }
+                            _parseElectricityBill(path);
+                          },
                         ),
                         _predefinedFilesSection(
                           title: 'Predefined Images',
@@ -2779,8 +3292,9 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 width: double.infinity,
                 height: 60,
                 child: FilledButton(
-                  onPressed: isLoading ? null : saveLead,
-                  child: isLoading
+                  // Disabled while saving or while the bill parse is in flight.
+                  onPressed: isLoading || isParsingBill ? null : saveLead,
+                  child: isLoading || isParsingBill
                       ? SizedBox(
                           height: 26,
                           width: 26,
