@@ -106,6 +106,8 @@ class AppDrawer extends ConsumerWidget {
       );
 
       for (final dest in items) {
+        if (dest.id == 'bb_payments') continue;
+
         navChildren.add(
           AppDrawerTile(
             index: animIndex++,

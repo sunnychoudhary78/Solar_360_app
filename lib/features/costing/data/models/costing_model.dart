@@ -134,6 +134,45 @@ class CostingLine {
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
     );
   }
+
+  /// Unsaved line held in the local draft until **Save costing**.
+  factory CostingLine.draft({
+    required String name,
+    required String kind,
+    required double unitPrice,
+    required double quantity,
+    String? itemId,
+    String? unit,
+  }) {
+    return CostingLine(
+      id: '',
+      name: name,
+      kind: kind,
+      unitPrice: unitPrice,
+      quantity: quantity,
+      amount: unitPrice * quantity,
+      itemId: itemId,
+      unit: unit,
+    );
+  }
+
+  /// Payload for `POST /costings/customer/:id/save` and `/lead/:id/save`.
+  Map<String, dynamic> toPayload() {
+    if (kind == 'catalog' && itemId != null && itemId!.isNotEmpty) {
+      return {
+        'kind': 'catalog',
+        'item_id': itemId,
+        'unit_price': unitPrice,
+        'quantity': quantity,
+      };
+    }
+    return {
+      'kind': 'custom',
+      'name': name,
+      'unit_price': unitPrice,
+      'quantity': quantity,
+    };
+  }
 }
 
 class CostingSheet {
@@ -197,6 +236,198 @@ class CostingSheet {
                 )
                 .toList()
           : const [],
+    );
+  }
+}
+
+/// One material line of a BOM sheet (`GET /boms/:id`). BOM lines carry no price.
+class BomLine {
+  final String id;
+  final String? itemId;
+  final String name;
+  final String kind;
+  final String? unit;
+  final double quantity;
+  final String? spec;
+  final String? sku;
+  final String? hsnCode;
+  final String? category;
+
+  const BomLine({
+    required this.id,
+    required this.name,
+    this.kind = 'custom',
+    this.quantity = 0,
+    this.itemId,
+    this.unit,
+    this.spec,
+    this.sku,
+    this.hsnCode,
+    this.category,
+  });
+
+  factory BomLine.fromJson(Map<String, dynamic> json) {
+    final item = json['item'];
+    final itemMap = item is Map ? Map<String, dynamic>.from(item) : null;
+    return BomLine(
+      id: asString(json['id']),
+      itemId: json['item_id']?.toString(),
+      name: asString(json['name'], itemMap == null ? '' : asString(itemMap['name'])),
+      kind: asString(json['kind'], 'custom'),
+      unit: json['unit']?.toString() ?? itemMap?['unit']?.toString(),
+      quantity: asDouble(json['quantity']),
+      spec: json['spec']?.toString(),
+      sku: itemMap?['sku']?.toString(),
+      hsnCode: itemMap?['hsn_code']?.toString(),
+      category: itemMap?['category']?.toString(),
+    );
+  }
+
+  factory BomLine.draft({
+    required String name,
+    required String kind,
+    required double quantity,
+    String? itemId,
+    String? unit,
+    String? spec,
+  }) {
+    return BomLine(
+      id: '',
+      name: name,
+      kind: kind,
+      quantity: quantity,
+      itemId: itemId,
+      unit: unit,
+      spec: spec,
+    );
+  }
+
+  /// Payload for `POST /boms` and `POST /boms/:id/save`.
+  Map<String, dynamic> toPayload() {
+    if (kind == 'catalog' && itemId != null && itemId!.isNotEmpty) {
+      return {
+        'kind': 'catalog',
+        'item_id': itemId,
+        'quantity': quantity,
+        if (spec != null && spec!.trim().isNotEmpty) 'spec': spec!.trim(),
+      };
+    }
+    return {
+      'kind': 'custom',
+      'name': name,
+      'quantity': quantity,
+      if (unit != null && unit!.trim().isNotEmpty) 'unit': unit!.trim(),
+      if (spec != null && spec!.trim().isNotEmpty) 'spec': spec!.trim(),
+    };
+  }
+}
+
+/// Full BOM sheet (`GET /boms/:id`, create / save responses).
+class Bom {
+  final String id;
+  final String? customerId;
+  final String projectName;
+  final String? notes;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final CostingCustomer? customer;
+  final String creatorName;
+  final String? creatorEmail;
+  final String updaterName;
+  final List<BomLine> items;
+
+  const Bom({
+    required this.id,
+    required this.projectName,
+    this.customerId,
+    this.notes,
+    this.createdAt,
+    this.updatedAt,
+    this.customer,
+    this.creatorName = '',
+    this.creatorEmail,
+    this.updaterName = '',
+    this.items = const [],
+  });
+
+  factory Bom.fromJson(dynamic json) {
+    if (json is! Map) {
+      throw const FormatException('Invalid BOM response');
+    }
+    final source = Map<String, dynamic>.from(json);
+    final data = source['data'];
+    final map = data is Map ? Map<String, dynamic>.from(data) : source;
+    final customer = map['customer'];
+    final creator = map['creator'];
+    final updater = map['updater'];
+    final items = map['items'];
+    return Bom(
+      id: asString(map['id']),
+      customerId: map['customer_id']?.toString(),
+      projectName: asString(map['project_name'], asString(map['projectName'])),
+      notes: map['notes']?.toString(),
+      createdAt: parseDate(map['created_at']),
+      updatedAt: parseDate(map['updated_at']),
+      customer: customer is Map
+          ? CostingCustomer.fromJson(Map<String, dynamic>.from(customer))
+          : null,
+      creatorName: creator is Map ? asString(creator['name']) : '',
+      creatorEmail: creator is Map ? creator['email']?.toString() : null,
+      updaterName: updater is Map ? asString(updater['name']) : '',
+      items: items is List
+          ? items
+                .whereType<Map>()
+                .map((item) => BomLine.fromJson(Map<String, dynamic>.from(item)))
+                .toList()
+          : const [],
+    );
+  }
+}
+
+/// One row of the BOM project table (`GET /boms`). Rows never include `items`.
+class BomListRow {
+  final String id;
+  final String? customerId;
+  final String projectName;
+  final int itemCount;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final CostingCustomer? customer;
+  final String creatorName;
+  final String? creatorEmail;
+
+  const BomListRow({
+    required this.id,
+    required this.projectName,
+    this.customerId,
+    this.itemCount = 0,
+    this.createdAt,
+    this.updatedAt,
+    this.customer,
+    this.creatorName = '',
+    this.creatorEmail,
+  });
+
+  String get customerName {
+    final name = (customer?.name ?? '').trim();
+    return name.isEmpty ? 'Unknown customer' : name;
+  }
+
+  factory BomListRow.fromJson(Map<String, dynamic> json) {
+    final customer = json['customer'];
+    final creator = json['creator'];
+    return BomListRow(
+      id: asString(json['id']),
+      customerId: json['customer_id']?.toString(),
+      projectName: asString(json['project_name'], asString(json['projectName'])),
+      itemCount: asInt(json['item_count']),
+      createdAt: parseDate(json['created_at']),
+      updatedAt: parseDate(json['updated_at']),
+      customer: customer is Map
+          ? CostingCustomer.fromJson(Map<String, dynamic>.from(customer))
+          : null,
+      creatorName: creator is Map ? asString(creator['name']) : '',
+      creatorEmail: creator is Map ? creator['email']?.toString() : null,
     );
   }
 }

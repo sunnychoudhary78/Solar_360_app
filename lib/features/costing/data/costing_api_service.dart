@@ -95,6 +95,29 @@ class CostingApiService {
     return CostingSheet.fromJson(response);
   }
 
+  /// Replaces the whole sheet in one transaction (preferred over per-line calls).
+  Future<CostingSheet> saveCustomerSheet(
+    String customerId,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      ApiEndpoints.customerCostingSave(customerId),
+      body,
+    );
+    return CostingSheet.fromJson(response);
+  }
+
+  Future<CostingSheet> saveLeadSheet(
+    String leadId,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      ApiEndpoints.leadCostingSave(leadId),
+      body,
+    );
+    return CostingSheet.fromJson(response);
+  }
+
   Future<Uint8List> downloadPdf(String costingId) {
     return _api.getBytes(
       ApiEndpoints.costingPdf(costingId),
@@ -152,6 +175,98 @@ class CostingApiService {
         .whereType<Map>()
         .map((lead) => CostingLead.fromJson(Map<String, dynamic>.from(lead)))
         .toList();
+  }
+
+  // ---------------------------------------------------------------- BOM ----
+
+  /// BOM project list (`GET /boms`).
+  Future<PaginatedResult<BomListRow>> listBoms({
+    String? search,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final response = await _api.get(
+      ApiEndpoints.boms,
+      queryParams: {
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        if (dateFrom != null) 'dateFrom': _dateParam(dateFrom),
+        if (dateTo != null) 'dateTo': _dateParam(dateTo),
+        'page': page,
+        'limit': limit,
+      },
+    );
+    return PaginatedResult.fromJson(response, BomListRow.fromJson);
+  }
+
+  Future<Bom> getBom(String bomId) async {
+    final response = await _api.get(ApiEndpoints.bom(bomId));
+    return Bom.fromJson(response);
+  }
+
+  /// A customer's projects (`GET /boms/customer/:customerId`) — a list.
+  Future<List<BomListRow>> listBomsForCustomer(String customerId) async {
+    final response = await _api.get(ApiEndpoints.bomsByCustomer(customerId));
+    final data = response is List
+        ? response
+        : response is Map
+        ? response['data']
+        : null;
+    if (data is! List) {
+      throw const FormatException('Invalid BOM list response');
+    }
+    return data
+        .whereType<Map>()
+        .map((row) => BomListRow.fromJson(Map<String, dynamic>.from(row)))
+        .toList();
+  }
+
+  Future<Bom> createBom(Map<String, dynamic> body) async {
+    final response = await _api.post(ApiEndpoints.boms, body);
+    return Bom.fromJson(response);
+  }
+
+  /// Replaces all materials of an existing project (`POST /boms/:id/save`).
+  Future<Bom> saveBom(String bomId, Map<String, dynamic> body) async {
+    final response = await _api.post(ApiEndpoints.bomSave(bomId), body);
+    return Bom.fromJson(response);
+  }
+
+  Future<Bom> saveBomForCustomer(
+    String customerId,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _api.post(
+      ApiEndpoints.customerBomSave(customerId),
+      body,
+    );
+    return Bom.fromJson(response);
+  }
+
+  Future<Bom> addBomLine(String customerId, Map<String, dynamic> body) async {
+    final response = await _api.post(
+      ApiEndpoints.customerBomLines(customerId),
+      body,
+    );
+    return Bom.fromJson(response);
+  }
+
+  Future<Bom> removeBomLine(String bomId, String lineId) async {
+    final response = await _api.delete(ApiEndpoints.bomLine(bomId, lineId));
+    return Bom.fromJson(response);
+  }
+
+  Future<Bom> clearBom(String bomId) async {
+    final response = await _api.postWithoutBody(ApiEndpoints.bomClear(bomId));
+    return Bom.fromJson(response);
+  }
+
+  Future<Uint8List> downloadBomPdf(String bomId) {
+    return _api.getBytes(
+      ApiEndpoints.bomPdf(bomId),
+      headers: {'Accept': 'application/pdf'},
+    );
   }
 
   /// `YYYY-MM-DD` for the `dateFrom` / `dateTo` list filters.

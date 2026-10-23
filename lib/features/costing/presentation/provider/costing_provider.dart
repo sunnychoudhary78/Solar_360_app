@@ -31,15 +31,22 @@ class CostingState {
   final List<CostingVendor> vendors;
   final String? selectedPartyId;
   final CostingSheet? sheet;
+
+  /// Local draft lines — only pushed to the server on **Save costing**.
+  final List<CostingLine> lines;
+  final bool dirty;
   final String? pendingVendorId;
   final bool isGreenEnergyScreen;
   final bool canBillbook;
   final bool canSolar;
   final bool canReadCosting;
   final bool canCreateCosting;
+  final bool canReadBom;
+  final bool canCreateBom;
   final bool canUseCatalog;
   final bool canSelectVendor;
   final bool useLeadParty;
+  final bool showBom;
   final bool isLoadingCatalogs;
   final bool isLoadingSheet;
   final bool isMutating;
@@ -52,20 +59,32 @@ class CostingState {
     this.vendors = const [],
     this.selectedPartyId,
     this.sheet,
+    this.lines = const [],
+    this.dirty = false,
     this.pendingVendorId,
     this.isGreenEnergyScreen = false,
     this.canBillbook = false,
     this.canSolar = false,
     this.canReadCosting = false,
     this.canCreateCosting = false,
+    this.canReadBom = false,
+    this.canCreateBom = false,
     this.canUseCatalog = false,
     this.canSelectVendor = false,
     this.useLeadParty = false,
+    this.showBom = false,
     this.isLoadingCatalogs = true,
     this.isLoadingSheet = false,
     this.isMutating = false,
     this.catalogError,
   });
+
+  /// Draft vendor selection (falls back to the saved sheet's vendor).
+  String? get vendorId => pendingVendorId ?? sheet?.vendorId;
+
+  /// Sum of the local draft lines; the server total is authoritative after save.
+  double get draftTotal =>
+      lines.fold(0, (sum, line) => sum + line.unitPrice * line.quantity);
 
   CostingState copyWith({
     List<CustomerModel>? customers,
@@ -74,15 +93,20 @@ class CostingState {
     List<CostingVendor>? vendors,
     String? selectedPartyId,
     CostingSheet? sheet,
+    List<CostingLine>? lines,
+    bool? dirty,
     String? pendingVendorId,
     bool? isGreenEnergyScreen,
     bool? canBillbook,
     bool? canSolar,
     bool? canReadCosting,
     bool? canCreateCosting,
+    bool? canReadBom,
+    bool? canCreateBom,
     bool? canUseCatalog,
     bool? canSelectVendor,
     bool? useLeadParty,
+    bool? showBom,
     bool? isLoadingCatalogs,
     bool? isLoadingSheet,
     bool? isMutating,
@@ -101,6 +125,8 @@ class CostingState {
           ? null
           : (selectedPartyId ?? this.selectedPartyId),
       sheet: clearSheet ? null : (sheet ?? this.sheet),
+      lines: lines ?? this.lines,
+      dirty: dirty ?? this.dirty,
       pendingVendorId: clearPendingVendor
           ? null
           : (pendingVendorId ?? this.pendingVendorId),
@@ -109,9 +135,12 @@ class CostingState {
       canSolar: canSolar ?? this.canSolar,
       canReadCosting: canReadCosting ?? this.canReadCosting,
       canCreateCosting: canCreateCosting ?? this.canCreateCosting,
+      canReadBom: canReadBom ?? this.canReadBom,
+      canCreateBom: canCreateBom ?? this.canCreateBom,
       canUseCatalog: canUseCatalog ?? this.canUseCatalog,
       canSelectVendor: canSelectVendor ?? this.canSelectVendor,
       useLeadParty: useLeadParty ?? this.useLeadParty,
+      showBom: showBom ?? this.showBom,
       isLoadingCatalogs: isLoadingCatalogs ?? this.isLoadingCatalogs,
       isLoadingSheet: isLoadingSheet ?? this.isLoadingSheet,
       isMutating: isMutating ?? this.isMutating,
@@ -150,9 +179,14 @@ class CostingNotifier extends Notifier<CostingState> {
         auth.hasPermission('costing.read') ||
         auth.hasPermission('costing.create');
     final canCreateCosting = auth.hasPermission('costing.create');
+    final canReadBom =
+        auth.hasPermission('bom.read') || auth.hasPermission('bom.create');
+    final canCreateBom = auth.hasPermission('bom.create');
     final useLeadParty = isGreenEnergyScreen && !canBillbook;
     final canUseCatalog = canBillbook && auth.hasPermission('item.read');
     final canSelectVendor = canBillbook;
+    // BOM lives on the Billbook Costing & BOM screen only.
+    final showBom = !isGreenEnergyScreen && canBillbook && canReadBom;
 
     final initial = CostingState(
       isGreenEnergyScreen: isGreenEnergyScreen,
@@ -160,9 +194,12 @@ class CostingNotifier extends Notifier<CostingState> {
       canSolar: canSolar,
       canReadCosting: canReadCosting,
       canCreateCosting: canCreateCosting,
+      canReadBom: canReadBom,
+      canCreateBom: canCreateBom,
       canUseCatalog: canUseCatalog,
       canSelectVendor: canSelectVendor,
       useLeadParty: useLeadParty,
+      showBom: showBom,
       isLoadingCatalogs: canReadCosting,
     );
     if (canReadCosting) Future.microtask(loadCatalogs);
@@ -264,6 +301,8 @@ class CostingNotifier extends Notifier<CostingState> {
       state = state.copyWith(
         clearParty: true,
         clearSheet: true,
+        lines: const [],
+        dirty: false,
         clearPendingVendor: true,
         isLoadingSheet: false,
       );
@@ -273,6 +312,8 @@ class CostingNotifier extends Notifier<CostingState> {
     state = state.copyWith(
       selectedPartyId: partyId,
       clearSheet: true,
+      lines: const [],
+      dirty: false,
       clearPendingVendor: true,
       isLoadingSheet: true,
     );
@@ -281,88 +322,80 @@ class CostingNotifier extends Notifier<CostingState> {
           ? await _repository.getForLead(partyId)
           : await _repository.getForCustomer(partyId);
       if (version == _selectionVersion) {
-        state = state.copyWith(sheet: sheet, isLoadingSheet: false);
+        state = state.copyWith(
+          sheet: sheet,
+          lines: [...sheet.items],
+          dirty: false,
+          pendingVendorId: sheet.vendorId,
+          clearPendingVendor: sheet.vendorId == null,
+          isLoadingSheet: false,
+        );
       }
     } catch (_) {
       if (version == _selectionVersion) {
-        state = state.copyWith(clearSheet: true, isLoadingSheet: false);
+        state = state.copyWith(
+          clearSheet: true,
+          lines: const [],
+          dirty: false,
+          isLoadingSheet: false,
+        );
       }
       rethrow;
     }
   }
 
-  Future<void> addCatalogLine({
-    required String itemId,
-    required double unitPrice,
-    required double quantity,
-  }) async {
-    await _addLine({
-      'kind': 'catalog',
-      'item_id': itemId,
-      'unit_price': unitPrice,
-      'quantity': quantity,
-    });
+  /// Adds a priced line to the local draft. Nothing is persisted until
+  /// [saveSheet] runs.
+  void addDraftLine(CostingLine line) {
+    state = state.copyWith(lines: [...state.lines, line], dirty: true);
   }
 
-  Future<void> addCustomLine({
-    required String name,
-    required double unitPrice,
-    required double quantity,
-  }) async {
-    await _addLine({
-      'kind': 'custom',
-      'name': name,
-      'unit_price': unitPrice,
-      'quantity': quantity,
-    });
+  void removeDraftLineAt(int index) {
+    if (index < 0 || index >= state.lines.length) return;
+    final next = [...state.lines]..removeAt(index);
+    state = state.copyWith(lines: next, dirty: true);
   }
 
-  Future<void> _addLine(Map<String, dynamic> body) async {
+  void clearDraftLines() {
+    if (state.lines.isEmpty) return;
+    state = state.copyWith(lines: const [], dirty: true);
+  }
+
+  /// Sets the draft vendor (persisted on the next [saveSheet]).
+  void setVendor(String? vendorId) {
+    state = state.copyWith(
+      pendingVendorId: vendorId,
+      clearPendingVendor: vendorId == null,
+      dirty: true,
+    );
+  }
+
+  /// Saves the whole sheet in one transaction (`POST .../save`).
+  Future<void> saveSheet() async {
     final partyId = state.selectedPartyId;
     if (partyId == null || partyId.isEmpty) {
       throw StateError('Select a customer or lead first');
     }
-    await _mutate(partyId, () async {
-      final updated = state.useLeadParty
-          ? await _repository.addLeadLine(partyId, body)
-          : await _repository.addLine(partyId, body);
-      final pendingVendorId = state.pendingVendorId;
-      if (pendingVendorId == null || pendingVendorId.isEmpty) return updated;
-      return _repository.setVendor(updated.id, pendingVendorId);
-    }, clearPendingVendor: true);
-  }
-
-  Future<void> removeLine(String lineId) async {
-    final sheet = state.sheet;
-    final partyId = state.selectedPartyId;
-    if (sheet == null || partyId == null) return;
-    await _mutate(partyId, () => _repository.removeLine(sheet.id, lineId));
-  }
-
-  Future<void> clearLines() async {
-    final sheet = state.sheet;
-    final partyId = state.selectedPartyId;
-    if (sheet == null || partyId == null) return;
-    await _mutate(partyId, () => _repository.clear(sheet.id));
-  }
-
-  Future<void> setVendor(String? vendorId) async {
-    final sheet = state.sheet;
-    if (sheet == null) {
+    if (state.isMutating) return;
+    final body = <String, dynamic>{
+      'vendor_id': state.pendingVendorId,
+      'items': [for (final line in state.lines) line.toPayload()],
+    };
+    state = state.copyWith(isMutating: true);
+    try {
+      final saved = state.useLeadParty
+          ? await _repository.saveLeadSheet(partyId, body)
+          : await _repository.saveCustomerSheet(partyId, body);
       state = state.copyWith(
-        pendingVendorId: vendorId,
-        clearPendingVendor: vendorId == null,
+        sheet: saved,
+        lines: [...saved.items],
+        dirty: false,
+        pendingVendorId: saved.vendorId,
+        clearPendingVendor: saved.vendorId == null,
       );
-      return;
+    } finally {
+      state = state.copyWith(isMutating: false);
     }
-    final partyId = state.selectedPartyId;
-    if (partyId == null) return;
-    await _mutate(
-      partyId,
-      () => _repository.setVendor(sheet.id, vendorId),
-      pendingVendorId: vendorId,
-      clearPendingVendor: vendorId == null,
-    );
   }
 
   Future<String> findOrCreateVendor({
@@ -372,7 +405,7 @@ class CostingNotifier extends Notifier<CostingState> {
   }) async {
     final normalizedName = name.trim();
     if (normalizedName.isEmpty) {
-      await setVendor(null);
+      setVendor(null);
       return '';
     }
     final matched = state.vendors.where(
@@ -391,7 +424,7 @@ class CostingNotifier extends Notifier<CostingState> {
     if (createdVendor != null) {
       state = state.copyWith(vendors: [...state.vendors, createdVendor]);
     }
-    await setVendor(vendorId);
+    setVendor(vendorId);
     return vendorId;
   }
 
@@ -425,40 +458,20 @@ class CostingNotifier extends Notifier<CostingState> {
     );
     if (state.sheet?.vendorId == vendorId ||
         state.pendingVendorId == vendorId) {
-      await setVendor(null);
+      setVendor(null);
     }
   }
 
+  /// PDF is only available once the sheet is saved, clean and non-empty.
   Future<Uint8List> downloadPdf() async {
+    if (state.dirty) {
+      throw StateError('Save your changes before downloading the PDF');
+    }
     final sheet = state.sheet;
     if (sheet == null || sheet.items.isEmpty) {
       throw StateError('There are no costing items to download');
     }
     return _repository.downloadPdf(sheet.id);
-  }
-
-  Future<void> _mutate(
-    String partyId,
-    Future<CostingSheet> Function() operation, {
-    String? pendingVendorId,
-    bool clearPendingVendor = false,
-  }) async {
-    if (state.isMutating) {
-      throw StateError('A costing update is already in progress');
-    }
-    state = state.copyWith(isMutating: true);
-    try {
-      final updatedSheet = await operation();
-      if (state.selectedPartyId == partyId) {
-        state = state.copyWith(
-          sheet: updatedSheet,
-          pendingVendorId: pendingVendorId,
-          clearPendingVendor: clearPendingVendor,
-        );
-      }
-    } finally {
-      state = state.copyWith(isMutating: false);
-    }
   }
 }
 

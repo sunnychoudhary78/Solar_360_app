@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/core/utils/file_download.dart';
 import 'package:solar_sales/features/costing/data/models/costing_model.dart';
+import 'package:solar_sales/features/costing/presentation/widgets/costing_section.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 import 'package:solar_sales/shared/widgets/paginated_list_view.dart';
@@ -280,10 +281,6 @@ class _CostingRowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final metaParts = <String>[
-      row.vendor == null ? 'No vendor' : 'Vendor: ${row.vendor!.name}',
-      '${row.itemCount} ${row.itemCount == 1 ? 'item' : 'items'}',
-    ];
     final createdBy = row.creatorName.trim();
 
     return PremiumCard(
@@ -348,13 +345,20 @@ class _CostingRowCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            metaParts.join(' · '),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              MetaChip(
+                row.vendor == null ? 'No vendor' : row.vendor!.name,
+                highlight: row.vendor != null,
+              ),
+              MetaChip(
+                '${row.itemCount} ${row.itemCount == 1 ? 'item' : 'items'}',
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 8),
           Text(
             [
               'Created ${formatDate(row.createdAt)}',
@@ -369,7 +373,7 @@ class _CostingRowCard extends StatelessWidget {
           Row(
             children: [
               TextButton.icon(
-                onPressed: canEdit ? onEdit : null,
+                onPressed: canEdit ? onEdit : onTap,
                 icon: Icon(canEdit ? Icons.edit_outlined : Icons.visibility_outlined, size: 18),
                 label: Text(canEdit ? 'Edit' : 'View'),
               ),

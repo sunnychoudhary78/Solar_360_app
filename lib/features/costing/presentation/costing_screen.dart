@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:solar_sales/core/utils/file_download.dart';
+import 'package:solar_sales/features/costing/presentation/widgets/costing_section.dart';
 import 'package:solar_sales/features/customers/data/models/customer_model.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
 import 'package:solar_sales/features/costing/data/models/costing_model.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 
+import 'provider/bom_provider.dart';
 import 'provider/costing_provider.dart';
+import 'widgets/bom_tab.dart';
 import 'widgets/costing_item_form.dart';
 import 'widgets/costing_line_tile.dart';
-import 'widgets/costing_list_tab.dart';
+import 'widgets/costing_overview_tab.dart';
+
 
 class CostingScreen extends ConsumerStatefulWidget {
   final bool isGreenEnergy;
@@ -35,8 +39,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   bool _isSavingVendor = false;
   Future<void>? _vendorSaveTask;
   bool _isDeletingVendor = false;
-  String? _removingLineId;
-  bool _isClearing = false;
+  bool _isSaving = false;
   bool _vendorHadFocus = false;
 
   @override
@@ -72,21 +75,8 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     }
   }
 
-  Future<void> _setVendor(String? vendorId) async {
-    final current = ref.read(costingProvider(widget.isGreenEnergy));
-    if (current.isMutating) return;
-
-    // Skip the API call if nothing would change.
-    final currentVendorId = current.sheet?.vendorId ?? current.pendingVendorId;
-    if (vendorId == null && currentVendorId == null) return;
-
-    try {
-      await _notifier.setVendor(vendorId);
-      _refreshList();
-    } catch (error) {
-      _showMessage(cleanError(error), isError: true);
-    }
-  }
+  /// Vendor is part of the local draft — persisted on Save costing.
+  void _setVendor(String? vendorId) => _notifier.setVendor(vendorId);
 
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
@@ -106,7 +96,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   CostingListNotifier get _listNotifier =>
       ref.read(costingListProvider(widget.isGreenEnergy).notifier);
 
-  /// Keeps the All Costings table in sync after a create / edit.
+  /// Keeps the Overview table in sync after a save.
   void _refreshList() => _listNotifier.refresh();
 
   Future<void> _selectParty(String? partyId) async {
@@ -135,12 +125,23 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     _selectParty(row.partyId);
   }
 
+  /// Open a project BOM from Overview: jump to the BOM tab and load it.
+  void _openBom(TabController controller, BomListRow row) {
+    controller.animateTo(2);
+    if (row.id.isEmpty) {
+      ref.read(bomProvider.notifier).startNew();
+    } else {
+      ref.read(bomProvider.notifier).openBom(row.id);
+    }
+  }
+
   Future<void> _saveTypedVendor() {
     final activeSave = _vendorSaveTask;
     if (activeSave != null) return activeSave;
     final name = _vendorNameController.text.trim();
     if (name.isEmpty) {
-      return _setVendor(null);
+      _setVendor(null);
+      return Future.value();
     }
     final task = _performTypedVendorSave(name);
     final trackedTask = task.whenComplete(() => _vendorSaveTask = null);
@@ -169,6 +170,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     }
   }
 
+  /// Adds the typed line to the local draft (no server call until Save).
   Future<void> _submitLine(CostingState state) async {
     if (state.selectedPartyId == null) {
       _showMessage('Select a customer or lead first', isError: true);
@@ -194,29 +196,27 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
       return;
     }
 
-    try {
-      if (_vendorNameController.text.trim().isNotEmpty) {
-        await _saveTypedVendor();
-      }
-      if (kind == 'catalog') {
-        await _notifier.addCatalogLine(
-          itemId: _selectedItemId!,
-          unitPrice: price,
-          quantity: quantity,
-        );
-      } else {
-        await _notifier.addCustomLine(
-          name: _nameController.text.trim(),
-          unitPrice: price,
-          quantity: quantity,
-        );
-      }
-      _clearDraft();
-      _refreshList();
-      _showMessage('Item saved');
-    } catch (error) {
-      _showMessage(cleanError(error), isError: true);
+    if (_vendorNameController.text.trim().isNotEmpty) {
+      await _saveTypedVendor();
     }
+    final chosen = state.items
+        .where((item) => item.id == _selectedItemId)
+        .firstOrNull;
+    _notifier.addDraftLine(
+      CostingLine.draft(
+        name: kind == 'catalog'
+            ? (chosen?.name ?? '')
+            : _nameController.text.trim(),
+        kind: kind,
+        unitPrice: price,
+        quantity: quantity,
+        itemId: kind == 'catalog' ? _selectedItemId : null,
+        unit: kind == 'catalog' ? chosen?.unit : null,
+      ),
+    );
+    _clearDraft();
+    setState(() {});
+    _showMessage('Item added — remember to save');
   }
 
   void _clearDraft() {
@@ -226,7 +226,24 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     setState(() => _selectedItemId = null);
   }
 
-  Future<void> _removeLine(CostingLine line) async {
+  Future<void> _saveCosting() async {
+    if (_vendorNameController.text.trim().isNotEmpty) {
+      await _saveTypedVendor();
+    }
+    setState(() => _isSaving = true);
+    try {
+      await _notifier.saveSheet();
+      _refreshList();
+      _showMessage('Costing saved');
+    } catch (error) {
+      _showMessage(cleanError(error), isError: true);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _removeLine(int index) async {
+    final line = ref.read(costingProvider(widget.isGreenEnergy)).lines[index];
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -245,16 +262,8 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _removingLineId = line.id);
-    try {
-      await _notifier.removeLine(line.id);
-      _refreshList();
-      _showMessage('Item removed');
-    } catch (error) {
-      _showMessage(cleanError(error), isError: true);
-    } finally {
-      if (mounted) setState(() => _removingLineId = null);
-    }
+    _notifier.removeDraftLineAt(index);
+    _showMessage('Item removed — remember to save');
   }
 
   Future<void> _clearLines() async {
@@ -262,9 +271,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Clear costing items?'),
-        content: const Text(
-          'This will remove every item saved for this party.',
-        ),
+        content: const Text('This will remove every item from this draft.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -278,16 +285,8 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _isClearing = true);
-    try {
-      await _notifier.clearLines();
-      _refreshList();
-      _showMessage('All items cleared');
-    } catch (error) {
-      _showMessage(cleanError(error), isError: true);
-    } finally {
-      if (mounted) setState(() => _isClearing = false);
-    }
+    _notifier.clearDraftLines();
+    _showMessage('All items cleared — remember to save');
   }
 
   Future<void> _downloadPdf(CostingSheet sheet, CostingState state) async {
@@ -435,11 +434,11 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
       );
     }
 
-    final sheet = state.sheet;
     final canCreate = state.canCreateCosting;
     final tabs = <Tab>[
-      const Tab(text: 'All Costings'),
+      const Tab(text: 'Overview'),
       const Tab(text: 'Costing'),
+      if (state.showBom) const Tab(text: 'BOM'),
       if (state.canSelectVendor) const Tab(text: 'Vendors'),
     ];
 
@@ -452,23 +451,6 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
             appBar: AppBar(
               title: const Text('Costing'),
               actions: [
-                IconButton(
-                  tooltip: 'Download PDF',
-                  onPressed:
-                      sheet != null &&
-                          sheet.items.isNotEmpty &&
-                          !_isDownloading &&
-                          !state.isLoadingSheet
-                      ? () => _downloadPdf(sheet, state)
-                      : null,
-                  icon: _isDownloading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.picture_as_pdf_outlined),
-                ),
                 if (canCreate)
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -479,18 +461,29 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                     ),
                   ),
               ],
-              bottom: TabBar(tabs: tabs),
+              bottom: TabBar(
+                tabs: tabs,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                dividerColor: Colors.transparent,
+                labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+              ),
             ),
             body: TabBarView(
               children: [
-                CostingListTab(
+                CostingOverviewTab(
                   isGreenEnergy: widget.isGreenEnergy,
+                  showBom: state.showBom,
                   canSelectVendor: state.canSelectVendor,
                   canCreateCosting: canCreate,
+                  canCreateBom: state.canCreateBom,
                   vendors: state.vendors,
-                  onEdit: (row) => _editCosting(controller, row),
+                  onEditCosting: (row) => _editCosting(controller, row),
+                  onOpenBom: (row) => _openBom(controller, row),
                 ),
                 _formTab(state, auth, canCreate),
+                if (state.showBom)
+                  BomTab(onSaved: () => ref.read(bomListProvider.notifier).refresh()),
                 if (state.canSelectVendor)
                   ListView(
                     padding: const EdgeInsets.all(16),
@@ -509,6 +502,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     final canReadParty = auth.hasPermission(partyPermission) as bool;
     final canRead = state.canReadCosting && canReadParty;
     final sheet = state.sheet;
+    final lines = state.lines;
     final selectedCustomer = state.customers
         .where((customer) => customer.id == state.selectedPartyId)
         .firstOrNull;
@@ -519,21 +513,30 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
         (double.tryParse(_priceController.text) ?? 0) *
         (double.tryParse(_quantityController.text) ?? 0);
     final scheme = Theme.of(context).colorScheme;
+    final canDownloadPdf =
+        sheet != null && !state.dirty && lines.isNotEmpty;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          widget.isGreenEnergy ? 'Green Energy / Costing' : 'Sales / Costing',
-          style: Theme.of(context).textTheme.titleSmall,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.isGreenEnergy ? 'Green Energy / Costing' : 'Sales / Costing',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            if (state.dirty) const UnsavedBadge(),
+          ],
         ),
         const SizedBox(height: 4),
         Text(
           widget.isGreenEnergy
               ? state.canBillbook
-                    ? 'Uses Billbook customers — select or type vendors and items'
+                    ? 'Priced project sheet — select or type vendors and items'
                     : 'Select a lead — type vendors and items (Billbook is not on this subscription)'
-              : 'Items are saved per customer — switch customers anytime to continue',
+              : 'Priced project sheet — select a customer, add items, then Save.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -600,8 +603,8 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                   nameController: _nameController,
                   priceController: _priceController,
                   quantityController: _quantityController,
-                  enabled: !state.isMutating,
-                  isSaving: state.isMutating,
+                  enabled: !state.isMutating && !_isSaving,
+                  isSaving: false,
                   lineTotal: lineTotal,
                   onKindChanged: (kind) => setState(() {
                     _kind = kind;
@@ -631,27 +634,21 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
             _sectionCard(
               context,
               title: 'Costing list',
-              trailing: Text('${sheet.items.length} items'),
-              child: sheet.items.isEmpty
+              trailing: Text('${lines.length} items'),
+              child: lines.isEmpty
                   ? const _HintCard(
                       icon: Icons.receipt_long_outlined,
-                      message: 'No items saved for this party yet.',
+                      message: 'No items yet. Add items, then Save costing.',
                     )
                   : Column(
                       children: [
-                        for (
-                          var index = 0;
-                          index < sheet.items.length;
-                          index++
-                        ) ...[
+                        for (var index = 0; index < lines.length; index++) ...[
                           if (index > 0) const Divider(height: 1),
                           CostingLineTile(
-                            line: sheet.items[index],
+                            line: lines[index],
                             index: index,
-                            enabled: canCreate && !state.isMutating,
-                            isRemoving:
-                                _removingLineId == sheet.items[index].id,
-                            onRemove: () => _removeLine(sheet.items[index]),
+                            enabled: canCreate && !state.isMutating && !_isSaving,
+                            onRemove: () => _removeLine(index),
                           ),
                         ],
                       ],
@@ -661,34 +658,69 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
               context,
               title: 'Total price',
               trailing: Text(
-                formatInr(sheet.totalAmount),
+                formatInr(state.draftTotal),
                 style: TextStyle(
                   color: scheme.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
                 ),
               ),
-              child: canCreate && sheet.items.isNotEmpty
-                  ? SizedBox(
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: canCreate && !state.isMutating && !_isSaving
+                          ? _saveCosting
+                          : null,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.save_outlined),
+                      label: Text(_isSaving ? 'Saving…' : 'Save costing'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: canDownloadPdf && !_isDownloading
+                          ? () => _downloadPdf(sheet, state)
+                          : null,
+                      icon: _isDownloading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.picture_as_pdf_outlined),
+                      label: const Text('Download PDF'),
+                    ),
+                  ),
+                  if (canCreate && lines.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: state.isMutating ? null : _clearLines,
-                        icon: _isClearing
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.delete_sweep_outlined),
-                        label: Text(_isClearing ? 'Clearing…' : 'Clear all'),
+                        onPressed: state.isMutating || _isSaving
+                            ? null
+                            : _clearLines,
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: const Text('Clear all'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: scheme.error,
                         ),
                       ),
-                    )
-                  : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ],
@@ -781,7 +813,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   }
 
   Widget _vendorCard(CostingState state, bool canCreate) {
-    final selectedVendorId = state.sheet?.vendorId ?? state.pendingVendorId;
+    final selectedVendorId = state.vendorId;
     final matchedVendor = state.vendors
         .where((vendor) => vendor.id == selectedVendorId)
         .firstOrNull;
@@ -801,7 +833,6 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                   ? (selection) => setState(() {
                       _vendorKind = selection.first;
                       if (_vendorKind == 'custom') {
-                        // vendor null ho to fields clear ho jayengi
                         _syncVendorControllers(matchedVendor);
                       }
                     })
@@ -870,7 +901,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                           ? null
                           : vendorId;
                       if (id == null) _syncVendorControllers(null);
-                      await _setVendor(id);
+                      _setVendor(id);
                     }
                   : null,
             ),
@@ -940,33 +971,33 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     required String title,
     required Widget child,
     Widget? trailing,
+    IconData? icon,
   }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                ?trailing,
-              ],
-            ),
-            const SizedBox(height: 14),
-            child,
-          ],
-        ),
-      ),
+    return CostingSectionCard(
+      title: title,
+      icon: icon ?? _iconFor(title),
+      trailing: trailing,
+      child: child,
     );
+  }
+
+  static IconData? _iconFor(String title) {
+    switch (title) {
+      case 'Lead':
+        return Icons.person_outline;
+      case 'Customer':
+        return Icons.business_outlined;
+      case 'Vendor (optional)':
+      case 'Vendors':
+        return Icons.storefront_outlined;
+      case 'Add item':
+        return Icons.add_box_outlined;
+      case 'Costing list':
+        return Icons.receipt_long_outlined;
+      case 'Total price':
+        return Icons.payments_outlined;
+    }
+    return null;
   }
 }
 
@@ -977,27 +1008,6 @@ class _HintCard extends StatelessWidget {
   const _HintCard({required this.icon, required this.message});
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: scheme.onSurfaceVariant),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      CostingHintCard(icon: icon, message: message);
 }

@@ -119,7 +119,7 @@ class NavDestinations {
     ),
     AppDestination(
       id: 'bb_costing',
-      label: 'Costing',
+      label: 'Costing & BOM',
       icon: Icons.calculate_outlined,
       selectedIcon: Icons.calculate_rounded,
       section: NavSection.main,
@@ -341,7 +341,7 @@ class NavDestinations {
     ),
     AppDestination(
       id: 'ge_costing',
-      label: 'Costing',
+      label: 'Costing & BOM',
       icon: Icons.calculate_outlined,
       selectedIcon: Icons.calculate_rounded,
       section: NavSection.solarCrm,

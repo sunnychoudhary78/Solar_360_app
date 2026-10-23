@@ -49,6 +49,14 @@ class CostingRepository {
 
   Future<CostingSheet> clear(String costingId) => _api.clear(costingId);
 
+  Future<CostingSheet> saveCustomerSheet(
+    String customerId,
+    Map<String, dynamic> body,
+  ) => _api.saveCustomerSheet(customerId, body);
+
+  Future<CostingSheet> saveLeadSheet(String leadId, Map<String, dynamic> body) =>
+      _api.saveLeadSheet(leadId, body);
+
   Future<Uint8List> downloadPdf(String costingId) =>
       _api.downloadPdf(costingId);
 
@@ -65,4 +73,43 @@ class CostingRepository {
   Future<void> deleteVendor(String vendorId) => _api.deleteVendor(vendorId);
 
   Future<List<CostingLead>> listLeads() => _api.listLeads();
+
+  // ------------------------------------------------------------------ BOM ---
+
+  Future<PaginatedResult<BomListRow>> listBoms({
+    String? search,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    int page = 1,
+    int limit = 20,
+  }) => _api.listBoms(
+    search: search,
+    dateFrom: dateFrom,
+    dateTo: dateTo,
+    page: page,
+    limit: limit,
+  );
+
+  Future<Bom> getBom(String bomId) => _api.getBom(bomId);
+
+  Future<List<BomListRow>> listBomsForCustomer(String customerId) =>
+      _api.listBomsForCustomer(customerId);
+
+  Future<Bom> createBom(Map<String, dynamic> body) => _api.createBom(body);
+
+  Future<Bom> saveBom(String bomId, Map<String, dynamic> body) =>
+      _api.saveBom(bomId, body);
+
+  Future<Bom> saveBomForCustomer(String customerId, Map<String, dynamic> body) =>
+      _api.saveBomForCustomer(customerId, body);
+
+  Future<Bom> addBomLine(String customerId, Map<String, dynamic> body) =>
+      _api.addBomLine(customerId, body);
+
+  Future<Bom> removeBomLine(String bomId, String lineId) =>
+      _api.removeBomLine(bomId, lineId);
+
+  Future<Bom> clearBom(String bomId) => _api.clearBom(bomId);
+
+  Future<Uint8List> downloadBomPdf(String bomId) => _api.downloadBomPdf(bomId);
 }

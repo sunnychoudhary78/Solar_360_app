@@ -83,6 +83,22 @@ class ApiEndpoints {
       'costings/$costingId/lines/$lineId';
   static String costingClear(String costingId) => 'costings/$costingId/clear';
   static String costingPdf(String costingId) => 'costings/$costingId/pdf';
+  static String customerCostingSave(String customerId) =>
+      'costings/customer/$customerId/save';
+  static String leadCostingSave(String leadId) => 'costings/lead/$leadId/save';
+
+  // BOM (bill of materials) — Billbook only, no prices
+  static const boms = 'boms';
+  static String bom(String id) => 'boms/$id';
+  static String bomSave(String id) => 'boms/$id/save';
+  static String bomsByCustomer(String customerId) => 'boms/customer/$customerId';
+  static String customerBomSave(String customerId) => 'boms/customer/$customerId/save';
+  static String customerBomLines(String customerId) =>
+      'boms/customer/$customerId/lines';
+  static String bomLine(String bomId, String lineId) =>
+      'boms/$bomId/lines/$lineId';
+  static String bomClear(String bomId) => 'boms/$bomId/clear';
+  static String bomPdf(String bomId) => 'boms/$bomId/pdf';
 
   // Warehouses
   static const warehouses = 'warehouses';

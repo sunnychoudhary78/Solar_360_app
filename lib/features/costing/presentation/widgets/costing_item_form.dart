@@ -40,27 +40,31 @@ class CostingItemForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (canUseCatalog) ...[
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(
-                value: 'catalog',
-                label: Text('Select'),
-                icon: Icon(Icons.inventory_2_outlined),
-              ),
-              ButtonSegment(
-                value: 'custom',
-                label: Text('Type'),
-                icon: Icon(Icons.edit_outlined),
-              ),
-            ],
-            selected: {kind},
-            onSelectionChanged: enabled
-                ? (selection) => onKindChanged(selection.first)
-                : null,
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'catalog',
+                  label: Text('Select'),
+                  icon: Icon(Icons.inventory_2_outlined, size: 18),
+                ),
+                ButtonSegment(
+                  value: 'custom',
+                  label: Text('Type'),
+                  icon: Icon(Icons.edit_outlined, size: 18),
+                ),
+              ],
+              selected: {kind},
+              onSelectionChanged: enabled
+                  ? (selection) => onKindChanged(selection.first)
+                  : null,
+            ),
           ),
           const SizedBox(height: 16),
         ],
@@ -102,6 +106,7 @@ class CostingItemForm extends StatelessWidget {
           ),
         const SizedBox(height: 12),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: TextFormField(
@@ -141,21 +146,27 @@ class CostingItemForm extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
-        Container(
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: scheme.primaryContainer.withValues(alpha: .45),
+            color: scheme.primaryContainer.withValues(
+              alpha: lineTotal > 0 ? 0.55 : 0.25,
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
-              const Expanded(child: Text('Line total')),
+              Icon(Icons.calculate_outlined, size: 18, color: scheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Line total', style: textTheme.bodyMedium),
+              ),
               Text(
                 formatInr(lineTotal),
-                style: TextStyle(
+                style: textTheme.titleMedium?.copyWith(
                   color: scheme.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
@@ -176,7 +187,9 @@ class CostingItemForm extends StatelessWidget {
                     ),
                   )
                 : const Icon(Icons.add_rounded),
-            label: Text(isSaving ? 'Saving…' : 'Add & save'),
+            // Items are only added to the local draft here; Save costing
+            // persists them, so the label no longer says "save".
+            label: Text(isSaving ? 'Adding…' : 'Add item'),
           ),
         ),
       ],
