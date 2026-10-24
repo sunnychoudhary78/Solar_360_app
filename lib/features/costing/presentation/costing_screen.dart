@@ -132,15 +132,14 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
 
   /// Resolves the typed vendor name:
   /// - Matches an existing vendor -> uses that vendor (by id).
-  /// - No match                   -> kept as a one-off custom vendor on THIS
-  ///                                 costing only. It is NEVER added to the
-  ///                                 vendor list (use the Vendors tab for that).
+  /// - No match                   -> creates it in the vendor list and links
+  ///                                 it by id, so it shows up in the Overview.
   /// - Empty                      -> clears the vendor.
   /// Always returns true so Save / Add item are never blocked by the vendor.
   ///
   /// With [validate] = true (Save / Add item), a partly filled vendor is
   /// rejected: name and a 10-digit contact number are both mandatory.
-  bool _resolveTypedVendor({bool validate = false}) {
+  Future<bool> _resolveTypedVendor({bool validate = false}) async {
     final state = ref.read(costingProvider(widget.isGreenEnergy));
     final typingVendor = !state.canSelectVendor || _vendorKind == 'custom';
     if (!typingVendor) return true; // vendor chosen via dropdown
@@ -164,24 +163,39 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
     if (match != null) {
       _setVendor(match.id);
       _syncVendorControllers(match);
-    } else {
-      if (validate) {
-        if (contact.isEmpty) {
-          _showMessage('Contact number is required', isError: true);
-          return false;
-        }
-        if (contact.length != 10) {
-          _showMessage('Contact number must be exactly 10 digits',
-              isError: true);
-          return false;
-        }
-      }
-      _notifier.setCustomVendor(
-        name: name,
-        address: _vendorAddressController.text.trim(),
-        contactNumber: contact,
-      );
+      return true;
     }
+
+    if (validate) {
+      if (contact.isEmpty) {
+        _showMessage('Contact number is required', isError: true);
+        return false;
+      }
+      if (contact.length != 10) {
+        _showMessage('Contact number must be exactly 10 digits',
+            isError: true);
+        return false;
+      }
+      // Save / Add item: create the typed vendor so it can be linked by id
+      // and shown in the Overview.
+      try {
+        final created = await _notifier.saveVendor(
+          name: name,
+          address: _vendorAddressController.text.trim(),
+          contactNumber: contact,
+        );
+        _setVendor(created.id);
+        _syncVendorControllers(created);
+        return true;
+      } catch (_) {
+        // Cannot create a vendor — keep it on this costing only.
+      }
+    }
+    _notifier.setCustomVendor(
+      name: name,
+      address: _vendorAddressController.text.trim(),
+      contactNumber: contact,
+    );
     return true;
   }
 
@@ -230,7 +244,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
       return;
     }
 
-    if (!_resolveTypedVendor(validate: true)) return;
+    if (!await _resolveTypedVendor(validate: true)) return;
     final chosen = state.items
         .where((item) => item.id == _selectedItemId)
         .firstOrNull;
@@ -259,7 +273,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
   }
 
   Future<void> _saveCosting() async {
-    if (!_resolveTypedVendor(validate: true)) return;
+    if (!await _resolveTypedVendor(validate: true)) return;
     setState(() => _isSaving = true);
     try {
       await _notifier.saveSheet();
@@ -574,7 +588,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
                     ? 'Priced project sheet — select or type vendors and items'
                     : 'Select a lead — type vendors and items (Billbook is not on this subscription)'
               : 'Priced project sheet — select a customer, add items, then Save. '
-                    'A typed vendor that is not in the list applies to this costing only.',
+                    'A typed vendor that is not in the list is added to your vendors.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -891,7 +905,7 @@ class _CostingScreenState extends ConsumerState<CostingScreen> {
               decoration: const InputDecoration(
                 labelText: 'Vendor name *',
                 helperText:
-                    'Not in the vendor list? It will apply to this costing only.',
+                    'Not in the vendor list? It will be added to your vendors.',
               ),
             ),
             const SizedBox(height: 12),

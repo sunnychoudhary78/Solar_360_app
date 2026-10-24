@@ -37,8 +37,8 @@ class CostingState {
   final bool dirty;
   final String? pendingVendorId;
 
-  /// One-off vendor typed by the user that is NOT in the vendor list.
-  /// Applies to this costing only and is never added to the Vendors tab.
+  /// Fallback for a typed vendor that could not be created in the vendor list.
+  /// Applies to this costing only.
   final CostingVendor? customVendor;
   final bool isGreenEnergyScreen;
   final bool canBillbook;
@@ -384,8 +384,8 @@ class CostingNotifier extends Notifier<CostingState> {
     );
   }
 
-  /// One-off vendor for THIS costing only. It is never added to the vendor
-  /// list — only the Vendors tab creates real vendors.
+  /// Fallback vendor for THIS costing only, used when a typed vendor could not
+  /// be created in the vendor list.
   void setCustomVendor({
     required String name,
     String address = '',
