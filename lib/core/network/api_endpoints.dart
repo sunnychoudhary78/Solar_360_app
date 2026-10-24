@@ -191,4 +191,7 @@ class ApiEndpoints {
       'solar-designs/$id/surroundings';
   static String publicSolarDesign(String code) =>
       'public/solar-designs/$code';
+
+  // Public finance (EMI calculator PDF — no auth required)
+  static const publicEmiPdf = 'public/finance/emi-pdf';
 }

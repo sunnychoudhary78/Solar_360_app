@@ -8,6 +8,7 @@ import 'package:solar_sales/features/customers/presentation/screens/customers_sc
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_detail_screen.dart';
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_form_screen.dart';
 import 'package:solar_sales/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:solar_sales/features/finance/presentation/screens/emi_calculator_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/inventory_hub_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/low_stock_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/stock_ledger_screen.dart';
@@ -153,6 +154,12 @@ class AppRoutes {
     '/invoices/approvals': (_) => const InvoiceApprovalsScreen(),
     '/reports': (_) => const ReportsScreen(),
     '/solar/reports': (_) => const GreenEnergyReportsScreen(),
+    '/finance/emi': (_) => const EmiCalculatorScreen(moduleLabel: 'Billbook'),
+    '/finance': (_) => const EmiCalculatorScreen(moduleLabel: 'Billbook'),
+    '/solar/finance/emi': (_) =>
+        const EmiCalculatorScreen(moduleLabel: 'Green Energy'),
+    '/solar/finance': (_) =>
+        const EmiCalculatorScreen(moduleLabel: 'Green Energy'),
     '/inventory': (_) => const InventoryHubScreen(),
     '/inventory/stock': (_) => const StockScreen(),
     '/inventory/ledger': (_) => const StockLedgerScreen(),
