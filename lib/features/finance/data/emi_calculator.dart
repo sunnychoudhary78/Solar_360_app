@@ -304,14 +304,24 @@ List<EmiYearGroup> _groupByYear(List<EmiScheduleRow> rows) {
 }
 
 String formatEmiInr(num? value, {int decimals = 0}) {
-  final n = value?.toDouble() ?? 0;
-  final fmt = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: decimals,
-  );
-  return fmt.format(n);
+  final n = round2(value?.toDouble() ?? 0);
+  if (decimals <= 0) {
+    return NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    ).format(n);
+  }
+  // Explicit fraction digits — avoids whole-rupee display drift that breaks
+  // EMI×months vs total repayment, interest sums, and principal sums.
+  final grouped = NumberFormat.decimalPattern('en_IN')
+    ..minimumFractionDigits = decimals
+    ..maximumFractionDigits = decimals;
+  return '₹${grouped.format(n)}';
 }
+
+/// Schedule / summary money from the EMI formula: always 2 decimals.
+String formatEmiScheduleInr(num? value) => formatEmiInr(value, decimals: 2);
 
 String formatTenure(int months) {
   if (months < 12) return '$months month${months == 1 ? '' : 's'}';

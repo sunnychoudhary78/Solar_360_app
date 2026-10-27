@@ -40,15 +40,24 @@ class _EmiCalculatorScreenState extends ConsumerState<EmiCalculatorScreen> {
   bool _downloading = false;
   bool _sharing = false;
 
-  bool get _rateLocked =>
-      _scheme == EmiScheme.advanceEmi && _months <= kAdvanceZeroMonths;
+  double get _committedAmount =>
+      clampNum(_amount, kEmiMinAmount, kEmiMaxAmount);
 
-  double get _effectiveRate => _rateLocked ? 0 : _rate;
+  int get _committedMonths =>
+      clampNum(_months, kEmiMinMonths, kEmiMaxMonths).round();
+
+  double get _committedRate => clampNum(_rate, 0, 36);
+
+  bool get _rateLocked =>
+      _scheme == EmiScheme.advanceEmi &&
+      _committedMonths <= kAdvanceZeroMonths;
+
+  double get _effectiveRate => _rateLocked ? 0 : _committedRate;
 
   EmiScheduleResult get _result => buildSchedule(
-        principal: _amount,
+        principal: _committedAmount,
         annualPercent: _effectiveRate,
-        months: _months,
+        months: _committedMonths,
         scheme: _scheme,
       );
 
@@ -76,9 +85,9 @@ class _EmiCalculatorScreenState extends ConsumerState<EmiCalculatorScreen> {
       final bytes = await ref.read(financeApiServiceProvider).downloadEmiPdf(
             segment: _segment,
             scheme: _scheme,
-            amount: _amount,
-            months: _months,
-            rate: _rate,
+            amount: _committedAmount,
+            months: _committedMonths,
+            rate: _committedRate,
             includeGuide: false,
           );
       final slug = _segment.toLowerCase().replaceAll(' ', '-');
@@ -141,7 +150,12 @@ class _EmiCalculatorScreenState extends ConsumerState<EmiCalculatorScreen> {
               icon: Icons.lock_outline_rounded,
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                12,
+                16,
+                24 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               children: [
                 _SegmentChips(
                   selected: _segment,
@@ -164,6 +178,11 @@ class _EmiCalculatorScreenState extends ConsumerState<EmiCalculatorScreen> {
                       _AmountField(
                         amount: _amount,
                         onChanged: (v) => setState(() {
+                          // Do not hard-clamp while typing; blur / presets clamp.
+                          _amount = v.isNaN || v.isInfinite ? _amount : v;
+                          _openYear = 'Year 1';
+                        }),
+                        onCommit: (v) => setState(() {
                           _amount = clampNum(v, kEmiMinAmount, kEmiMaxAmount);
                           _openYear = 'Year 1';
                         }),
@@ -172,6 +191,10 @@ class _EmiCalculatorScreenState extends ConsumerState<EmiCalculatorScreen> {
                       _TenureField(
                         months: _months,
                         onChanged: (v) => setState(() {
+                          _months = v;
+                          _openYear = 'Year 1';
+                        }),
+                        onCommit: (v) => setState(() {
                           _months =
                               clampNum(v, kEmiMinMonths, kEmiMaxMonths).round();
                           _openYear = 'Year 1';
@@ -182,6 +205,10 @@ class _EmiCalculatorScreenState extends ConsumerState<EmiCalculatorScreen> {
                         rate: _rate,
                         locked: _rateLocked,
                         onChanged: (v) => setState(() {
+                          _rate = v.isNaN || v.isInfinite ? _rate : v;
+                          _openYear = 'Year 1';
+                        }),
+                        onCommit: (v) => setState(() {
                           _rate = clampNum(v, 0, 36);
                           _openYear = 'Year 1';
                         }),
@@ -354,11 +381,61 @@ class _SchemePicker extends StatelessWidget {
   }
 }
 
-class _AmountField extends StatelessWidget {
-  const _AmountField({required this.amount, required this.onChanged});
+class _AmountField extends StatefulWidget {
+  const _AmountField({
+    required this.amount,
+    required this.onChanged,
+    required this.onCommit,
+  });
 
   final double amount;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double> onCommit;
+
+  @override
+  State<_AmountField> createState() => _AmountFieldState();
+}
+
+class _AmountFieldState extends State<_AmountField> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.amount.round().toString());
+    _focusNode = FocusNode()..addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AmountField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_focusNode.hasFocus) return;
+    final next = widget.amount.round().toString();
+    if (_controller.text != next) {
+      _controller.text = next;
+    }
+  }
+
+  void _handleFocusChange() {
+    if (_focusNode.hasFocus) return;
+    final parsed = double.tryParse(_controller.text) ?? widget.amount;
+    final clamped = clampNum(parsed, kEmiMinAmount, kEmiMaxAmount);
+    widget.onCommit(clamped);
+    final text = clamped.round().toString();
+    if (_controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode
+      ..removeListener(_handleFocusChange)
+      ..dispose();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -373,8 +450,8 @@ class _AmountField extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         TextFormField(
-          key: ValueKey('amount-$amount'),
-          initialValue: amount.round().toString(),
+          controller: _controller,
+          focusNode: _focusNode,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: const InputDecoration(
@@ -384,38 +461,88 @@ class _AmountField extends StatelessWidget {
           ),
           onChanged: (raw) {
             final v = double.tryParse(raw);
-            if (v != null) onChanged(v);
+            if (v != null) widget.onChanged(v);
           },
           onEditingComplete: () {
-            onChanged(clampNum(amount, kEmiMinAmount, kEmiMaxAmount));
-            FocusScope.of(context).unfocus();
+            _focusNode.unfocus();
           },
         ),
         Slider(
-          value: amount.clamp(kEmiMinAmount, kEmiMaxAmount),
+          value: widget.amount.clamp(kEmiMinAmount, kEmiMaxAmount),
           min: kEmiMinAmount,
           max: kEmiMaxAmount,
           divisions: ((kEmiMaxAmount - kEmiMinAmount) / 10000).round(),
-          label: formatEmiInr(amount),
-          onChanged: onChanged,
+          label: formatEmiInr(widget.amount),
+          onChanged: widget.onCommit,
         ),
         _PresetRow(
           items: kAmountPresets
               .map((e) => (label: e.label, value: e.value))
               .toList(),
-          selected: amount,
-          onPick: onChanged,
+          selected: widget.amount,
+          onPick: widget.onCommit,
         ),
       ],
     );
   }
 }
 
-class _TenureField extends StatelessWidget {
-  const _TenureField({required this.months, required this.onChanged});
+class _TenureField extends StatefulWidget {
+  const _TenureField({
+    required this.months,
+    required this.onChanged,
+    required this.onCommit,
+  });
 
   final int months;
   final ValueChanged<int> onChanged;
+  final ValueChanged<int> onCommit;
+
+  @override
+  State<_TenureField> createState() => _TenureFieldState();
+}
+
+class _TenureFieldState extends State<_TenureField> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.months.toString());
+    _focusNode = FocusNode()..addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TenureField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_focusNode.hasFocus) return;
+    final next = widget.months.toString();
+    if (_controller.text != next) {
+      _controller.text = next;
+    }
+  }
+
+  void _handleFocusChange() {
+    if (_focusNode.hasFocus) return;
+    final parsed = int.tryParse(_controller.text) ?? widget.months;
+    final clamped =
+        clampNum(parsed, kEmiMinMonths, kEmiMaxMonths).round();
+    widget.onCommit(clamped);
+    final text = clamped.toString();
+    if (_controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode
+      ..removeListener(_handleFocusChange)
+      ..dispose();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -430,8 +557,8 @@ class _TenureField extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         TextFormField(
-          key: ValueKey('months-$months'),
-          initialValue: months.toString(),
+          controller: _controller,
+          focusNode: _focusNode,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: const InputDecoration(
@@ -441,42 +568,103 @@ class _TenureField extends StatelessWidget {
           ),
           onChanged: (raw) {
             final v = int.tryParse(raw);
-            if (v != null) onChanged(v);
+            if (v != null) widget.onChanged(v);
+          },
+          onEditingComplete: () {
+            _focusNode.unfocus();
           },
         ),
         Slider(
-          value: months.toDouble().clamp(
+          value: widget.months.toDouble().clamp(
                 kEmiMinMonths.toDouble(),
                 kEmiMaxMonths.toDouble(),
               ),
           min: kEmiMinMonths.toDouble(),
           max: kEmiMaxMonths.toDouble(),
           divisions: kEmiMaxMonths - kEmiMinMonths,
-          label: '$months mo',
-          onChanged: (v) => onChanged(v.round()),
+          label: '${widget.months} mo',
+          onChanged: (v) => widget.onCommit(v.round()),
         ),
         _PresetRow(
           items: kTenurePresets
               .map((e) => (label: e.label, value: e.value.toDouble()))
               .toList(),
-          selected: months.toDouble(),
-          onPick: (v) => onChanged(v.round()),
+          selected: widget.months.toDouble(),
+          onPick: (v) => widget.onCommit(v.round()),
         ),
       ],
     );
   }
 }
 
-class _RateField extends StatelessWidget {
+class _RateField extends StatefulWidget {
   const _RateField({
     required this.rate,
     required this.locked,
     required this.onChanged,
+    required this.onCommit,
   });
 
   final double rate;
   final bool locked;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double> onCommit;
+
+  @override
+  State<_RateField> createState() => _RateFieldState();
+}
+
+class _RateFieldState extends State<_RateField> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  String _formatRate(double rate) => rate.toStringAsFixed(2);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: _formatRate(widget.locked ? 0 : widget.rate),
+    );
+    _focusNode = FocusNode()..addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _RateField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.locked != oldWidget.locked) {
+      final next = _formatRate(widget.locked ? 0 : widget.rate);
+      if (_controller.text != next) {
+        _controller.text = next;
+      }
+      return;
+    }
+    if (_focusNode.hasFocus || widget.locked) return;
+    final next = _formatRate(widget.rate);
+    if (_controller.text != next) {
+      _controller.text = next;
+    }
+  }
+
+  void _handleFocusChange() {
+    if (_focusNode.hasFocus || widget.locked) return;
+    final parsed = double.tryParse(_controller.text) ?? widget.rate;
+    final clamped = clampNum(parsed, 0, 36);
+    widget.onCommit(clamped);
+    final text = _formatRate(clamped);
+    if (_controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode
+      ..removeListener(_handleFocusChange)
+      ..dispose();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -492,9 +680,9 @@ class _RateField extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         TextFormField(
-          key: ValueKey('rate-$rate-$locked'),
-          initialValue: (locked ? 0 : rate).toStringAsFixed(2),
-          enabled: !locked,
+          controller: _controller,
+          focusNode: _focusNode,
+          enabled: !widget.locked,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
             suffixText: '%',
@@ -503,10 +691,13 @@ class _RateField extends StatelessWidget {
           ),
           onChanged: (raw) {
             final v = double.tryParse(raw);
-            if (v != null) onChanged(v);
+            if (v != null) widget.onChanged(v);
+          },
+          onEditingComplete: () {
+            _focusNode.unfocus();
           },
         ),
-        if (locked) ...[
+        if (widget.locked) ...[
           const SizedBox(height: 6),
           Text(
             'Advance EMI on a 6-month term is interest-free.',
@@ -604,12 +795,12 @@ class _SummaryCard extends StatelessWidget {
           _summaryRow(
             context,
             'Total interest',
-            formatEmiInr(result.totalInterest),
+            formatEmiScheduleInr(result.totalInterest),
           ),
           _summaryRow(
             context,
             'Total repayment',
-            formatEmiInr(result.totalPayment),
+            formatEmiScheduleInr(result.totalPayment),
           ),
           const Divider(height: 24),
           Text(
@@ -622,7 +813,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            formatEmiInr(result.emi),
+            formatEmiScheduleInr(result.emi),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                   color: colorScheme.primary,
@@ -712,6 +903,17 @@ class _RepaymentTable extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+            child: Row(
+              children: [
+                const Expanded(child: SizedBox()),
+                _headerCell('Principal'),
+                _headerCell('Interest'),
+                _headerCell('EMI'),
+              ],
+            ),
+          ),
           ...years.map((year) {
             final open = openYear == year.key;
             return Column(
@@ -739,9 +941,9 @@ class _RepaymentTable extends StatelessWidget {
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
-                        _moneyCell(formatEmiInr(year.principal)),
-                        _moneyCell(formatEmiInr(year.interest)),
-                        _moneyCell(formatEmiInr(year.payment)),
+                        _moneyCell(formatEmiScheduleInr(year.principal)),
+                        _moneyCell(formatEmiScheduleInr(year.interest)),
+                        _moneyCell(formatEmiScheduleInr(year.payment)),
                       ],
                     ),
                   ),
@@ -761,9 +963,9 @@ class _RepaymentTable extends StatelessWidget {
                               ),
                             ),
                           ),
-                          _moneyCell(formatEmiInr(row.principal)),
-                          _moneyCell(formatEmiInr(row.interest)),
-                          _moneyCell(formatEmiInr(row.payment)),
+                          _moneyCell(formatEmiScheduleInr(row.principal)),
+                          _moneyCell(formatEmiScheduleInr(row.interest)),
+                          _moneyCell(formatEmiScheduleInr(row.payment)),
                         ],
                       ),
                     ),
@@ -771,17 +973,7 @@ class _RepaymentTable extends StatelessWidget {
               ],
             );
           }),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-            child: Row(
-              children: [
-                const Expanded(child: SizedBox()),
-                _headerCell('Principal'),
-                _headerCell('Interest'),
-                _headerCell('EMI'),
-              ],
-            ),
-          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -789,18 +981,21 @@ class _RepaymentTable extends StatelessWidget {
 
   Widget _moneyCell(String text) {
     return SizedBox(
-      width: 72,
+      width: 96,
       child: Text(
         text,
         textAlign: TextAlign.right,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.visible,
+        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600),
       ),
     );
   }
 
   Widget _headerCell(String text) {
     return SizedBox(
-      width: 72,
+      width: 96,
       child: Text(
         text,
         textAlign: TextAlign.right,

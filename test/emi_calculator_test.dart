@@ -28,6 +28,40 @@ void main() {
     expect(result.rows[5].interest, 112.82);
     expect(result.rows[5].payment, 17057.20);
     expect(result.rows[5].balance, 0.00);
+
+    // Exact schedule: principals sum to loan; interest sum = totalInterest;
+    // each row principal + interest = payment.
+    final principalSum = round2(
+      result.rows.fold<double>(0, (s, r) => s + r.principal),
+    );
+    final interestSum = round2(
+      result.rows.fold<double>(0, (s, r) => s + r.interest),
+    );
+    final paymentSum = round2(
+      result.rows.fold<double>(0, (s, r) => s + r.payment),
+    );
+    expect(principalSum, result.principal);
+    expect(interestSum, result.totalInterest);
+    expect(paymentSum, result.totalPayment);
+    for (final row in result.rows) {
+      expect(round2(row.principal + row.interest), row.payment);
+    }
+    // Whole-rupee display: 17,057×6 = 1,02,342 ≠ total repayment 1,02,343.
+    final wholeRupeePrincipals = result.rows
+        .map((r) => r.principal.round())
+        .fold<int>(0, (s, v) => s + v);
+    final wholeRupeeInterest = result.rows
+        .map((r) => r.interest.round())
+        .fold<int>(0, (s, v) => s + v);
+    final wholeRupeePayments = result.rows
+        .map((r) => r.payment.round())
+        .fold<int>(0, (s, v) => s + v);
+    expect(wholeRupeePrincipals, isNot(result.principal.round()));
+    expect(wholeRupeeInterest, isNot(result.totalInterest.round()));
+    expect(wholeRupeePayments, isNot(result.totalPayment.round()));
+
+    expect(formatEmiScheduleInr(result.emi), '₹17,057.22');
+    expect(formatEmiScheduleInr(result.totalPayment), '₹1,02,343.30');
   });
 
   test('Example B — EMI ₹1L / 12 months / 7.99%', () {
