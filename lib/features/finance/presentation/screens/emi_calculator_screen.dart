@@ -268,6 +268,7 @@ class _EmiCalculatorScreenState extends ConsumerState<EmiCalculatorScreen> {
                 const SizedBox(height: 14),
                 _RepaymentTable(
                   years: result.years,
+                  months: result.months,
                   openYear: _openYear,
                   onToggle: (key) => setState(() {
                     _openYear = _openYear == key ? '' : key;
@@ -865,13 +866,23 @@ class _SummaryCard extends StatelessWidget {
 class _RepaymentTable extends StatelessWidget {
   const _RepaymentTable({
     required this.years,
+    required this.months,
     required this.openYear,
     required this.onToggle,
   });
 
   final List<EmiYearGroup> years;
+  final int months;
   final String openYear;
   final ValueChanged<String> onToggle;
+
+  /// Short tenures (< 1 year) show e.g. "6 Months" instead of "Year 1".
+  String _groupLabel(String yearKey) {
+    if (months < 12 && yearKey == 'Year 1') {
+      return '$months Month${months == 1 ? '' : 's'}';
+    }
+    return yearKey;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -937,7 +948,7 @@ class _RepaymentTable extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            year.key,
+                            _groupLabel(year.key),
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
