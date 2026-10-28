@@ -428,6 +428,23 @@ class NavDestinations {
       quickActionSubtitle: 'Project tasks & assignees',
     ),
     AppDestination(
+      id: 'ge_amc',
+      label: 'AMC Visits',
+      icon: Icons.handyman_outlined,
+      selectedIcon: Icons.handyman_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      anyOf: [
+        'amc.read',
+        'amc.create',
+        'amc.update',
+        'amc.delete',
+      ],
+      route: '/solar/amc',
+      quickAction: true,
+      quickActionSubtitle: 'Post-install maintenance visits',
+    ),
+    AppDestination(
       id: 'ge_support',
       label: 'Support',
       icon: Icons.headset_mic_outlined,

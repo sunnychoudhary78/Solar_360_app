@@ -175,6 +175,19 @@ class ApiEndpoints {
   static String solarTask(String id) => 'solar-tasks/$id';
   static String solarTaskStatus(String id) => 'solar-tasks/$id/status';
 
+  // Solar CRM — AMC visits (post-install O&M)
+  static const amcMeta = 'amc/meta';
+  static const amcSummary = 'amc/summary';
+  static const amcPlants = 'amc/plants';
+  static String amcPlant(String leadId) => 'amc/plants/$leadId';
+  static const amcAssignees = 'amc/assignees';
+  static const amcVisits = 'amc/visits';
+  static String amcVisit(String id) => 'amc/visits/$id';
+  static String amcVisitPhotos(String id) => 'amc/visits/$id/photos';
+  static const amcContracts = 'amc/contracts';
+  static String amcContract(String id) => 'amc/contracts/$id';
+  static String amcContractRenew(String id) => 'amc/contracts/$id/renew';
+
   // 3D Solar Design (staff + public preview helpers)
   static String solarDesignsForLead(String leadId) =>
       'solar-designs/lead/$leadId';

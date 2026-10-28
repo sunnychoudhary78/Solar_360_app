@@ -42,6 +42,8 @@ import 'package:solar_sales/features/settings/presentation/screens/settings_scre
 import 'package:solar_sales/features/shell/presentation/screens/app_shell.dart';
 import 'package:solar_sales/features/site_survey/presentation/screens/survey_templates_screen.dart';
 import 'package:solar_sales/features/solar_design/presentation/screens/solar_design_hub_screen.dart';
+import 'package:solar_sales/features/amc/presentation/screens/amc_visit_detail_screen.dart';
+import 'package:solar_sales/features/amc/presentation/screens/amc_visits_screen.dart';
 import 'package:solar_sales/features/solar_tasks/presentation/screens/solar_tasks_screen.dart';
 import 'package:solar_sales/features/support/presentation/screens/support_ticket_detail_screen.dart';
 import 'package:solar_sales/features/support/presentation/screens/support_tickets_screen.dart';
@@ -63,6 +65,11 @@ class AppRoutes {
     '/solar/3d-design': (_) => const SolarDesignHubScreen(),
     '/solar/notifications': (_) => const NotificationsScreen(),
     '/solar/support': (_) => const SupportTicketsScreen(),
+    '/solar/amc': (_) => const AmcVisitsScreen(),
+    '/solar/amc/visit': (context) {
+      final id = ModalRoute.of(context)!.settings.arguments as String;
+      return AmcVisitDetailScreen(visitId: id);
+    },
     '/solar/task-management': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
       String? projectId;
