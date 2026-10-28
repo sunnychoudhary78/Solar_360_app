@@ -777,9 +777,22 @@ class _SummaryCard extends StatelessWidget {
   final double displayRate;
   final EmiScheduleResult result;
 
+  /// Advance EMI teaser: headline EMI is only for the first 6 months when
+  /// tenure is longer; later months include interest (see repayment table).
+  bool get _advanceTeaserSplit =>
+      scheme == EmiScheme.advanceEmi && result.months > kAdvanceZeroMonths;
+
+  double? get _afterTeaserEmi {
+    if (!_advanceTeaserSplit) return null;
+    if (result.rows.length <= kAdvanceZeroMonths) return null;
+    return result.rows[kAdvanceZeroMonths].payment;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final remainingMonths = result.months - kAdvanceZeroMonths;
+    final afterEmi = _afterTeaserEmi;
     return PremiumCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -805,7 +818,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           const Divider(height: 24),
           Text(
-            'EMI',
+            _advanceTeaserSplit ? 'EMI · first $kAdvanceZeroMonths months' : 'EMI',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w700,
@@ -820,6 +833,35 @@ class _SummaryCard extends StatelessWidget {
                   color: colorScheme.primary,
                 ),
           ),
+          if (_advanceTeaserSplit && afterEmi != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'EMI · after $kAdvanceZeroMonths months',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              formatEmiScheduleInr(afterEmi),
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.primary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '0% interest for the first $kAdvanceZeroMonths months. '
+              'Then ${formatEmiScheduleInr(afterEmi)} / month with interest '
+              'for the remaining $remainingMonths months.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+            ),
+          ],
           const SizedBox(height: 4),
           Text(
             '$segment · ${scheme.caption}',
