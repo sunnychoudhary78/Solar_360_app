@@ -166,6 +166,7 @@ class _MilestoneSheetState extends ConsumerState<_MilestoneSheet> {
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _titleController,
+                enabled: !_isEdit,
                 decoration: const InputDecoration(
                   labelText: 'Title',
                   hintText: 'e.g. Extra material',
@@ -177,6 +178,7 @@ class _MilestoneSheetState extends ConsumerState<_MilestoneSheet> {
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _amountController,
+                enabled: !_isEdit,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
@@ -230,6 +232,7 @@ class _MilestoneSheetState extends ConsumerState<_MilestoneSheet> {
                 const SizedBox(height: AppSpacing.md),
                 TextFormField(
                   controller: _notesController,
+                  enabled: !_isEdit,
                   minLines: 2,
                   maxLines: 3,
                   decoration: const InputDecoration(

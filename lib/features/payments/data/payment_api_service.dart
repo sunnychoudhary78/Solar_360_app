@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:solar_sales/core/network/api_endpoints.dart';
 import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/shared/models/paginated_result.dart';
@@ -12,10 +15,12 @@ class PaymentApiService {
 
   Future<PaymentDashboardModel> dashboard() async {
     final res = await _api.get(ApiEndpoints.paymentsDashboard);
+    debugPrint('DASHBOARD RAW:----> ${jsonEncode(res)}');
     return PaymentDashboardModel.fromJson(
       Map<String, dynamic>.from(res as Map),
     );
   }
+  
 
   /// Paginated milestone list (always invoices — `source_type` alone is ignored
   /// by the API unless `source_id` is present).

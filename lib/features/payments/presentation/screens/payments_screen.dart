@@ -21,7 +21,8 @@ class PaymentsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
-    final canRead = auth.hasAny(paymentReadPermissions) ||
+    final canRead =
+        auth.hasAny(paymentReadPermissions) ||
         auth.hasPermission('module.billbook.access');
     final scheme = Theme.of(context).colorScheme;
 
@@ -56,20 +57,23 @@ class PaymentsScreen extends ConsumerWidget {
             const SizedBox(width: 8),
           ],
         ),
-        body: Column(
-          children: [
-            const TabBar(
-              tabs: [
-                Tab(text: 'Overview'),
-                Tab(text: 'Milestones'),
-              ],
-            ),
-            const Expanded(
-              child: TabBarView(
-                children: [_OverviewTab(), _MilestonesTab()],
+        // SafeArea keeps the last items (e.g. Milestone counts) clear of the
+        // system navigation bar / gesture area on edge-to-edge Android.
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              const TabBar(
+                tabs: [
+                  Tab(text: 'Overview'),
+                  Tab(text: 'Milestones'),
+                ],
               ),
-            ),
-          ],
+              const Expanded(
+                child: TabBarView(children: [_OverviewTab(), _MilestonesTab()]),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -120,6 +124,7 @@ class _OverviewTab extends ConsumerWidget {
                           label: 'Outstanding',
                           value: formatInr(data.outstanding),
                           icon: Icons.account_balance_wallet_outlined,
+                          color: const Color(0xFF1F2937),
                         ),
                       ),
                     ],
@@ -131,7 +136,8 @@ class _OverviewTab extends ConsumerWidget {
                         child: PaymentKpiCard(
                           label: 'Overdue',
                           value: formatInr(data.overdueAmount),
-                          subtitle: '${data.overdueCount} milestone'
+                          subtitle:
+                              '${data.overdueCount} milestone'
                               '${data.overdueCount == 1 ? '' : 's'}',
                           icon: Icons.error_outline,
                           color: Theme.of(context).colorScheme.error,
@@ -142,7 +148,8 @@ class _OverviewTab extends ConsumerWidget {
                         child: PaymentKpiCard(
                           label: 'Due this week',
                           value: formatInr(data.dueThisWeekAmount),
-                          subtitle: '${data.dueThisWeekCount} milestone'
+                          subtitle:
+                              '${data.dueThisWeekCount} milestone'
                               '${data.dueThisWeekCount == 1 ? '' : 's'}',
                           icon: Icons.event_available_outlined,
                           color: const Color(0xFFD97706),
@@ -170,13 +177,14 @@ class _OverviewTab extends ConsumerWidget {
                   showParty: true,
                   onTap: s.sourceId.isEmpty
                       ? null
-                      : () => Navigator.pushNamed(
-                            context,
-                            '/invoices/detail',
-                            arguments: s.sourceId,
-                          ).then((_) {
-                            ref.invalidate(paymentDashboardProvider);
-                          }),
+                      : () =>
+                            Navigator.pushNamed(
+                              context,
+                              '/invoices/detail',
+                              arguments: s.sourceId,
+                            ).then((_) {
+                              ref.invalidate(paymentDashboardProvider);
+                            }),
                 ),
               ),
             const PremiumSectionTitle(title: 'Recent receipts'),
@@ -216,14 +224,16 @@ class _OverviewTab extends ConsumerWidget {
                     Expanded(
                       child: _CountBlock(
                         label: 'Partial',
-                        value: data.partialCount,
+                        value: ref
+                            .watch(paymentPartialCountProvider)
+                            .maybeWhen(
+                              data: (c) => c,
+                              orElse: () => data.partialCount,
+                            ),
                       ),
                     ),
                     Expanded(
-                      child: _CountBlock(
-                        label: 'Paid',
-                        value: data.paidCount,
-                      ),
+                      child: _CountBlock(label: 'Paid', value: data.paidCount),
                     ),
                   ],
                 ),
@@ -294,48 +304,44 @@ class _MilestonesTabState extends ConsumerState<_MilestonesTab> {
           child: state.isLoading && state.items.isEmpty
               ? const LoadingState()
               : state.error != null && state.items.isEmpty
-                  ? ErrorState(
-                      message: state.error!,
-                      onRetry: () =>
-                          ref.read(paymentMilestoneListProvider.notifier).refresh(),
-                    )
-                  : PaginatedListView(
-                      padding: const EdgeInsets.only(bottom: 80),
-                      items: state.items,
-                      isLoadingMore: state.isLoadingMore,
-                      hasMore: state.hasMore,
-                      onRefresh: () => ref
-                          .read(paymentMilestoneListProvider.notifier)
-                          .refresh(),
-                      onLoadMore: () =>
-                          ref.read(paymentMilestoneListProvider.notifier).loadMore(),
-                      empty: const EmptyState(
-                        title: 'No milestones found',
-                        subtitle:
-                            'Milestones appear here once an invoice is approved and sent.',
-                        icon: Icons.event_note_outlined,
-                      ),
-                      itemBuilder: (context, schedule, index) {
-                        return PaymentMilestoneTile(
-                          schedule: schedule,
-                          showParty: true,
-                          onTap: schedule.sourceId.isEmpty
-                              ? null
-                              : () => Navigator.pushNamed(
-                                    context,
-                                    '/invoices/detail',
-                                    arguments: schedule.sourceId,
-                                  ),
-                          onRecord: canWrite
-                              ? () => showRecordPaymentSheet(
-                                    context,
-                                    ref,
-                                    schedule,
-                                  )
-                              : null,
-                        );
-                      },
-                    ),
+              ? ErrorState(
+                  message: state.error!,
+                  onRetry: () =>
+                      ref.read(paymentMilestoneListProvider.notifier).refresh(),
+                )
+              : PaginatedListView(
+                  padding: const EdgeInsets.only(bottom: 80),
+                  items: state.items,
+                  isLoadingMore: state.isLoadingMore,
+                  hasMore: state.hasMore,
+                  onRefresh: () =>
+                      ref.read(paymentMilestoneListProvider.notifier).refresh(),
+                  onLoadMore: () => ref
+                      .read(paymentMilestoneListProvider.notifier)
+                      .loadMore(),
+                  empty: const EmptyState(
+                    title: 'No milestones found',
+                    subtitle:
+                        'Milestones appear here once an invoice is approved and sent.',
+                    icon: Icons.event_note_outlined,
+                  ),
+                  itemBuilder: (context, schedule, index) {
+                    return PaymentMilestoneTile(
+                      schedule: schedule,
+                      showParty: true,
+                      onTap: schedule.sourceId.isEmpty
+                          ? null
+                          : () => Navigator.pushNamed(
+                              context,
+                              '/invoices/detail',
+                              arguments: schedule.sourceId,
+                            ),
+                      onRecord: canWrite
+                          ? () => showRecordPaymentSheet(context, ref, schedule)
+                          : null,
+                    );
+                  },
+                ),
         ),
       ],
     );

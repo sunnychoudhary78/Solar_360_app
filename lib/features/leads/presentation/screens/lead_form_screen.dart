@@ -652,8 +652,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       isParsingBill = false;
     });
 
-    // Jump to Electricity Details so the user can check the read values.
-    _scrollToAnchor(_connectionSectionKey);
+    // Jump to the most relevant section so the user can check the read values.
+    _scrollToAnchor(
+      _isBasicCreate ? _basicSectionKey : _connectionSectionKey,
+    );
 
     // Optional public pincode lookup — fills state/city only when still empty.
     if (outcome.filledKeys.contains('pincode') &&
@@ -887,6 +889,117 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                   ),
               ],
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _billAutofillUploadSection() {
+    final scheme = Theme.of(context).colorScheme;
+    final path = predefinedDocPaths['Electricity Bill']?.trim() ?? '';
+    final hasFile = path.isNotEmpty;
+
+    return AppCard(
+      variant: AppCardVariant.outlined,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Electricity Bill',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Auto-fills the form',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          InkWell(
+            onTap: isLoading || isParsingBill
+                ? null
+                : () async {
+                    final picked = await _pickSingleFile(imageOnly: false);
+                    if (picked == null || !mounted) return;
+                    setState(() => predefinedDocPaths['Electricity Bill'] = picked);
+
+                    // Trigger parse
+                    final rejection = _billFileRejection(picked);
+                    if (rejection != null) {
+                      setState(() => predefinedDocPaths['Electricity Bill'] = null);
+                      showAppMessage(context, rejection, isError: true);
+                      return;
+                    }
+                    _parseElectricityBill(picked);
+                  },
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: .5),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    hasFile
+                        ? Icons.file_present_rounded
+                        : Icons.cloud_upload_outlined,
+                    size: 32,
+                    color: scheme.primary,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    hasFile ? fileDisplayName(path) : 'Upload File',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'PDF, JPG, PNG and more (Max 5MB)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (hasFile) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Tap to replace',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1533,7 +1646,19 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           if (customerId != null && customerId.isNotEmpty)
             'customer_id': customerId,
         };
-        final created = await repo.createLead(basicData);
+        final created = await repo.createLead(
+          basicData,
+          singleFilePaths: {
+            for (final e in singleFiles.entries)
+              if (e.value.isNotEmpty) e.key: e.value,
+          },
+          additionalImageEntries: mergedAdditionalImages
+              .map((e) => e.toPayload())
+              .toList(),
+          additionalDocumentEntries: mergedAdditionalDocs
+              .map((e) => e.toPayload())
+              .toList(),
+        );
         if (!mounted) return;
 
         if (widget.customerPortal) {
@@ -2920,6 +3045,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           child: formCard(
             children: [
               _billAutofillBanner(),
+              _billAutofillUploadSection(),
               if (!widget.customerPortal && _isBasicCreate) ...[
                 sectionTitle('Customer'),
                 _linkedCustomerSection(

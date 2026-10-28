@@ -151,7 +151,50 @@ class PaymentScheduleModel {
     final customerRaw = json['customer'];
     final receiptsRaw = json['receipts'];
     final amount = asDouble(json['amount']);
-    final paidAmount = asDouble(json['paid_amount']);
+
+    final receipts = receiptsRaw is List
+        ? receiptsRaw
+              .whereType<Map>()
+              .map(
+                (e) =>
+                    PaymentReceiptModel.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList()
+        : <PaymentReceiptModel>[];
+
+    // Paid amount: accept alternate keys the API may use, and fall back to
+    // the sum of attached receipts when the roll-up field is 0/missing.
+    var paidAmount = 0.0;
+    for (final key in const [
+      'paid_amount',
+      'paidAmount',
+      'received_amount',
+      'amount_paid',
+      'total_paid',
+    ]) {
+      final v = asDouble(json[key]);
+      if (v > paidAmount) paidAmount = v;
+    }
+    if (paidAmount <= 0 && receipts.isNotEmpty) {
+      paidAmount = receipts.fold<double>(0, (s, r) => s + r.amount);
+    }
+
+    final rawBalance = json['balance'] == null
+        ? (amount - paidAmount)
+        : asDouble(json['balance']);
+    // If the server balance wasn't reduced but money was received, trust the math.
+    final balance = (paidAmount > 0 && rawBalance >= amount - 0.009)
+        ? (amount - paidAmount).clamp(0, double.infinity).toDouble()
+        : rawBalance;
+
+    // Server can leave a part-paid milestone as "pending"/"overdue".
+    var status = asString(json['status'], PaymentScheduleStatus.pending);
+    if (paidAmount > 0.009 &&
+        balance > 0.009 &&
+        (status == PaymentScheduleStatus.pending ||
+            status == PaymentScheduleStatus.overdue)) {
+      status = PaymentScheduleStatus.partial;
+    }
 
     return PaymentScheduleModel(
       id: asString(json['id']),
@@ -165,12 +208,12 @@ class PaymentScheduleModel {
       percent: asDouble(json['percent']),
       amount: amount,
       paidAmount: paidAmount,
-      balance: json['balance'] == null
-          ? (amount - paidAmount)
-          : asDouble(json['balance']),
+      balance: balance,
       dueDate: json['due_date']?.toString(),
-      status: asString(json['status'], PaymentScheduleStatus.pending),
-      isOverdue: asBool(json['is_overdue']),
+      status: status,
+      isOverdue:
+          asBool(json['is_overdue']) ||
+          asString(json['status'], '') == PaymentScheduleStatus.overdue,
       daysOverdue: asInt(json['days_overdue']),
       isCustomerDue: json['is_customer_due'] == null
           ? true
@@ -179,43 +222,30 @@ class PaymentScheduleModel {
       partyName: json['party_name']?.toString(),
       invoiceNumber: json['invoice_number']?.toString(),
       customer: customerRaw is Map
-          ? PaymentCustomerInfo.fromJson(
-              Map<String, dynamic>.from(customerRaw),
-            )
+          ? PaymentCustomerInfo.fromJson(Map<String, dynamic>.from(customerRaw))
           : null,
-      receipts: receiptsRaw is List
-          ? receiptsRaw
-                .whereType<Map>()
-                .map(
-                  (e) =>
-                      PaymentReceiptModel.fromJson(Map<String, dynamic>.from(e)),
-                )
-                .toList()
-          : const [],
+      receipts: receipts,
       createdBy: json['created_by']?.toString(),
       createdAt: parseDate(json['created_at']),
     );
   }
 
   /// Party/company label matching the web list.
-  String get displayParty =>
-      partyName?.trim().isNotEmpty == true
-          ? partyName!
-          : (customer?.name.trim().isNotEmpty == true ? customer!.name : '—');
+  String get displayParty => partyName?.trim().isNotEmpty == true
+      ? partyName!
+      : (customer?.name.trim().isNotEmpty == true ? customer!.name : '—');
 
-  String get displayTitle =>
-      title.trim().isNotEmpty
-          ? title
-          : (invoiceNumber?.trim().isNotEmpty == true
-                ? 'Invoice $invoiceNumber'
-                : 'Milestone');
+  String get displayTitle => title.trim().isNotEmpty
+      ? title
+      : (invoiceNumber?.trim().isNotEmpty == true
+            ? 'Invoice $invoiceNumber'
+            : 'Milestone');
 
   bool get isSettled =>
       status == PaymentScheduleStatus.paid ||
       status == PaymentScheduleStatus.waived;
 
-  bool get canRecord =>
-      !isSettled && balance > 0.009;
+  bool get canRecord => !isSettled && balance > 0.009;
 
   double get overdueAmount => isOverdue ? balance : 0;
 
@@ -228,9 +258,13 @@ class PaymentScheduleModel {
   }
 
   PaymentScheduleModel copyWith({
+    double? amount,
     double? paidAmount,
     double? balance,
     String? status,
+    bool? isOverdue,
+    int? daysOverdue,
+    List<PaymentReceiptModel>? receipts,
   }) {
     return PaymentScheduleModel(
       id: id,
@@ -242,23 +276,56 @@ class PaymentScheduleModel {
       title: title,
       sequence: sequence,
       percent: percent,
-      amount: amount,
+      amount: amount ?? this.amount,
       paidAmount: paidAmount ?? this.paidAmount,
       balance: balance ?? this.balance,
       dueDate: dueDate,
       status: status ?? this.status,
-      isOverdue: isOverdue,
-      daysOverdue: daysOverdue,
+      isOverdue: isOverdue ?? this.isOverdue,
+      daysOverdue: daysOverdue ?? this.daysOverdue,
       isCustomerDue: isCustomerDue,
       notes: notes,
       partyName: partyName,
       invoiceNumber: invoiceNumber,
       customer: customer,
-      receipts: receipts,
+      receipts: receipts ?? this.receipts,
       createdBy: createdBy,
       createdAt: createdAt,
     );
   }
+
+  // PaymentScheduleModel copyWith({
+  //   double? paidAmount,
+  //   double? balance,
+  //   String? status,
+  // }) {
+  //   return PaymentScheduleModel(
+  //     id: id,
+  //     companyId: companyId,
+  //     sourceType: sourceType,
+  //     sourceId: sourceId,
+  //     quotationId: quotationId,
+  //     customerId: customerId,
+  //     title: title,
+  //     sequence: sequence,
+  //     percent: percent,
+  //     amount: amount,
+  //     paidAmount: paidAmount ?? this.paidAmount,
+  //     balance: balance ?? this.balance,
+  //     dueDate: dueDate,
+  //     status: status ?? this.status,
+  //     isOverdue: isOverdue,
+  //     daysOverdue: daysOverdue,
+  //     isCustomerDue: isCustomerDue,
+  //     notes: notes,
+  //     partyName: partyName,
+  //     invoiceNumber: invoiceNumber,
+  //     customer: customer,
+  //     receipts: receipts,
+  //     createdBy: createdBy,
+  //     createdAt: createdAt,
+  //   );
+  // }
 }
 
 /// Invoice roll-up (`summary` on the schedules-for-invoice call, `payment` on
@@ -299,8 +366,9 @@ class InvoicePaymentSummaryModel {
           ? schedulesRaw
                 .whereType<Map>()
                 .map(
-                  (e) =>
-                      PaymentScheduleModel.fromJson(Map<String, dynamic>.from(e)),
+                  (e) => PaymentScheduleModel.fromJson(
+                    Map<String, dynamic>.from(e),
+                  ),
                 )
                 .toList()
           : const [],
@@ -339,10 +407,10 @@ class InvoicePaymentBundle {
     final status = total <= 0
         ? InvoicePaymentStatus.unpaid
         : paid >= total - 0.009
-            ? InvoicePaymentStatus.paid
-            : paid > 0
-                ? InvoicePaymentStatus.partial
-                : InvoicePaymentStatus.unpaid;
+        ? InvoicePaymentStatus.paid
+        : paid > 0
+        ? InvoicePaymentStatus.partial
+        : InvoicePaymentStatus.unpaid;
     return InvoicePaymentSummaryModel(
       status: overdueCount > 0 ? InvoicePaymentStatus.overdue : status,
       amount: total,
@@ -446,8 +514,9 @@ class PaymentDashboardModel {
           ? (json['recentPayments'] as List)
                 .whereType<Map>()
                 .map(
-                  (e) =>
-                      PaymentReceiptModel.fromJson(Map<String, dynamic>.from(e)),
+                  (e) => PaymentReceiptModel.fromJson(
+                    Map<String, dynamic>.from(e),
+                  ),
                 )
                 .toList()
           : const [],
