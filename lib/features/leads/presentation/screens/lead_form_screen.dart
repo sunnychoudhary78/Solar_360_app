@@ -32,6 +32,11 @@ import 'package:solar_sales/shared/widgets/india_state_city_fields.dart';
 import 'package:solar_sales/shared/widgets/premium_feature_components.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+/// AI electricity-bill autofill is temporarily hidden from users.
+/// Flip to `true` to bring back the summary banner, the "Auto-fills the form"
+/// upload card, the per-field "From bill" tags and the bill-parse autofill.
+const bool kAiBillAutofillEnabled = false;
+
 enum LeadFormMode { basicCreate, completeDetails }
 
 class TitledLocalFile {
@@ -217,6 +222,8 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
   /// AI electricity-bill autofill state (parse is stateless, no lead created).
   bool isParsingBill = false;
+  bool _discomOtherMode = false;
+  int _autofillRevision = 0;
   bool _billAutofillActive = false;
   String _billParseMessage = '';
   final List<String> _billWarnings = [];
@@ -537,6 +544,14 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         return predefinedDocPaths['PAN Card'];
       case 'cheque_passbook':
         return chequePassbookPath;
+      case 'pre_installation_photo':
+        return preInstallationPhotoPath;
+      case 'roof_load_bearing_capacity':
+        return roofLoadBearingCapacity ? 'true' : '';
+      case 'shadow_free_roof':
+        return shadowFreeRoof ? 'true' : '';
+      case 'vendor_visited_site':
+        return vendorVisitedSite ? 'true' : '';
       default:
         return null;
     }
@@ -608,14 +623,17 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
       typedValue: _billCurrentValue,
     );
 
+    // Work on copies so values rejected below are not reported as "filled".
+    final filledKeys = <String>{...outcome.filledKeys};
+    final reviewKeys = <String>{...outcome.reviewKeys};
+    final maskedKeys = <String>{...result.maskedKeys, ...outcome.maskedKeys};
+
     void setText(TextEditingController controller, String key) {
       final value = outcome.values[key];
       if (value != null && value.isNotEmpty) controller.text = value;
     }
 
     setText(fullName, 'full_name');
-    setText(mobile, 'mobile');
-    setText(email, 'email');
     setText(caNumber, 'ca_number');
     setText(kNumber, 'k_number');
     setText(referenceNumber, 'reference_number');
@@ -624,8 +642,51 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     setText(address, 'address');
     setText(pincode, 'pincode');
     setText(bankAccountName, 'bank_account_name');
-    setText(state, 'state');
-    setText(city, 'city');
+
+    // Mobile: only a real 10-digit number. A masked value (98XXXXXX12,
+    // ******1234) is never written into the field.
+    if (outcome.values.containsKey('mobile')) {
+      final cleanMobile = _cleanBillMobile(outcome.values['mobile']);
+      if (cleanMobile != null) {
+        if (mobile.text.trim().isEmpty) mobile.text = cleanMobile;
+      } else {
+        filledKeys.remove('mobile');
+        reviewKeys.remove('mobile');
+        maskedKeys.add('mobile');
+      }
+    }
+
+    // Email: must be a syntactically valid address, otherwise leave it empty.
+    if (outcome.values.containsKey('email')) {
+      final cleanEmail = _cleanBillEmail(outcome.values['email']);
+      if (cleanEmail != null) {
+        if (email.text.trim().isEmpty) email.text = cleanEmail;
+      } else {
+        filledKeys.remove('email');
+        reviewKeys.remove('email');
+      }
+    }
+
+    // State/City: normalise to the dropdown values, otherwise the selects
+    // show nothing even though the bill was read correctly.
+    final rawState = outcome.values['state'];
+    final rawCity = outcome.values['city'];
+    if ((rawState ?? '').trim().isNotEmpty ||
+        (rawCity ?? '').trim().isNotEmpty) {
+      var nextState = state.text;
+      if ((rawState ?? '').trim().isNotEmpty) {
+        final normalized = normalizeStateName(rawState);
+        nextState = normalized.trim().isNotEmpty
+            ? normalized
+            : rawState!.trim();
+        state.text = nextState;
+      }
+      if ((rawCity ?? '').trim().isNotEmpty) {
+        final resolved = resolveIndiaCityName(rawCity, nextState);
+        // Never drop a city the bill gave us just because it is not in the list.
+        city.text = resolved.trim().isNotEmpty ? resolved : rawCity!.trim();
+      }
+    }
 
     final nextProjectType = outcome.values['project_type'];
     final filledCity = outcome.values['city'];
@@ -633,29 +694,56 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
 
     setState(() {
       if (nextProjectType != null && nextProjectType.isNotEmpty) {
-        projectType = nextProjectType;
+        projectType = _matchedOption(
+          nextProjectType,
+          projectTypeOptions,
+          projectType,
+        );
       }
       _billFilledKeys
         ..clear()
-        ..addAll(outcome.filledKeys);
+        ..addAll(filledKeys);
       _billReviewKeys
         ..clear()
-        ..addAll(outcome.reviewKeys);
+        ..addAll(reviewKeys);
       _billMaskedKeys
         ..clear()
-        ..addAll({...result.maskedKeys, ...outcome.maskedKeys});
+        ..addAll(maskedKeys);
       _billWarnings
         ..clear()
         ..addAll(result.warnings);
-      _billParseMessage = result.message;
+      // Rebuild the dropdown-style fields so they pick up controller values
+      // that were set after they were first built.
+      _autofillRevision++;
+      _discomOtherMode = false;
+
+      // Count only fields that are visible AND really hold a value now, so the
+      // banner number always matches what is on screen.
+      filledKeys.removeWhere(
+        (k) =>
+            !_isBillKeyVisible(k) ||
+            (_billCurrentValue(k) ?? '').trim().isEmpty,
+      );
+      reviewKeys.removeWhere((k) => !filledKeys.contains(k));
+      _billFilledKeys
+        ..clear()
+        ..addAll(filledKeys);
+      _billReviewKeys
+        ..clear()
+        ..addAll(reviewKeys);
+      final shown = filledKeys.length;
+      _billParseMessage = shown == 0
+          ? 'No fields could be read from the bill'
+          : 'Filled $shown field${shown == 1 ? '' : 's'} from the bill. '
+              'Please review the green labels.';
       _billAutofillActive = true;
       isParsingBill = false;
     });
 
     // Jump to the most relevant section so the user can check the read values.
-    _scrollToAnchor(
-      _isBasicCreate ? _basicSectionKey : _connectionSectionKey,
-    );
+    // Backend doc: after a parse, jump to Electricity Details so the user
+    // checks consumer number / DISCOM / load.
+    _scrollToAnchor(_connectionSectionKey);
 
     // Optional public pincode lookup — fills state/city only when still empty.
     if (outcome.filledKeys.contains('pincode') &&
@@ -672,6 +760,49 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
         }
       });
     }
+  }
+
+  static final RegExp _validEmailRe = RegExp(
+    r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$',
+  );
+
+  /// Returns a clean 10-digit mobile, or null when missing/masked.
+  String? _cleanBillMobile(String? raw) {
+    final value = (raw ?? '').trim();
+    if (value.isEmpty) return null;
+    if (RegExp(r'[xX*•#]').hasMatch(value)) return null; // masked on the bill
+    var digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 10) digits = digits.substring(digits.length - 10);
+    return RegExp(r'^[6-9]\d{9}$').hasMatch(digits) ? digits : null;
+  }
+
+  /// Returns a valid email, or null (never partial/garbled text).
+  String? _cleanBillEmail(String? raw) {
+    final value = (raw ?? '').trim();
+    if (value.isEmpty || !_validEmailRe.hasMatch(value)) return null;
+    if (RegExp(r'[xX*•]{3,}').hasMatch(value)) return null;
+    return value;
+  }
+
+  /// Bill keys that have a visible field in the current form mode.
+  bool _isBillKeyVisible(String key) {
+    const basicKeys = {
+      'full_name',
+      'mobile',
+      'email',
+      'address',
+      'city',
+      'state',
+      'pincode',
+      'load_section_kw',
+      'ca_number',
+      'k_number',
+      'reference_number',
+      'discom',
+      'project_type',
+    };
+    if (key == 'electricity_bill') return false; // the uploaded file itself
+    return _isBasicCreate ? basicKeys.contains(key) : true;
   }
 
   void _resetBillAutofill() {
@@ -729,7 +860,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
   }
 
   Widget? _billTag(String key) {
-    if (!_billAutofillActive) return null;
+    if (!kAiBillAutofillEnabled || !_billAutofillActive) return null;
     if (_billMaskedKeys.contains(key)) {
       return _billTagChip('Masked on the bill', const Color(0xFF6D4C41));
     }
@@ -799,7 +930,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
     );
     final reviewLabels = _billLabelsFor(_billReviewKeys);
     final maskedLabels = _billLabelsFor(_billMaskedKeys);
-    final filledCount = _billFilledKeys.length;
+    final filledCount = _billFilledKeys.where(_isBillKeyVisible).length;
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -862,7 +993,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Still needed',
+            'Still needed (${stillNeeded.length})',
             style: TextStyle(
               fontWeight: FontWeight.w800,
               color: scheme.onSurface,
@@ -1639,6 +1770,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           'state': data['state'],
           'pincode': data['pincode'],
           'load_section_kw': data['load_section_kw'],
+          'ca_number': data['ca_number'],
+          'k_number': data['k_number'],
+          'reference_number': data['reference_number'],
+          'discom': data['discom'],
           'project_type': data['project_type'],
           'source': data['source'],
           'priority': data['priority'],
@@ -1923,6 +2058,68 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           ),
           child: Align(alignment: Alignment.centerLeft, child: tag),
         ),
+      ],
+    );
+  }
+
+  /// DISCOM per backend doc: a known name selects that option; anything else
+  /// selects "Other" and the raw name goes into a free-text box.
+  Widget _discomField({bool isRequired = false}) {
+    final text = discom.text.trim();
+    final isOther =
+        _discomOtherMode || (text.isNotEmpty && !discomOptions.contains(text));
+    final dropdownValue = isOther
+        ? 'Other'
+        : (text.isNotEmpty ? text : null);
+    final tag = _billTag('discom');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(bottom: tag == null ? AppSpacing.md - 2 : 4),
+          child: DropdownButtonFormField<String>(
+            value: dropdownValue,
+            isExpanded: true,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            validator: isRequired
+                ? (_) => discom.text.trim().isEmpty ? 'DISCOM is required' : null
+                : null,
+            decoration: InputDecoration(
+              label: _requiredFieldLabel('DISCOM', isRequired: isRequired),
+              hintText: 'Select DISCOM',
+            ),
+            items: _discomMenuItems,
+            onChanged: isLoading
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    setState(() {
+                      if (value == 'Other') {
+                        _discomOtherMode = true;
+                        if (discomOptions.contains(discom.text.trim())) {
+                          discom.clear();
+                        }
+                      } else {
+                        _discomOtherMode = false;
+                        discom.text = value;
+                      }
+                    });
+                  },
+          ),
+        ),
+        if (tag != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: AppSpacing.md - 2),
+            child: Align(alignment: Alignment.centerLeft, child: tag),
+          ),
+        if (isOther)
+          input(
+            'Other DISCOM name',
+            discom,
+            textCapitalization: TextCapitalization.words,
+            isRequired: isRequired,
+          ),
       ],
     );
   }
@@ -3044,8 +3241,10 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
           padding: const EdgeInsets.all(18),
           child: formCard(
             children: [
-              _billAutofillBanner(),
-              _billAutofillUploadSection(),
+              if (kAiBillAutofillEnabled) ...[
+                _billAutofillBanner(),
+                _billAutofillUploadSection(),
+              ],
               if (!widget.customerPortal && _isBasicCreate) ...[
                 sectionTitle('Customer'),
                 _linkedCustomerSection(
@@ -3107,6 +3306,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ),
               ),
               IndiaStateCityFields(
+                key: ValueKey('state_city_$_autofillRevision'),
                 stateController: state,
                 cityController: city,
                 stateRequired: _isCompleteDetails,
@@ -3129,33 +3329,43 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                 ),
                 tag: _billTag('load_section_kw'),
               ),
+              // Shown in both modes so values read from the bill are visible
+              // (and saved) even on the basic "Create Lead" form.
+              sectionTitle('Connection Details', anchor: _connectionSectionKey),
+              input(
+                'CA Number',
+                caNumber,
+                isRequired: !_isBasicCreate,
+                tag: _billTag('ca_number'),
+              ),
+              input(
+                'K Number',
+                kNumber,
+                tag: _billTag('k_number'),
+              ),
+              input(
+                'Reference Number',
+                referenceNumber,
+                tag: _billTag('reference_number'),
+              ),
+              KeyedSubtree(
+                key: ValueKey('discom_$_autofillRevision'),
+                child: _discomField(isRequired: !_isBasicCreate),
+              ),
+              if (_isBasicCreate)
+                KeyedSubtree(
+                  key: ValueKey('ptype_basic_$_autofillRevision'),
+                  child: dropdown(
+                    label: 'Project Type',
+                    value: projectType,
+                    items: projectTypeOptions,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      projectType = value;
+                    },
+                  ),
+                ),
               if (!_isBasicCreate) ...[
-                sectionTitle('Connection Details', anchor: _connectionSectionKey),
-                input(
-                  'CA Number',
-                  caNumber,
-                  isRequired: true,
-                  tag: _billTag('ca_number'),
-                ),
-                input(
-                  'K Number',
-                  kNumber,
-                  tag: _billTag('k_number'),
-                ),
-                input(
-                  'Reference Number',
-                  referenceNumber,
-                  tag: _billTag('reference_number'),
-                ),
-                controllerDropdown(
-                  label: 'DISCOM',
-                  controller: discom,
-                  items: discomOptions,
-                  menuItems: _discomMenuItems,
-                  hintText: 'Select DISCOM',
-                  isRequired: true,
-                  tag: _billTag('discom'),
-                ),
                 sectionTitle('Location'),
                 locationStatusBox(),
                 input(
@@ -3360,6 +3570,7 @@ class _LeadFormScreenState extends ConsumerState<LeadFormScreen> {
                               showAppMessage(context, rejection, isError: true);
                               return;
                             }
+                            if (!kAiBillAutofillEnabled) return;
                             _parseElectricityBill(path);
                           },
                         ),

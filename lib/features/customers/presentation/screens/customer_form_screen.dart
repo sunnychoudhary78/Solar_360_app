@@ -105,9 +105,9 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
     );
 
     setState(() => _loading = true);
-    ref.read(globalLoadingProvider.notifier).showLoading(
-          isEdit ? 'Updating customer...' : 'Creating customer...',
-        );
+    ref
+        .read(globalLoadingProvider.notifier)
+        .showLoading(isEdit ? 'Updating customer...' : 'Creating customer...');
 
     try {
       final repo = ref.read(customerRepositoryProvider);
@@ -117,9 +117,7 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
         await repo.update(widget.customerId!, model);
       } else {
         final created = await repo.create(model);
-        popResult = created.customer.id.isNotEmpty
-            ? created.customer.id
-            : true;
+        popResult = created.customer.id.isNotEmpty ? created.customer.id : true;
         credentials = created.credentials;
       }
       ref.read(customerListProvider.notifier).refresh();
@@ -127,15 +125,12 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
         ref.invalidate(customerDetailProvider(widget.customerId!));
       }
       ref.read(globalLoadingProvider.notifier).hide();
-      ref.read(globalLoadingProvider.notifier).showSuccess(
-            isEdit ? 'Customer updated' : 'Customer created',
-          );
+      ref
+          .read(globalLoadingProvider.notifier)
+          .showSuccess(isEdit ? 'Customer updated' : 'Customer created');
       if (!mounted) return;
       if (credentials != null) {
-        await showCustomerCredentialsDialog(
-          context,
-          credentials: credentials,
-        );
+        await showCustomerCredentialsDialog(context, credentials: credentials);
       }
       if (mounted) Navigator.pop(context, popResult);
     } catch (e) {
@@ -271,15 +266,38 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
                 validator: AppValidators.optionalPhone,
               ),
               const SizedBox(height: AppSpacing.md),
+
               TextFormField(
                 controller: _email,
                 decoration: const InputDecoration(
                   labelText: 'Email *',
-                  hintText: 'Used for customer login',
+                  hintText: 'example@gmail.com',
                 ),
                 keyboardType: TextInputType.emailAddress,
-                inputFormatters: [LengthLimitingTextInputFormatter(100)],
-                validator: AppValidators.email,
+                textCapitalization: TextCapitalization.none,
+                autocorrect: false,
+                inputFormatters: [
+                  FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                  LengthLimitingTextInputFormatter(100),
+                ],
+                validator: (value) {
+                  final email = value?.trim() ?? '';
+
+                  if (email.isEmpty) {
+                    return 'Email is required';
+                  }
+
+                  final emailRegex = RegExp(
+                    r'^[a-zA-Z0-9]+([._%+-]?[a-zA-Z0-9]+)*@'
+                    r'[a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+$',
+                  );
+
+                  if (!emailRegex.hasMatch(email)) {
+                    return 'Please enter a valid email address';
+                  }
+
+                  return null;
+                },
               ),
 
               const SizedBox(height: AppSpacing.xl),
@@ -292,11 +310,8 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
                 decoration: const InputDecoration(labelText: 'Street Address'),
                 maxLines: 2,
                 inputFormatters: [LengthLimitingTextInputFormatter(250)],
-                validator: (v) => AppValidators.maxLength(
-                  v,
-                  max: 250,
-                  field: 'Address',
-                ),
+                validator: (v) =>
+                    AppValidators.maxLength(v, max: 250, field: 'Address'),
               ),
               const SizedBox(height: AppSpacing.md),
               IndiaStateCityFields(
@@ -320,7 +335,10 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
               const SizedBox(height: AppSpacing.xl),
 
               // Tax Section
-              _buildSectionHeader('Tax & Identification', 'GST and Aadhar verification'),
+              _buildSectionHeader(
+                'Tax & Identification',
+                'GST and Aadhar verification',
+              ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _gst,

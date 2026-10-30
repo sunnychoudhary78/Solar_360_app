@@ -83,6 +83,10 @@ const Map<String, String> _billFieldLabels = {
   'aadhaar_back': 'Aadhaar back',
   'pan_card': 'PAN card',
   'cheque_passbook': 'Cheque / passbook',
+  'pre_installation_photo': 'Pre-installation photo',
+  'roof_load_bearing_capacity': 'Roof load bearing',
+  'shadow_free_roof': 'Shadow-free roof',
+  'vendor_visited_site': 'Vendor visited site',
   'available_shadow_free_area': 'Shadow-free area',
   'quotation_amount': 'Quotation amount',
   'visited_employee_name': 'Visited employee',
@@ -114,6 +118,10 @@ const Map<String, String> _billFieldSections = {
   'aadhaar_back': 'documents',
   'pan_card': 'documents',
   'cheque_passbook': 'documents',
+  'pre_installation_photo': 'documents',
+  'roof_load_bearing_capacity': 'site',
+  'shadow_free_roof': 'site',
+  'vendor_visited_site': 'site',
   'available_shadow_free_area': 'site',
   'quotation_amount': 'site',
   'visited_employee_name': 'site',
@@ -128,20 +136,20 @@ const List<String> _billRequiredKeys = [
   'ca_number',
   'discom',
   'load_section_kw',
-  'address',
-  'city',
-  'state',
-  'pincode',
   'electricity_bill',
   'aadhaar_front',
   'aadhaar_back',
   'pan_card',
   'cheque_passbook',
+  'pre_installation_photo',
   'bank_account_name',
   'bank_name',
   'account_number',
   'account_type',
   'ifsc_code',
+  'roof_load_bearing_capacity',
+  'shadow_free_roof',
+  'vendor_visited_site',
   'available_shadow_free_area',
   'quotation_amount',
   'visited_employee_name',
@@ -183,11 +191,36 @@ bool isMaskedBillValue(String raw) {
   final text = raw.trim();
   if (text.isEmpty) return false;
   if (RegExp(r'[*＊✱⁎]').hasMatch(text)) return true;
-  if (RegExp(r'[•●◉]{2,}').hasMatch(text)) return true;
+  if (RegExp(r'[•●◉…]').hasMatch(text)) return true;
   final compact = text.replaceAll(RegExp(r'[\s.\-_/]'), '');
   if (RegExp(r'X{3,}', caseSensitive: false).hasMatch(compact)) return true;
   if (RegExp(r'#{2,}').hasMatch(compact)) return true;
+  // A phone-like value mixing digits with x/X is a masked number
+  // (e.g. 98xx543210), never a real one.
+  if (RegExp(r'\d').hasMatch(compact) &&
+      RegExp(r'^[\dxX]+$').hasMatch(compact) &&
+      RegExp(r'[xX]').hasMatch(compact)) {
+    return true;
+  }
   return false;
+}
+
+final RegExp _billEmailRe = RegExp(
+  r'^[A-Za-z0-9][A-Za-z0-9._%+\-]*@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$',
+);
+
+/// Strict email check for bill values. A partially masked address such as
+/// `raXX@gmail.com`, `r…h@gmail.com` or OCR noise returns `null` so the field
+/// stays empty instead of getting made-up letters.
+String? normalizeBillEmail(String raw) {
+  final value = raw.trim().replaceAll(RegExp(r'\s'), '');
+  if (value.isEmpty || value.length > 254) return null;
+  if (!_billEmailRe.hasMatch(value)) return null;
+  final local = value.split('@').first;
+  // Repeated x / dots / dashes in the local part are mask fillers.
+  if (RegExp(r'x{2,}', caseSensitive: false).hasMatch(local)) return null;
+  if (RegExp(r'[.\-_]{2,}').hasMatch(local)) return null;
+  return value;
 }
 
 /// DISCOM is a dropdown on web; the app dropdown keeps unknown values verbatim
@@ -195,9 +228,16 @@ bool isMaskedBillValue(String raw) {
 String billDiscomValue(String raw) {
   final value = raw.trim();
   if (value.isEmpty) return '';
+  final lower = value.toLowerCase();
   for (final option in kBillDiscomOptions) {
-    if (option.toLowerCase() == value.toLowerCase()) return option;
+    if (option.toLowerCase() == lower) return option;
   }
+  // "BSES Rajdhani Power Ltd" -> "BSES Rajdhani" (longest match first).
+  final candidates = kBillDiscomOptions
+      .where((o) => o != 'Other' && lower.contains(o.toLowerCase()))
+      .toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  if (candidates.isNotEmpty) return candidates.first;
   return value;
 }
 
@@ -225,14 +265,18 @@ String? normalizeBillValue(String key, String raw) {
         ? number.toInt().toString()
         : number.toString();
   }
-  if (key == 'email') {
-    final valid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
-    return valid ? value : null;
-  }
+  if (key == 'email') return normalizeBillEmail(value);
   if (key == 'project_type') {
+    final lower = value.toLowerCase();
     for (final option in kBillProjectTypes) {
-      if (option.toLowerCase() == value.toLowerCase()) return option;
+      if (option.toLowerCase() == lower) return option;
     }
+    // Tariff wording used on bills.
+    if (lower.contains('non') && lower.contains('dom')) return 'Commercial';
+    if (lower.contains('dom') || lower.contains('resid')) return 'Residential';
+    if (lower.contains('comm')) return 'Commercial';
+    if (lower.contains('indus')) return 'Industrial';
+    if (lower.contains('agri') || lower.contains('farm')) return 'Agriculture';
     return null;
   }
   if (key == 'discom') return billDiscomValue(value);
