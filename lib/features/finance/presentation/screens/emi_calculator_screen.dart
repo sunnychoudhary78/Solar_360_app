@@ -793,6 +793,8 @@ class _SummaryCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final remainingMonths = result.months - kAdvanceZeroMonths;
     final afterEmi = _afterTeaserEmi;
+    final showSplitEmi = _advanceTeaserSplit && afterEmi != null;
+
     return PremiumCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -806,37 +808,20 @@ class _SummaryCard extends StatelessWidget {
           ),
           _summaryRow(context, 'Loan amount', formatEmiInr(result.principal)),
           _summaryRow(context, 'Loan term', formatTenure(result.months)),
-          _summaryRow(
-            context,
-            'Total interest',
-            formatEmiScheduleInr(result.totalInterest),
-          ),
-          _summaryRow(
-            context,
-            'Total repayment',
-            formatEmiScheduleInr(result.totalPayment),
-          ),
-          const Divider(height: 24),
-          Text(
-            _advanceTeaserSplit ? 'EMI · first $kAdvanceZeroMonths months' : 'EMI',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            formatEmiScheduleInr(result.emi),
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: colorScheme.primary,
-                ),
-          ),
-          if (_advanceTeaserSplit && afterEmi != null) ...[
-            const SizedBox(height: 12),
+          if (!showSplitEmi) ...[
+            _summaryRow(
+              context,
+              'Total interest',
+              formatEmiScheduleInr(result.totalInterest),
+            ),
+            _summaryRow(
+              context,
+              'Total repayment',
+              formatEmiScheduleInr(result.totalPayment),
+            ),
+            const Divider(height: 24),
             Text(
-              'EMI · after $kAdvanceZeroMonths months',
+              'Monthly EMI',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w700,
@@ -845,11 +830,63 @@ class _SummaryCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              formatEmiScheduleInr(afterEmi),
+              formatEmiScheduleInr(result.emi),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                     color: colorScheme.primary,
                   ),
+            ),
+          ] else ...[
+            const Divider(height: 24),
+            Text(
+              'Monthly EMI',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final stack = constraints.maxWidth < 360;
+                final freeCard = _EmiAmountCard(
+                  label: 'First $kAdvanceZeroMonths Months EMI',
+                  amount: formatEmiScheduleInr(result.emi),
+                );
+                final afterCard = _EmiAmountCard(
+                  label: 'Next $remainingMonths Months EMI',
+                  amount: formatEmiScheduleInr(afterEmi),
+                );
+                if (stack) {
+                  return Column(
+                    children: [
+                      freeCard,
+                      const SizedBox(height: 8),
+                      afterCard,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: freeCard),
+                    const SizedBox(width: 8),
+                    Expanded(child: afterCard),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _summaryRow(
+              context,
+              'Total interest',
+              formatEmiScheduleInr(result.totalInterest),
+            ),
+            _summaryRow(
+              context,
+              'Total repayment',
+              formatEmiScheduleInr(result.totalPayment),
             ),
             const SizedBox(height: 6),
             Text(
@@ -898,6 +935,53 @@ class _SummaryCard extends StatelessWidget {
               fontSize: accent ? 16 : 13,
               color: accent ? scheme.primary : scheme.onSurface,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmiAmountCard extends StatelessWidget {
+  const _EmiAmountCard({
+    required this.label,
+    required this.amount,
+  });
+
+  final String label;
+  final String amount;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(
+          color: colorScheme.primary.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                  height: 1.3,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            amount,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: colorScheme.primary,
+                ),
           ),
         ],
       ),
