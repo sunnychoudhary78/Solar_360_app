@@ -58,6 +58,9 @@ class WhatsappComposeResult {
   final String recipientName;
   final String phone;
   final String message;
+  final String? designUrl;
+  final bool designAttached;
+  final String? documentUrl;
 
   const WhatsappComposeResult({
     required this.entityType,
@@ -67,6 +70,9 @@ class WhatsappComposeResult {
     required this.recipientName,
     required this.phone,
     required this.message,
+    this.designUrl,
+    this.designAttached = false,
+    this.documentUrl,
   });
 
   factory WhatsappComposeResult.fromJson(Map<String, dynamic> json) {
@@ -87,8 +93,17 @@ class WhatsappComposeResult {
       recipientName: asString(json['recipientName']),
       phone: asString(json['phone']),
       message: asString(json['message']),
+      designUrl: _optionalUrl(json['designUrl'] ?? json['design_url']),
+      designAttached:
+          json['designAttached'] == true || json['design_attached'] == true,
+      documentUrl: _optionalUrl(json['documentUrl'] ?? json['document_url']),
     );
   }
+}
+
+String? _optionalUrl(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
 }
 
 class WhatsappShareResult {

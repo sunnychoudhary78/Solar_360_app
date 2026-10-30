@@ -29,6 +29,7 @@ const billbookPerms = [
   'inventory.read',
   'quotation.read',
   'invoice.read',
+  'payment.read',
   'report.read',
 ];
 

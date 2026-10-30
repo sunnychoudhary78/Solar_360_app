@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/features/payments/data/models/payment_models.dart';
+import 'package:solar_sales/features/payments/presentation/payment_format.dart';
 import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
@@ -267,6 +269,9 @@ class _InvoiceCard extends StatelessWidget {
     final reason = invoice.rejectionReason?.trim();
     final isRejected =
         invoice.status == 'rejected' && reason != null && reason.isNotEmpty;
+    final rawPayment = invoice.payment;
+    final payment =
+        rawPayment is InvoicePaymentSummaryModel ? rawPayment : null;
 
     return PremiumCard(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -348,6 +353,42 @@ class _InvoiceCard extends StatelessWidget {
               ),
             ],
           ),
+          if (payment != null) ...[
+            const SizedBox(height: 10),
+            Divider(
+              height: 1,
+              color: scheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  payment.isOverdue
+                      ? Icons.error_outline
+                      : Icons.payments_outlined,
+                  size: 15,
+                  color: payment.isOverdue ? scheme.error : scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Collection · balance ${formatInr(payment.balance)}'
+                    '${payment.dueDate != null ? ' · due ${dueDateLabel(payment.dueDate)}' : ''}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: payment.isOverdue
+                          ? scheme.error
+                          : scheme.onSurfaceVariant,
+                      fontWeight: payment.isOverdue ? FontWeight.w700 : null,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PremiumStatusPill.forStatus(context, payment.status),
+              ],
+            ),
+          ],
           if (isRejected) ...[
             const SizedBox(height: 12),
             Container(

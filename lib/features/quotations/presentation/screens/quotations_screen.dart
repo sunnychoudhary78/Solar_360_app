@@ -268,6 +268,30 @@ class _QuotationCard extends StatelessWidget {
               ),
             ],
           ),
+          if (quotation.hasSolarDesign == true) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  Icons.view_in_ar_outlined,
+                  size: 16,
+                  color: scheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    quotation.solarDesign?.summaryLabel ?? '3D design attached',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (isRejected) ...[
             const SizedBox(height: 12),
             Container(

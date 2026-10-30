@@ -118,6 +118,18 @@ class NavDestinations {
       quickActionSubtitle: 'Manage parties',
     ),
     AppDestination(
+      id: 'bb_costing',
+      label: 'Costing & BOM',
+      icon: Icons.calculate_outlined,
+      selectedIcon: Icons.calculate_rounded,
+      section: NavSection.main,
+      kind: NavKind.route,
+      anyOf: ['costing.read', 'costing.create'],
+      route: '/costing',
+      quickAction: true,
+      quickActionSubtitle: 'Build customer costings',
+    ),
+    AppDestination(
       id: 'bb_quotes',
       label: 'Quotes',
       icon: Icons.request_quote_outlined,
@@ -152,6 +164,18 @@ class NavDestinations {
       screen: InvoicesScreen(),
       quickAction: true,
       quickActionSubtitle: 'Billing & dispatch',
+    ),
+    AppDestination(
+      id: 'bb_payments',
+      label: 'Payments',
+      icon: Icons.payments_outlined,
+      selectedIcon: Icons.payments_rounded,
+      section: NavSection.main,
+      kind: NavKind.route,
+      anyOf: ['payment.read', 'invoice.read', 'module.billbook.access'],
+      route: '/payments',
+      quickAction: true,
+      quickActionSubtitle: 'Collections & dues',
     ),
     AppDestination(
       id: 'bb_notifications',
@@ -332,6 +356,18 @@ class NavDestinations {
       route: '/customers',
     ),
     AppDestination(
+      id: 'ge_costing',
+      label: 'Costing & BOM',
+      icon: Icons.calculate_outlined,
+      selectedIcon: Icons.calculate_rounded,
+      section: NavSection.solarCrm,
+      kind: NavKind.route,
+      anyOf: ['costing.read', 'costing.create'],
+      route: '/solar/costing',
+      quickAction: true,
+      quickActionSubtitle: 'Build customer or lead costings',
+    ),
+    AppDestination(
       id: 'ge_completed',
       label: 'Completed Leads',
       icon: Icons.task_alt_outlined,
@@ -417,12 +453,7 @@ class NavDestinations {
       selectedIcon: Icons.checklist_rounded,
       section: NavSection.solarCrm,
       kind: NavKind.route,
-      anyOf: [
-        'task.read',
-        'task.create',
-        'task.update',
-        'task.delete',
-      ],
+      anyOf: ['task.read', 'task.create', 'task.update', 'task.delete'],
       route: '/solar/task-management',
       quickAction: true,
       quickActionSubtitle: 'Project tasks & assignees',
@@ -491,7 +522,10 @@ class NavDestinations {
   }) {
     return forModule(moduleId).where((d) {
       if (d.section != section) return false;
-      return d.shownTo(hasPermission: hasPermission, companyAdmin: companyAdmin);
+      return d.shownTo(
+        hasPermission: hasPermission,
+        companyAdmin: companyAdmin,
+      );
     }).toList();
   }
 
@@ -503,7 +537,10 @@ class NavDestinations {
   }) {
     return forModule(moduleId).where((d) {
       if (!d.quickAction) return false;
-      return d.shownTo(hasPermission: hasPermission, companyAdmin: companyAdmin);
+      return d.shownTo(
+        hasPermission: hasPermission,
+        companyAdmin: companyAdmin,
+      );
     }).toList();
   }
 

@@ -51,19 +51,21 @@ class AppDrawer extends ConsumerWidget {
       return auth.hasPermission(permission);
     }
 
-    final canReadSupport = hasPerm('solar.support.read') ||
-        hasPerm('support_ticket.read');
+    final canReadSupport =
+        hasPerm('solar.support.read') || hasPerm('support_ticket.read');
     final supportUnread = canReadSupport
-        ? ref.watch(supportTicketListProvider).items.fold<int>(
-              0,
-              (sum, ticket) =>
-                  sum + ticket.unreadIncomingCount(isCustomerView: false),
-            )
+        ? ref
+              .watch(supportTicketListProvider)
+              .items
+              .fold<int>(
+                0,
+                (sum, ticket) =>
+                    sum + ticket.unreadIncomingCount(isCustomerView: false),
+              )
         : 0;
 
     final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
-    final routeName =
-        activeRoute ?? ModalRoute.of(context)?.settings.name;
+    final routeName = activeRoute ?? ModalRoute.of(context)?.settings.name;
     final drawerRadius = Radius.circular(isIOS ? 16 : 28);
 
     final sections = <NavSection>[
@@ -113,12 +115,11 @@ class AppDrawer extends ConsumerWidget {
             selectedIcon: dest.effectiveSelectedIcon,
             title: dest.label,
             isActive: _isActive(dest, routeName),
-            badgeCount: dest.id == 'ge_alerts' ||
-                    dest.id == 'bb_notifications'
+            badgeCount: dest.id == 'ge_alerts' || dest.id == 'bb_notifications'
                 ? unreadCount
                 : dest.id == 'ge_support'
-                    ? supportUnread
-                    : 0,
+                ? supportUnread
+                : 0,
             onTap: () {
               Navigator.pop(context);
               onSelectDestination(dest);
@@ -183,12 +184,7 @@ class AppDrawer extends ConsumerWidget {
                   // ---------------------------------------------------------
                   if (showModuleToggle && onModuleChanged != null) ...[
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        14,
-                        8,
-                        14,
-                        6,
-                      ),
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
                       child: ModuleToggle(
                         activeModule: activeModule,
                         onChanged: (id) {
@@ -215,9 +211,7 @@ class AppDrawer extends ConsumerWidget {
             // FOOTER
             // ---------------------------------------------------------------
             Divider(
-              color: scheme.outlineVariant.withValues(
-                alpha: 0.5,
-              ),
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
               height: 1,
             ),
 
@@ -225,18 +219,11 @@ class AppDrawer extends ConsumerWidget {
             // THEME TOGGLE
             // ---------------------------------------------------------------
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                14,
-                8,
-                14,
-                4,
-              ),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
               child: AppDrawerThemeToggle(
                 themeMode: themeMode,
                 onChanged: (mode) {
-                  ref
-                      .read(themeModeProvider.notifier)
-                      .changeMode(mode);
+                  ref.read(themeModeProvider.notifier).changeMode(mode);
                 },
               ),
             ),
@@ -245,12 +232,7 @@ class AppDrawer extends ConsumerWidget {
             // LOGOUT
             // ---------------------------------------------------------------
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                14,
-                4,
-                14,
-                14,
-              ),
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
               child: AppDrawerTile(
                 index: animIndex++,
                 icon: Icons.logout_rounded,
@@ -260,8 +242,7 @@ class AppDrawer extends ConsumerWidget {
                   final ok = await showConfirmDialog(
                     context,
                     title: 'Logout',
-                    message:
-                        'Are you sure you want to sign out?',
+                    message: 'Are you sure you want to sign out?',
                     confirmLabel: 'Logout',
                     isDestructive: true,
                   );
@@ -276,9 +257,7 @@ class AppDrawer extends ConsumerWidget {
                   }
                   await Future<void>.delayed(Duration.zero);
 
-                  await ref
-                      .read(authProvider.notifier)
-                      .logout();
+                  await ref.read(authProvider.notifier).logout();
                 },
               ),
             ),
@@ -292,10 +271,7 @@ class AppDrawer extends ConsumerWidget {
   // ROLE SWITCHER
   // ===========================================================================
 
-  Future<void> _showRoleSwitcher(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _showRoleSwitcher(BuildContext context, WidgetRef ref) async {
     final auth = ref.read(authProvider);
 
     final currentRole = auth.effectiveRoleName.trim();
@@ -315,9 +291,7 @@ class AppDrawer extends ConsumerWidget {
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
-            title: const Text(
-              'Switch Role',
-            ),
+            title: const Text('Switch Role'),
             content: const Text(
               'No roles are currently assigned '
               'to this user.',
@@ -344,36 +318,25 @@ class AppDrawer extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor:
-          Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (sheetContext) {
-        final scheme =
-            Theme.of(sheetContext).colorScheme;
+        final scheme = Theme.of(sheetContext).colorScheme;
 
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              4,
-              16,
-              20,
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment:
-                  CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // -------------------------------------------------------------
                 // TITLE
                 // -------------------------------------------------------------
                 Text(
                   'Switch Role',
-                  style: Theme.of(sheetContext)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                  style: Theme.of(
+                    sheetContext,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
 
                 const SizedBox(height: 4),
@@ -384,14 +347,10 @@ class AppDrawer extends ConsumerWidget {
                 if (currentRole.isNotEmpty)
                   Text(
                     'Current role: $currentRole',
-                    style: Theme.of(sheetContext)
-                        .textTheme
-                        .bodyMedium
+                    style: Theme.of(sheetContext).textTheme.bodyMedium
                         ?.copyWith(
-                          color:
-                              scheme.onSurfaceVariant,
-                          fontWeight:
-                              FontWeight.w600,
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
                         ),
                   ),
 
@@ -407,28 +366,17 @@ class AppDrawer extends ConsumerWidget {
                     separatorBuilder: (context, index) {
                       return const SizedBox(height: 6);
                     },
-                    itemBuilder: (
-                      itemContext,
-                      index,
-                    ) {
+                    itemBuilder: (itemContext, index) {
                       final role = roles[index];
                       final isCurrent =
                           role.toLowerCase() == currentRole.toLowerCase();
 
                       return Material(
-                        color:
-                            scheme.surfaceContainerLow,
-                        borderRadius:
-                            BorderRadius.circular(
-                          AppRadius.lg,
-                        ),
+                        color: scheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
                         child: ListTile(
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(
-                              AppRadius.lg,
-                            ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.lg),
                           ),
                           leading: Icon(
                             Icons.badge_outlined,
@@ -436,10 +384,7 @@ class AppDrawer extends ConsumerWidget {
                           ),
                           title: Text(
                             role,
-                            style: const TextStyle(
-                              fontWeight:
-                                  FontWeight.w700,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: isCurrent
                               ? Text(
@@ -468,8 +413,7 @@ class AppDrawer extends ConsumerWidget {
                             // -------------------------------------------------
                             // CONFIRM ROLE SWITCH
                             // -------------------------------------------------
-                            final confirmed =
-                                await showConfirmDialog(
+                            final confirmed = await showConfirmDialog(
                               itemContext,
                               title: 'Switch role',
                               message:
@@ -479,8 +423,7 @@ class AppDrawer extends ConsumerWidget {
                               confirmLabel: 'Switch',
                             );
 
-                            if (!confirmed ||
-                                !itemContext.mounted) {
+                            if (!confirmed || !itemContext.mounted) {
                               return;
                             }
 
@@ -499,10 +442,7 @@ class AppDrawer extends ConsumerWidget {
                             await Future<void>.delayed(Duration.zero);
 
                             await ref
-                                .read(
-                                  authProvider
-                                      .notifier,
-                                )
+                                .read(authProvider.notifier)
                                 .switchRole(role);
                           },
                         ),
@@ -519,12 +459,13 @@ class AppDrawer extends ConsumerWidget {
   }
 
   List<String> _assignedRoles(List<String> roles) {
-    final cleaned = roles
-        .map((role) => role.trim())
-        .where((role) => role.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final cleaned =
+        roles
+            .map((role) => role.trim())
+            .where((role) => role.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return cleaned;
   }
 
@@ -532,24 +473,17 @@ class AppDrawer extends ConsumerWidget {
   // ACTIVE DESTINATION
   // ===========================================================================
 
-  bool _isActive(
-    AppDestination dest,
-    String? route,
-  ) {
+  bool _isActive(AppDestination dest, String? route) {
     if (dest.kind == NavKind.shellTab) {
       if (activeRoute != null) {
         return false;
       }
 
-      final index = tabs.indexWhere(
-        (tab) => tab.id == dest.id,
-      );
+      final index = tabs.indexWhere((tab) => tab.id == dest.id);
 
-      return index >= 0 &&
-          index == selectedTabIndex;
+      return index >= 0 && index == selectedTabIndex;
     }
 
-    return dest.route != null &&
-        route == dest.route;
+    return dest.route != null && route == dest.route;
   }
 }

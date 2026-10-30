@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:solar_sales/core/providers/global_loading_provider.dart';
 import 'package:solar_sales/core/theme/app_design.dart';
@@ -22,6 +24,7 @@ import 'package:solar_sales/shared/widgets/rejection_banner.dart';
 import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_history_section.dart';
 import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_share_dialog.dart';
 
+import '../../data/models/quotation_model.dart';
 import '../providers/quotation_providers.dart';
 
 class QuotationDetailScreen extends ConsumerWidget {
@@ -170,6 +173,8 @@ class QuotationDetailScreen extends ConsumerWidget {
                         ),
                       ),
                       MarketingTemplatePanel(template: q.marketingTemplate),
+                      if (q.hasSolarDesign)
+                        _AttachedSolarDesignCard(design: q.solarDesign),
                       if (q.rejectionReason != null &&
                           q.rejectionReason!.isNotEmpty)
                         RejectionBanner(reason: q.rejectionReason!),
@@ -376,15 +381,95 @@ class QuotationDetailScreen extends ConsumerWidget {
     if (email == null) return;
     ref.read(globalLoadingProvider.notifier).showLoading('Sending email...');
     try {
-      await ref
+      final designAttached = await ref
           .read(quotationRepositoryProvider)
           .sendEmail(quotationId, email: email.isEmpty ? null : email);
       ref.read(globalLoadingProvider.notifier).hide();
-      ref.read(globalLoadingProvider.notifier).showSuccess('Email sent');
+      ref.read(globalLoadingProvider.notifier).showSuccess(
+            designAttached
+                ? 'Email sent with 3D design link'
+                : 'Email sent',
+          );
       ref.invalidate(quotationDetailProvider(quotationId));
     } catch (e) {
       ref.read(globalLoadingProvider.notifier).hide();
       ref.read(globalLoadingProvider.notifier).showApiError(e);
     }
+  }
+}
+
+class _AttachedSolarDesignCard extends StatelessWidget {
+  const _AttachedSolarDesignCard({this.design});
+
+  final QuotationSolarDesign? design;
+
+  @override
+  Widget build(BuildContext context) {
+    final previewUrl = design?.previewUrl;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const PremiumSectionTitle(title: '3D solar design'),
+        PremiumCard(
+          margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                design?.summaryLabel ?? 'Attached 3D design',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                previewUrl == null
+                    ? 'Included on PDF, WhatsApp, and email once this quotation is sent.'
+                    : 'Customers can open the public 3D preview without logging in.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (previewUrl != null) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final uri = Uri.tryParse(previewUrl);
+                        if (uri == null) return;
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      },
+                      icon: const Icon(Icons.view_in_ar_outlined, size: 18),
+                      label: const Text('Open 3D preview'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: previewUrl),
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('3D preview link copied'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.copy_outlined, size: 18),
+                      label: const Text('Copy link'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

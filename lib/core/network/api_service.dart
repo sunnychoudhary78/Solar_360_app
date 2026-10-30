@@ -45,6 +45,15 @@ class ApiService {
     }
   }
 
+  Future<dynamic> postWithoutBody(String endpoint) async {
+    try {
+      final response = await _dio.post(_path(endpoint));
+      return _handle(response);
+    } on DioException catch (e) {
+      throw _extractException(e);
+    }
+  }
+
   Future<dynamic> put(
     String endpoint,
     Map<String, dynamic> data, {
@@ -89,13 +98,17 @@ class ApiService {
     }
   }
 
-  Future<Uint8List> getBytes(String endpoint) async {
+  Future<Uint8List> getBytes(
+    String endpoint, {
+    Map<String, dynamic>? headers,
+  }) async {
     try {
       final response = await _dio.get(
         _path(endpoint),
         options: Options(
           responseType: ResponseType.bytes,
           receiveTimeout: const Duration(seconds: 90),
+          headers: headers,
         ),
       );
       return _bytesFrom(response.data);

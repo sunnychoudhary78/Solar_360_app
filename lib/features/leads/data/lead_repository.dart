@@ -1,3 +1,4 @@
+import 'models/electricity_bill_model.dart';
 import 'models/lead_model.dart';
 import 'lead_api_service.dart';
 
@@ -29,6 +30,9 @@ class LeadRepository {
   );
 
   Future<List<LeadModel>> getAllLeads() => _api.getAllLeads();
+
+  Future<ElectricityBillParseResult> parseElectricityBill(String filePath) =>
+      _api.parseElectricityBill(filePath: filePath);
 
   Future<LeadModel> getLeadById(String id) => _api.getLeadById(id);
 

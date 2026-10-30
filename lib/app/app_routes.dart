@@ -7,6 +7,7 @@ import 'package:solar_sales/features/customers/presentation/screens/customer_for
 import 'package:solar_sales/features/customers/presentation/screens/customers_screen.dart';
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_detail_screen.dart';
 import 'package:solar_sales/features/customer_portal/presentation/screens/customer_support_form_screen.dart';
+import 'package:solar_sales/features/costing/presentation/costing_screen.dart';
 import 'package:solar_sales/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:solar_sales/features/finance/presentation/screens/emi_calculator_screen.dart';
 import 'package:solar_sales/features/inventory/presentation/screens/inventory_hub_screen.dart';
@@ -31,6 +32,7 @@ import 'package:solar_sales/features/leads/presentation/screens/lead_detail_by_i
 import 'package:solar_sales/features/leads/presentation/screens/lead_form_screen.dart';
 import 'package:solar_sales/features/leads/presentation/screens/solar_home_screen.dart';
 import 'package:solar_sales/features/notifications/presentation/screens/notifications_screen.dart';
+import 'package:solar_sales/features/payments/presentation/screens/payments_screen.dart';
 import 'package:solar_sales/features/quotations/presentation/screens/quotation_approvals_screen.dart';
 import 'package:solar_sales/features/quotations/presentation/screens/quotation_detail_screen.dart';
 import 'package:solar_sales/features/quotations/presentation/screens/quotation_form_screen.dart';
@@ -110,6 +112,8 @@ class AppRoutes {
       return SupportTicketDetailScreen(ticketId: id);
     },
     '/customers': (_) => const CustomersScreen(),
+    '/costing': (_) => const CostingScreen(),
+    '/solar/costing': (_) => const CostingScreen(isGreenEnergy: true),
     '/customers/form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
       final id = args is String ? args : null;
@@ -130,6 +134,13 @@ class AppRoutes {
     '/quotations': (_) => const QuotationsScreen(),
     '/quotations/form': (context) {
       final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map) {
+        return QuotationFormScreen(
+          quotationId: args['quotationId']?.toString() ??
+              args['id']?.toString(),
+          initialCustomerId: args['customerId']?.toString(),
+        );
+      }
       final id = args is String ? args : null;
       return QuotationFormScreen(quotationId: id);
     },
@@ -159,6 +170,7 @@ class AppRoutes {
       return InvoiceDetailScreen(invoiceId: id);
     },
     '/invoices/approvals': (_) => const InvoiceApprovalsScreen(),
+    '/payments': (_) => const PaymentsScreen(),
     '/reports': (_) => const ReportsScreen(),
     '/solar/reports': (_) => const GreenEnergyReportsScreen(),
     '/finance/emi': (_) => const EmiCalculatorScreen(moduleLabel: 'Billbook'),

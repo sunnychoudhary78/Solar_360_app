@@ -17,13 +17,12 @@ class QuotationRepository {
     String? customerId,
     int page = 1,
     int limit = 20,
-  }) =>
-      _api.list(
-        status: status,
-        customerId: customerId,
-        page: page,
-        limit: limit,
-      );
+  }) => _api.list(
+    status: status,
+    customerId: customerId,
+    page: page,
+    limit: limit,
+  );
 
   Future<QuotationModel> getById(String id) => _api.getById(id);
 
@@ -42,10 +41,13 @@ class QuotationRepository {
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
     String? marketingTemplateId,
+    bool includeSolarDesignId = true,
+    String? solarDesignId,
     required bool clearNotesIfEmpty,
   }) {
     final resolvedShip = shipSameAsBill ? billTo : shipTo;
     final trimmedNotes = notes?.trim() ?? '';
+    final trimmedDesignId = solarDesignId?.trim() ?? '';
     return {
       'customerId': customerId,
       'items': items.map((e) => e.toCreateJson()).toList(),
@@ -59,6 +61,9 @@ class QuotationRepository {
       'shipSameAsBill': shipSameAsBill,
       if (fromParty != null && fromParty.isNotEmpty) 'fromParty': fromParty,
       'marketingTemplateId': marketingTemplateIdBody(marketingTemplateId),
+      // null / "" clears the link; omit the key to leave an existing link as-is.
+      if (includeSolarDesignId)
+        'solarDesignId': trimmedDesignId.isEmpty ? null : trimmedDesignId,
     };
   }
 
@@ -73,6 +78,7 @@ class QuotationRepository {
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
     String? marketingTemplateId,
+    String? solarDesignId,
   }) {
     return _api.create(
       _payload(
@@ -86,6 +92,8 @@ class QuotationRepository {
         shipSameAsBill: shipSameAsBill,
         fromParty: fromParty,
         marketingTemplateId: marketingTemplateId,
+        includeSolarDesignId: true,
+        solarDesignId: solarDesignId,
         clearNotesIfEmpty: false,
       ),
     );
@@ -103,6 +111,8 @@ class QuotationRepository {
     bool shipSameAsBill = true,
     Map<String, dynamic>? fromParty,
     String? marketingTemplateId,
+    bool includeSolarDesignId = false,
+    String? solarDesignId,
   }) {
     return _api.update(
       id,
@@ -117,6 +127,8 @@ class QuotationRepository {
         shipSameAsBill: shipSameAsBill,
         fromParty: fromParty,
         marketingTemplateId: marketingTemplateId,
+        includeSolarDesignId: includeSolarDesignId,
+        solarDesignId: solarDesignId,
         clearNotesIfEmpty: true,
       ),
     );
@@ -131,6 +143,6 @@ class QuotationRepository {
 
   Future<Uint8List> downloadPdf(String id) => _api.downloadPdf(id);
 
-  Future<void> sendEmail(String id, {String? email}) =>
+  Future<bool> sendEmail(String id, {String? email}) =>
       _api.sendEmail(id, email: email);
 }

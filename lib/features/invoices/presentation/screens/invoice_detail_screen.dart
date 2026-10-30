@@ -27,6 +27,8 @@ import '../utils/invoice_warehouse_stock.dart';
 import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_history_section.dart';
 import 'package:solar_sales/features/whatsapp/presentation/widgets/whatsapp_share_dialog.dart';
 
+import 'package:solar_sales/features/payments/presentation/widgets/invoice_payment_panel.dart';
+
 import '../widgets/invoice_stock_plan_panel.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
@@ -242,6 +244,11 @@ class InvoiceDetailScreen extends ConsumerWidget {
                           totalAmount: inv.totalAmount,
                         ),
                       ),
+                      if (inv.status == 'sent')
+                        InvoicePaymentPanel(
+                          invoiceId: inv.id,
+                          invoiceTotal: inv.totalAmount,
+                        ),
                       WhatsAppHistorySection(
                         entityType: 'invoice',
                         entityId: inv.id,

@@ -16,6 +16,12 @@ class SolarDesignApiService {
     return SolarDesignListResult.fromJson(_asMap(res));
   }
 
+  /// Designs + leads for a Billbook customer (quotation form picker).
+  Future<CustomerSolarDesignsResult> listForCustomer(String customerId) async {
+    final res = await _api.get(ApiEndpoints.solarDesignsForCustomer(customerId));
+    return CustomerSolarDesignsResult.fromJson(_asMap(res));
+  }
+
   Future<SolarDesignDetail> getById(String id) async {
     final res = await _api.get(ApiEndpoints.solarDesign(id));
     return SolarDesignDetail.fromJson(_asMap(res));

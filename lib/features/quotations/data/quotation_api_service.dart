@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:solar_sales/core/network/api_constants.dart';
 import 'package:solar_sales/core/network/api_endpoints.dart';
 import 'package:solar_sales/core/network/api_service.dart';
 import 'package:solar_sales/shared/models/paginated_result.dart';
@@ -81,10 +82,17 @@ class QuotationApiService {
   Future<Uint8List> downloadPdf(String id) =>
       _api.getBytes(ApiEndpoints.quotationPdf(id));
 
-  Future<void> sendEmail(String id, {String? email}) async {
-    await _api.post(
+  Future<bool> sendEmail(String id, {String? email}) async {
+    final res = await _api.post(
       ApiEndpoints.quotationEmail(id),
-      {if (email != null && email.isNotEmpty) 'email': email},
+      {
+        if (email != null && email.isNotEmpty) 'email': email,
+        'origin': ApiConstants.webAppBaseUrl,
+      },
     );
+    if (res is Map) {
+      return res['designAttached'] == true || res['design_attached'] == true;
+    }
+    return false;
   }
 }

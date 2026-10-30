@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -15,6 +16,7 @@ Future<void> showWhatsAppShareDialog(
   required String entityType,
   required String entityId,
   String title = 'Send on WhatsApp',
+  String? initialTemplateKey,
 }) {
   return showDialog<void>(
     context: context,
@@ -22,6 +24,7 @@ Future<void> showWhatsAppShareDialog(
       entityType: entityType,
       entityId: entityId,
       title: title,
+      initialTemplateKey: initialTemplateKey,
     ),
   );
 }
@@ -31,11 +34,15 @@ class WhatsAppShareDialog extends ConsumerStatefulWidget {
   final String entityId;
   final String title;
 
+  /// Preselects a template (e.g. `invoice_payment_reminder`).
+  final String? initialTemplateKey;
+
   const WhatsAppShareDialog({
     super.key,
     required this.entityType,
     required this.entityId,
     required this.title,
+    this.initialTemplateKey,
   });
 
   @override
@@ -54,11 +61,15 @@ class _WhatsAppShareDialogState extends ConsumerState<WhatsAppShareDialog> {
   bool _sending = false;
   String? _phoneError;
   String? _messageError;
+  String? _designUrl;
+  bool _designAttached = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _load(templateKey: widget.initialTemplateKey),
+    );
   }
 
   @override
@@ -83,6 +94,9 @@ class _WhatsAppShareDialogState extends ConsumerState<WhatsAppShareDialog> {
         _recipientName = result.recipientName;
         _messageController.text = result.message;
         if (!keepPhone) _phoneController.text = result.phone;
+        _designUrl = result.designUrl;
+        _designAttached = result.designAttached ||
+            (result.designUrl != null && result.designUrl!.isNotEmpty);
         _phoneError = null;
         _messageError = null;
         _loading = false;
@@ -273,6 +287,58 @@ class _WhatsAppShareDialogState extends ConsumerState<WhatsAppShareDialog> {
                                               },
                                       ),
                                   ],
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              if (_designAttached &&
+                                  (_designUrl ?? '').isNotEmpty) ...[
+                                Material(
+                                  color: scheme.primaryContainer.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      12,
+                                      10,
+                                      4,
+                                      10,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.view_in_ar_outlined,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Expanded(
+                                          child: Text(
+                                            '3D rooftop preview is included in this message',
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Copy 3D link',
+                                          onPressed: _sending
+                                              ? null
+                                              : () async {
+                                                  await Clipboard.setData(
+                                                    ClipboardData(
+                                                      text: _designUrl!,
+                                                    ),
+                                                  );
+                                                  if (!context.mounted) {
+                                                    return;
+                                                  }
+                                                  showAppSnackBar(
+                                                    context,
+                                                    '3D preview link copied',
+                                                  );
+                                                },
+                                          icon: const Icon(Icons.copy_outlined),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: 12),
                               ],

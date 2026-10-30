@@ -65,6 +65,41 @@ class ApiEndpoints {
   static String itemApprove(String id) => 'items/$id/approve';
   static String itemReject(String id) => 'items/$id/reject';
 
+  // Costing
+  static const costings = 'costings';
+  static String costing(String id) => 'costings/$id';
+  static String customerCosting(String customerId) =>
+      'costings/customer/$customerId';
+  static String customerCostingLines(String customerId) =>
+      'costings/customer/$customerId/lines';
+  static String leadCosting(String leadId) => 'costings/lead/$leadId';
+  static String leadCostingLines(String leadId) =>
+      'costings/lead/$leadId/lines';
+  static const vendors = 'vendors';
+  static String vendor(String id) => 'vendors/$id';
+  static String costingVendor(String costingId) =>
+      'costings/$costingId/vendor';
+  static String costingLine(String costingId, String lineId) =>
+      'costings/$costingId/lines/$lineId';
+  static String costingClear(String costingId) => 'costings/$costingId/clear';
+  static String costingPdf(String costingId) => 'costings/$costingId/pdf';
+  static String customerCostingSave(String customerId) =>
+      'costings/customer/$customerId/save';
+  static String leadCostingSave(String leadId) => 'costings/lead/$leadId/save';
+
+  // BOM (bill of materials) — Billbook only, no prices
+  static const boms = 'boms';
+  static String bom(String id) => 'boms/$id';
+  static String bomSave(String id) => 'boms/$id/save';
+  static String bomsByCustomer(String customerId) => 'boms/customer/$customerId';
+  static String customerBomSave(String customerId) => 'boms/customer/$customerId/save';
+  static String customerBomLines(String customerId) =>
+      'boms/customer/$customerId/lines';
+  static String bomLine(String bomId, String lineId) =>
+      'boms/$bomId/lines/$lineId';
+  static String bomClear(String bomId) => 'boms/$bomId/clear';
+  static String bomPdf(String bomId) => 'boms/$bomId/pdf';
+
   // Warehouses
   static const warehouses = 'warehouses';
   static String warehouse(String id) => 'warehouses/$id';
@@ -103,6 +138,15 @@ class ApiEndpoints {
   static String invoicePdf(String id) => 'invoices/$id/pdf';
   static String invoiceEmail(String id) => 'invoices/$id/send-email';
 
+  // Payments / collections (accounts receivable on invoices)
+  static const payments = 'payments';
+  static const paymentsDashboard = 'payments/dashboard';
+  static const paymentSchedules = 'payments/schedules';
+  static String paymentSchedule(String id) => 'payments/schedules/$id';
+  static String paymentScheduleRemind(String id) =>
+      'payments/schedules/$id/remind';
+  static String paymentReceipt(String id) => 'payments/$id';
+
   // WhatsApp share (same routes as the web app)
   static const whatsappCompose = 'whatsapp/compose';
   static const whatsappShare = 'whatsapp/share';
@@ -110,6 +154,11 @@ class ApiEndpoints {
 
   // Solar CRM — leads
   static const leads = 'leads';
+  /// AI electricity-bill reader (staff). Multipart, field `electricity_bill`.
+  static const parseElectricityBill = 'leads/parse-electricity-bill';
+  /// AI electricity-bill reader for the customer portal (customer JWT).
+  static const customerParseElectricityBill =
+      'customers/leads/parse-electricity-bill';
   static String lead(String id) => 'leads/$id';
   static String leadAssign(String id) => 'leads/$id/assign';
   static String leadStatus(String id) => 'leads/$id/status';
@@ -191,6 +240,8 @@ class ApiEndpoints {
   // 3D Solar Design (staff + public preview helpers)
   static String solarDesignsForLead(String leadId) =>
       'solar-designs/lead/$leadId';
+  static String solarDesignsForCustomer(String customerId) =>
+      'solar-designs/customer/$customerId';
   static String solarDesign(String id) => 'solar-designs/$id';
   static String solarDesignShare(String id) => 'solar-designs/$id/share';
   static String solarDesignReport(String id) => 'solar-designs/$id/report';

@@ -39,6 +39,8 @@ void main() {
       expect(q.quotationNumber, 'QT-2026-00001');
       expect(q.items, hasLength(1));
       expect(q.items.first.itemId, 'i1');
+      expect(q.solarDesignId, isNull);
+      expect(q.hasSolarDesign, isFalse);
       expect(
         DocumentWorkflow.canCreateInvoiceFromQuotation(
           status: q.status,
@@ -133,6 +135,30 @@ void main() {
         'gst_percent': 18,
         'description': 'Cable',
       });
+    });
+
+    test('quotation parses flattened solarDesign from quotation_design_links', () {
+      final q = QuotationModel.fromJson({
+        'id': 'q1',
+        'quotation_number': 'QT-1',
+        'customer_id': 'c1',
+        'status': 'draft',
+        'solar_design_id': 'd1',
+        'solarDesign': {
+          'id': 'd1',
+          'name': 'Option A 5 kW',
+          'capacity_kw': 5.0,
+          'panel_count': 10,
+          'share_code': 'AbCdEfGhIj',
+          'share_enabled': true,
+        },
+        'items': [],
+      });
+      expect(q.solarDesignId, 'd1');
+      expect(q.hasSolarDesign, isTrue);
+      expect(q.solarDesign?.name, 'Option A 5 kW');
+      expect(q.solarDesign?.panelCount, 10);
+      expect(q.solarDesign?.previewUrl, contains('/p/AbCdEfGhIj'));
     });
   });
 }
