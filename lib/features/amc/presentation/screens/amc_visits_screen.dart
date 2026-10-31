@@ -8,10 +8,10 @@ import 'package:solar_sales/features/amc/presentation/providers/amc_providers.da
 import 'package:solar_sales/features/amc/presentation/widgets/amc_extra_visit_sheet.dart';
 import 'package:solar_sales/features/amc/presentation/widgets/amc_kpi_row.dart';
 import 'package:solar_sales/features/amc/presentation/widgets/amc_plant_card.dart';
+import 'package:solar_sales/features/amc/presentation/widgets/amc_plant_history_sheet.dart';
 import 'package:solar_sales/features/amc/presentation/widgets/amc_start_sheet.dart';
 import 'package:solar_sales/features/amc/presentation/widgets/amc_visit_card.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
-import 'package:solar_sales/shared/utils/app_snackbar.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 
@@ -23,14 +23,12 @@ class AmcVisitsScreen extends ConsumerStatefulWidget {
 }
 
 class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
-  final _visitSearch = TextEditingController();
-  final _plantSearch = TextEditingController();
+  final _search = TextEditingController();
   bool _bootstrapped = false;
 
   @override
   void dispose() {
-    _visitSearch.dispose();
-    _plantSearch.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -70,26 +68,32 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
     if (body == null || !mounted) return;
     await runAmcAction(
       context,
-      successMessage: 'AMC started',
+      successMessage: 'AMC started and visits scheduled',
       action: () async {
         await ref.read(amcHomeProvider.notifier).startAmc(body);
+        await ref.read(amcHomeProvider.notifier).setVisitFilter('');
       },
     );
   }
 
-  Future<void> _extraVisit(AmcPlant plant) async {
+  Future<void> _extraVisit([AmcPlant? plant]) async {
+    final notifier = ref.read(amcHomeProvider.notifier);
+    await notifier.ensurePlantsLoadedSilent();
+    if (!mounted) return;
     final state = ref.read(amcHomeProvider);
     final body = await showAmcExtraVisitSheet(
       context,
       plant: plant,
+      plantsWithAmc: state.plantsWithAmc,
       assignees: state.assignees,
     );
     if (body == null || !mounted) return;
     await runAmcAction(
       context,
-      successMessage: 'Extra visit added',
+      successMessage: 'Extra visit scheduled',
       action: () async {
-        await ref.read(amcHomeProvider.notifier).createExtraVisit(body);
+        await notifier.createExtraVisit(body);
+        await notifier.setVisitFilter('');
       },
     );
   }
@@ -97,12 +101,13 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
   Future<void> _renew(AmcPlant plant) async {
     final contractId = plant.contract?.id ?? '';
     if (contractId.isEmpty) return;
+    final n = plant.contract?.visitsPerYear ?? 0;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Renew AMC year?'),
+        title: const Text('Renew this AMC for another year?'),
         content: Text(
-          'Extends the contract by 12 months and schedules another year of visits for ${plant.fullName}.',
+          'This extends ${plant.plantLabel} by 12 months and adds another $n visit${n == 1 ? '' : 's'}. Completed visits stay.',
         ),
         actions: [
           TextButton(
@@ -111,7 +116,7 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Renew'),
+            child: const Text('Confirm'),
           ),
         ],
       ),
@@ -119,19 +124,20 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
     if (ok != true || !mounted) return;
     await runAmcAction(
       context,
-      successMessage: 'AMC renewed',
-      action: () async {
-        await ref.read(amcHomeProvider.notifier).renewAmc(contractId);
-      },
+      successMessage: 'Next year of AMC visits added',
+      action: () => ref.read(amcHomeProvider.notifier).renewAmc(contractId),
     );
   }
 
-  void _openLead(AmcPlant plant) {
-    if (!AmcAccess.canOpenLead(ref.read(authProvider))) {
-      showAppSnackBar(context, 'No permission to open leads', isError: true);
-      return;
-    }
-    Navigator.of(context).pushNamed('/solar/leads/detail', arguments: plant.leadId);
+  Future<void> _openHistory(AmcPlant plant) {
+    return showAmcPlantHistorySheet(
+      context,
+      plant: plant,
+      canCreate: AmcAccess.canCreate(ref.read(authProvider)),
+      onStartAmc: _startAmc,
+      onExtraVisit: _extraVisit,
+      onOpenVisit: _openVisit,
+    );
   }
 
   @override
@@ -140,9 +146,9 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
     final scheme = Theme.of(context).colorScheme;
 
     if (!AmcAccess.canRead(auth)) {
-      return Scaffold(
-        appBar: const AppAppBar(title: 'AMC Visits'),
-        body: const EmptyState(
+      return const Scaffold(
+        appBar: AppAppBar(title: 'AMC Visits'),
+        body: EmptyState(
           title: 'No access',
           subtitle: 'You need amc.read permission to open AMC Visits.',
           icon: Icons.lock_outline,
@@ -151,18 +157,32 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
     }
 
     final state = ref.watch(amcHomeProvider);
-    final canManage = AmcAccess.canManageContract(auth);
+    final canCreate = AmcAccess.canCreate(auth);
+    final notifier = ref.read(amcHomeProvider.notifier);
 
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
       appBar: AppAppBar(
         title: 'AMC Visits',
+        subtitle: 'Schedule annual maintenance on installed plants',
         actions: [
+          if (canCreate)
+            IconButton(
+              tooltip: 'Extra visit',
+              onPressed: () => _extraVisit(),
+              icon: const Icon(Icons.add_circle_outline),
+            ),
+          if (canCreate)
+            IconButton(
+              tooltip: 'Start AMC',
+              onPressed: () async {
+                await notifier.setPlantAmcFilter('none');
+              },
+              icon: const Icon(Icons.playlist_add_check_circle_outlined),
+            ),
           IconButton(
             tooltip: 'Refresh',
-            onPressed: state.isLoading
-                ? null
-                : () => ref.read(amcHomeProvider.notifier).refresh(),
+            onPressed: state.isLoading ? null : () => notifier.refresh(),
             icon: state.isRefreshing
                 ? const SizedBox(
                     width: 18,
@@ -173,30 +193,30 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
           ),
         ],
       ),
-      body: state.isLoading
+      body: state.isLoading && state.visits.isEmpty && state.plants.isEmpty
           ? const LoadingState(message: 'Loading AMC…')
           : state.error != null &&
                   state.visits.isEmpty &&
                   state.plants.isEmpty
               ? ErrorState(
                   message: state.error!,
-                  onRetry: () =>
-                      ref.read(amcHomeProvider.notifier).bootstrap(),
+                  onRetry: () => notifier.bootstrap(),
                 )
               : RefreshIndicator(
-                  onRefresh: () =>
-                      ref.read(amcHomeProvider.notifier).refresh(),
+                  onRefresh: () => notifier.refresh(),
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                     children: [
-                      Text(
-                        'Annual maintenance for installed plants',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                      AmcKpiRow(
+                        summary: state.summary,
+                        onPlants: () => notifier.setTab(AmcHomeTab.plants),
+                        onActiveAmc: () => notifier.setPlantAmcFilter('active'),
+                        onOverdue: () => notifier.setVisitFilter('overdue'),
+                        onDueToday: () => notifier.setVisitFilter('today'),
+                        onThisMonth: () => notifier.setVisitFilter('month'),
+                        onDoneMonth: () =>
+                            notifier.setVisitFilter('done_month'),
                       ),
-                      const SizedBox(height: 12),
-                      AmcKpiRow(summary: state.summary),
                       const SizedBox(height: 14),
                       Row(
                         children: [
@@ -204,9 +224,7 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
                             child: _TabChip(
                               label: 'Visits',
                               selected: state.tab == AmcHomeTab.visits,
-                              onTap: () => ref
-                                  .read(amcHomeProvider.notifier)
-                                  .setTab(AmcHomeTab.visits),
+                              onTap: () => notifier.setTab(AmcHomeTab.visits),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -214,178 +232,283 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
                             child: _TabChip(
                               label: 'Plants',
                               selected: state.tab == AmcHomeTab.plants,
-                              onTap: () => ref
-                                  .read(amcHomeProvider.notifier)
-                                  .setTab(AmcHomeTab.plants),
+                              onTap: () => notifier.setTab(AmcHomeTab.plants),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      if (state.tab == AmcHomeTab.visits)
-                        ..._visitsSection(state)
-                      else
-                        ..._plantsSection(state, canManage),
+                      TextField(
+                        controller: _search,
+                        decoration: InputDecoration(
+                          hintText: state.tab == AmcHomeTab.visits
+                              ? 'Search visits or customer'
+                              : 'Search plant, code, inverter',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _search.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _search.clear();
+                                    notifier.setSearchInput('');
+                                    setState(() {});
+                                  },
+                                ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          setState(() {});
+                          notifier.setSearchInput(v);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      if (state.tab == AmcHomeTab.visits) ...[
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final chip in amcVisitChips)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: FilterChip(
+                                    label: Text(
+                                      chip.id == 'overdue' &&
+                                              state.summary.overdue > 0
+                                          ? '${chip.label} · ${state.summary.overdue}'
+                                          : chip.id == 'today' &&
+                                                  state.summary.dueToday > 0
+                                              ? '${chip.label} · ${state.summary.dueToday}'
+                                              : chip.label,
+                                    ),
+                                    selected: state.visitFilter == chip.id,
+                                    selectedColor: chip.id == 'overdue'
+                                        ? const Color(0xFFE11D48)
+                                        : null,
+                                    labelStyle: chip.id == 'overdue' &&
+                                            state.visitFilter == chip.id
+                                        ? const TextStyle(color: Colors.white)
+                                        : null,
+                                    checkmarkColor: chip.id == 'overdue' &&
+                                            state.visitFilter == chip.id
+                                        ? Colors.white
+                                        : null,
+                                    onSelected: (_) =>
+                                        notifier.setVisitFilter(chip.id),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          // ignore: deprecated_member_use
+                          value: state.visitFilter == 'unassigned'
+                              ? 'unassigned'
+                              : state.assigneeFilter,
+                          decoration: const InputDecoration(
+                            labelText: 'Technician',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: '',
+                              child: Text('All technicians'),
+                            ),
+                            const DropdownMenuItem(
+                              value: 'unassigned',
+                              child: Text('Unassigned'),
+                            ),
+                            ...state.assignees.map(
+                              (a) => DropdownMenuItem(
+                                value: a.id,
+                                child: Text(a.name),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) =>
+                              notifier.setAssigneeFilter(v ?? ''),
+                        ),
+                        const SizedBox(height: 12),
+                        if (state.isLoading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: LoadingState(message: 'Loading visits…'),
+                          )
+                        else if (state.visits.isEmpty)
+                          EmptyState(
+                            title: state.search.isNotEmpty ||
+                                    state.visitFilter.isNotEmpty
+                                ? 'No visits match these filters'
+                                : 'No AMC visits yet',
+                            subtitle: state.search.isNotEmpty ||
+                                    state.visitFilter.isNotEmpty
+                                ? 'Clear the filter or search to see the rest of the calendar.'
+                                : 'Start AMC on an installed plant to schedule the year’s maintenance visits.',
+                            icon: Icons.event_available_outlined,
+                            action: canCreate &&
+                                    state.search.isEmpty &&
+                                    state.visitFilter.isEmpty
+                                ? FilledButton(
+                                    onPressed: () =>
+                                        notifier.setPlantAmcFilter('none'),
+                                    child: const Text('Start AMC'),
+                                  )
+                                : null,
+                          )
+                        else
+                          ...groupAmcVisits(state.visits).map((group) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Card(
+                                margin: EdgeInsets.zero,
+                                clipBehavior: Clip.antiAlias,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Container(
+                                      color: scheme.surfaceContainerHighest
+                                          .withValues(alpha: .45),
+                                      padding: const EdgeInsets.fromLTRB(
+                                        14,
+                                        10,
+                                        14,
+                                        10,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  group.label,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        color: group.key ==
+                                                                'overdue'
+                                                            ? const Color(
+                                                                0xFFE11D48,
+                                                              )
+                                                            : null,
+                                                      ),
+                                                ),
+                                                Text(
+                                                  group.hint,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: scheme
+                                                            .onSurfaceVariant,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Text(
+                                            '${group.rows.length}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelMedium
+                                                ?.copyWith(
+                                                  color:
+                                                      scheme.onSurfaceVariant,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    ...group.rows.map(
+                                      (visit) => Column(
+                                        children: [
+                                          AmcVisitCard(
+                                            visit: visit,
+                                            onTap: () => _openVisit(visit),
+                                          ),
+                                          Divider(
+                                            height: 1,
+                                            color: scheme.outlineVariant
+                                                .withValues(alpha: .4),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                      ] else ...[
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final chip in amcPlantChips)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: FilterChip(
+                                    label: Text(chip.label),
+                                    selected:
+                                        state.plantAmcFilter == chip.id,
+                                    onSelected: (_) =>
+                                        notifier.setPlantAmcFilter(chip.id),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (state.isLoading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: LoadingState(message: 'Loading plants…'),
+                          )
+                        else if (state.plants.isEmpty)
+                          EmptyState(
+                            title: state.search.isNotEmpty ||
+                                    state.plantAmcFilter.isNotEmpty
+                                ? 'No plants match these filters'
+                                : 'No installed plants',
+                            subtitle: state.search.isNotEmpty ||
+                                    state.plantAmcFilter.isNotEmpty
+                                ? 'Clear the filter or search to see every installed site.'
+                                : 'AMC starts after installation. Complete a lead’s installation details first.',
+                            icon: Icons.solar_power_outlined,
+                          )
+                        else
+                          Card(
+                            margin: EdgeInsets.zero,
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              children: state.plants
+                                  .map(
+                                    (plant) => AmcPlantCard(
+                                      plant: plant,
+                                      canCreate: canCreate,
+                                      onOpenHistory: () =>
+                                          _openHistory(plant),
+                                      onStartAmc: () => _startAmc(plant),
+                                      onExtraVisit: () => _extraVisit(plant),
+                                      onRenew: () => _renew(plant),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
+                      ],
                     ],
                   ),
                 ),
     );
-  }
-
-  List<Widget> _visitsSection(AmcHomeState state) {
-    return [
-      TextField(
-        controller: _visitSearch,
-        decoration: InputDecoration(
-          hintText: 'Search visits, plant, mobile…',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _visitSearch.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _visitSearch.clear();
-                    ref.read(amcHomeProvider.notifier).setVisitSearch('');
-                    setState(() {});
-                  },
-                ),
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-        onChanged: (v) {
-          setState(() {});
-          ref.read(amcHomeProvider.notifier).setVisitSearch(v);
-        },
-      ),
-      const SizedBox(height: 10),
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            FilterChip(
-              label: Text('Overdue (${state.visitSummary.overdue})'),
-              selected: state.overdueOnly,
-              onSelected: (v) =>
-                  ref.read(amcHomeProvider.notifier).setOverdueOnly(v),
-            ),
-            const SizedBox(width: 8),
-            ...['', 'scheduled', 'in_progress', 'completed'].map((status) {
-              final label = status.isEmpty
-                  ? 'All'
-                  : amcVisitStatusLabel(status);
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: Text(label),
-                  selected: !state.overdueOnly &&
-                      state.visitStatusFilter == status,
-                  onSelected: (_) => ref
-                      .read(amcHomeProvider.notifier)
-                      .setVisitStatusFilter(status),
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-      const SizedBox(height: 12),
-      if (state.visits.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
-          child: EmptyState(
-            title: 'No visits',
-            subtitle: 'Start an AMC on a plant to schedule visits.',
-            icon: Icons.event_available_outlined,
-          ),
-        )
-      else
-        ...state.visits.map(
-          (visit) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: AmcVisitCard(
-              visit: visit,
-              onTap: () => _openVisit(visit),
-            ),
-          ),
-        ),
-    ];
-  }
-
-  List<Widget> _plantsSection(AmcHomeState state, bool canManage) {
-    return [
-      TextField(
-        controller: _plantSearch,
-        decoration: InputDecoration(
-          hintText: 'Search name, lead code, mobile, inverter…',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _plantSearch.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _plantSearch.clear();
-                    ref.read(amcHomeProvider.notifier).setPlantSearch('');
-                    setState(() {});
-                  },
-                ),
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-        onChanged: (v) {
-          setState(() {});
-          ref.read(amcHomeProvider.notifier).setPlantSearch(v);
-        },
-      ),
-      const SizedBox(height: 10),
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final entry in const [
-              ('', 'All'),
-              ('active', 'AMC active'),
-              ('none', 'No AMC'),
-              ('overdue', 'Overdue'),
-            ])
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: Text(entry.$2),
-                  selected: state.plantAmcFilter == entry.$1,
-                  onSelected: (_) => ref
-                      .read(amcHomeProvider.notifier)
-                      .setPlantAmcFilter(entry.$1),
-                ),
-              ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 12),
-      if (state.plants.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
-          child: EmptyState(
-            title: 'No plants',
-            subtitle:
-                'Installed / completed leads in this company will appear here.',
-            icon: Icons.solar_power_outlined,
-          ),
-        )
-      else
-        ...state.plants.map(
-          (plant) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: AmcPlantCard(
-              plant: plant,
-              canManage: canManage,
-              onOpenLead: () => _openLead(plant),
-              onStartAmc: () => _startAmc(plant),
-              onExtraVisit: () => _extraVisit(plant),
-              onRenew: () => _renew(plant),
-            ),
-          ),
-        ),
-    ];
   }
 }
 

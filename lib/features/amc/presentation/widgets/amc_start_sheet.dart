@@ -40,9 +40,8 @@ class _AmcStartSheet extends StatefulWidget {
 class _AmcStartSheetState extends State<_AmcStartSheet> {
   late String _startDate;
   late int _visitsPerYear;
-  String? _assigneeId;
+  String _assigneeId = '';
   final _notes = TextEditingController();
-  bool _saving = false;
 
   @override
   void initState() {
@@ -76,15 +75,12 @@ class _AmcStartSheetState extends State<_AmcStartSheet> {
   }
 
   void _submit() {
-    if (_saving) return;
-    setState(() => _saving = true);
     Navigator.pop(context, {
       'lead_id': widget.plant.leadId,
       'start_date': _startDate,
       'visits_per_year': _visitsPerYear,
-      if (_assigneeId != null && _assigneeId!.isNotEmpty)
-        'assignee_id': _assigneeId,
-      if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
+      'assignee_id': _assigneeId.isEmpty ? null : _assigneeId,
+      'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
     });
   }
 
@@ -92,6 +88,9 @@ class _AmcStartSheetState extends State<_AmcStartSheet> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final opts = widget.visitsPerYearOptions.isEmpty
+        ? const [1, 2, 3, 4]
+        : widget.visitsPerYearOptions;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottom),
@@ -119,7 +118,7 @@ class _AmcStartSheetState extends State<_AmcStartSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              '${widget.plant.leadCode} — ${widget.plant.fullName}',
+              widget.plant.plantLabel,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -140,60 +139,57 @@ class _AmcStartSheetState extends State<_AmcStartSheet> {
                   ),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: widget.visitsPerYearOptions.map((n) {
-                final selected = _visitsPerYear == n;
-                return ChoiceChip(
-                  label: Text('$n'),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _visitsPerYear = n),
-                );
-              }).toList(),
+            DropdownButtonFormField<int>(
+              // ignore: deprecated_member_use
+              value: _visitsPerYear,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+              items: opts
+                  .map(
+                    (n) => DropdownMenuItem(
+                      value: n,
+                      child: Text(amcVisitsPerYearLabel(n)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _visitsPerYear = v);
+              },
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use — match app pattern; initialValue is not controlled
-              value: _assigneeId ?? '',
+              // ignore: deprecated_member_use
+              value: _assigneeId,
               decoration: const InputDecoration(
-                labelText: 'Assignee (optional)',
+                labelText: 'Assign technician',
                 border: OutlineInputBorder(),
               ),
               items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('Unassigned'),
-                ),
+                const DropdownMenuItem(value: '', child: Text('Unassigned')),
                 ...widget.assignees.map(
-                  (a) => DropdownMenuItem<String>(
+                  (a) => DropdownMenuItem(
                     value: a.id,
-                    child: Text(a.optionLabel),
+                    child: Text(a.name),
                   ),
                 ),
               ],
-              onChanged: (v) =>
-                  setState(() => _assigneeId = (v == null || v.isEmpty) ? null : v),
+              onChanged: (v) => setState(() => _assigneeId = v ?? ''),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _notes,
               maxLines: 3,
               decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
+                labelText: 'Notes',
+                hintText: 'Contract terms, customer preferences…',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: _saving ? null : _submit,
-              child: const Text('Start AMC'),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Creates one contract and schedules visits across 12 months.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              onPressed: _submit,
+              child: const Text('Schedule visits'),
             ),
           ],
         ),

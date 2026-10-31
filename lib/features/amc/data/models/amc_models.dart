@@ -110,6 +110,7 @@ class AmcSummary {
     this.plants = 0,
     this.amcActive = 0,
     this.overdue = 0,
+    this.dueToday = 0,
     this.dueThisMonth = 0,
     this.completedThisMonth = 0,
     this.scheduled = 0,
@@ -118,6 +119,7 @@ class AmcSummary {
   final int plants;
   final int amcActive;
   final int overdue;
+  final int dueToday;
   final int dueThisMonth;
   final int completedThisMonth;
   final int scheduled;
@@ -127,6 +129,7 @@ class AmcSummary {
       plants: asInt(json['plants']),
       amcActive: asInt(json['amc_active']),
       overdue: asInt(json['overdue']),
+      dueToday: asInt(json['due_today']),
       dueThisMonth: asInt(json['due_this_month']),
       completedThisMonth: asInt(json['completed_this_month']),
       scheduled: asInt(json['scheduled']),
@@ -202,12 +205,24 @@ class AmcPlantRef {
     this.leadCode = '',
     this.fullName = '',
     this.mobile = '',
+    this.capacity = '',
+    this.inverterSerialNumber = '',
+    this.solarPanelBrand = '',
+    this.city = '',
+    this.district = '',
+    this.state = '',
   });
 
   final String id;
   final String leadCode;
   final String fullName;
   final String mobile;
+  final String capacity;
+  final String inverterSerialNumber;
+  final String solarPanelBrand;
+  final String city;
+  final String district;
+  final String state;
 
   factory AmcPlantRef.fromJson(Map<String, dynamic> json) {
     return AmcPlantRef(
@@ -217,7 +232,22 @@ class AmcPlantRef {
       leadCode: asString(json['lead_code']),
       fullName: asString(json['full_name']),
       mobile: asString(json['mobile']),
+      capacity: asString(json['capacity']),
+      inverterSerialNumber: asString(json['inverter_serial_number']),
+      solarPanelBrand: asString(json['solar_panel_brand']),
+      city: asString(json['city']),
+      district: asString(json['district']),
+      state: asString(json['state']),
     );
+  }
+
+  String get systemSummary {
+    final parts = [
+      capacity,
+      solarPanelBrand,
+      if (city.isNotEmpty) city else district,
+    ].where((e) => e.trim().isNotEmpty);
+    return parts.join(' · ');
   }
 }
 
@@ -272,6 +302,36 @@ class AmcPlant {
       contract != null &&
       contract!.id.isNotEmpty &&
       contract!.status != 'cancelled';
+
+  String get plantLabel {
+    final parts = [leadCode, fullName].where((e) => e.trim().isNotEmpty);
+    return parts.isEmpty ? 'Plant' : parts.join(' — ');
+  }
+
+  String get locationLabel {
+    final parts = [
+      if (city.isNotEmpty) city else district,
+      state,
+    ].where((e) => e.trim().isNotEmpty);
+    return parts.isEmpty ? 'No location' : parts.join(', ');
+  }
+
+  String get systemSummary {
+    final parts = [
+      capacity,
+      solarPanelBrand,
+      if (inverterSerialNumber.isNotEmpty)
+        inverterSerialNumber
+      else
+        inverterType,
+    ].where((e) => e.trim().isNotEmpty);
+    return parts.isEmpty ? 'No system details' : parts.join(' · ');
+  }
+
+  int get visitTotal => completedVisits + openVisits;
+
+  int get visitPercent =>
+      visitTotal == 0 ? 0 : ((completedVisits / visitTotal) * 100).round();
 
   factory AmcPlant.fromJson(Map<String, dynamic> json) {
     final leadId = asString(json['lead_id']).isNotEmpty
@@ -400,6 +460,8 @@ class AmcVisit {
     this.contract,
     this.createdAt,
     this.updatedAt,
+    this.creator,
+    this.updater,
   });
 
   final String id;
@@ -423,6 +485,8 @@ class AmcVisit {
   final AmcContractRef? contract;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final AmcAssignee? creator;
+  final AmcAssignee? updater;
 
   bool get isOpen => status == 'scheduled' || status == 'in_progress';
   bool get isCompleted => status == 'completed';
@@ -449,6 +513,8 @@ class AmcVisit {
     AmcContractRef? contract,
     DateTime? createdAt,
     DateTime? updatedAt,
+    AmcAssignee? creator,
+    AmcAssignee? updater,
     bool clearAssignee = false,
   }) {
     return AmcVisit(
@@ -473,6 +539,8 @@ class AmcVisit {
       contract: contract ?? this.contract,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      creator: creator ?? this.creator,
+      updater: updater ?? this.updater,
     );
   }
 
@@ -523,6 +591,18 @@ class AmcVisit {
       }
     }
     final assigneeIdRaw = asString(json['assignee_id']);
+    AmcAssignee? creator;
+    final rawCreator = json['creator'];
+    if (rawCreator is Map) {
+      creator = AmcAssignee.fromJson(Map<String, dynamic>.from(rawCreator));
+      if (creator.id.isEmpty && creator.name.isEmpty) creator = null;
+    }
+    AmcAssignee? updater;
+    final rawUpdater = json['updater'];
+    if (rawUpdater is Map) {
+      updater = AmcAssignee.fromJson(Map<String, dynamic>.from(rawUpdater));
+      if (updater.id.isEmpty && updater.name.isEmpty) updater = null;
+    }
     return AmcVisit(
       id: asString(json['id']),
       companyId: asString(json['company_id']),
@@ -547,6 +627,8 @@ class AmcVisit {
       contract: contract,
       createdAt: parseDate(json['created_at']),
       updatedAt: parseDate(json['updated_at']),
+      creator: creator,
+      updater: updater,
     );
   }
 }
@@ -561,24 +643,119 @@ String formatAmcDate(String? ymd) {
 }
 
 String amcVisitStatusLabel(String status) {
-  switch (status) {
-    case 'in_progress':
-      return 'In progress';
-    case 'completed':
-      return 'Completed';
-    case 'skipped':
-      return 'Skipped';
-    case 'cancelled':
-      return 'Cancelled';
-    case 'scheduled':
-    default:
-      return 'Scheduled';
-  }
+  final raw = status.trim();
+  if (raw.isEmpty) return '';
+  return raw.replaceAll('_', ' ');
 }
 
 String todayIstYmd() {
+  // Match web: `toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })`
   final now = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
   return '${now.year.toString().padLeft(4, '0')}-'
       '${now.month.toString().padLeft(2, '0')}-'
       '${now.day.toString().padLeft(2, '0')}';
+}
+
+int? amcDaysFromToday(String? ymd) {
+  final raw = (ymd ?? '').trim();
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(raw);
+  if (match == null) return null;
+  final todayParts = todayIstYmd().split('-');
+  final today = DateTime.utc(
+    int.parse(todayParts[0]),
+    int.parse(todayParts[1]),
+    int.parse(todayParts[2]),
+  );
+  final due = DateTime.utc(
+    int.parse(match.group(1)!),
+    int.parse(match.group(2)!),
+    int.parse(match.group(3)!),
+  );
+  return due.difference(today).inDays;
+}
+
+String amcRelativeDue(String? ymd) {
+  final days = amcDaysFromToday(ymd);
+  if (days == null) return formatAmcDate(ymd);
+  if (days == 0) return 'Today';
+  if (days == 1) return 'Tomorrow';
+  if (days == -1) return 'Yesterday';
+  if (days < 0) return '${days.abs()} days overdue';
+  if (days <= 14) return 'In $days days';
+  return formatAmcDate(ymd);
+}
+
+({int done, int total, int percent}) amcChecklistProgress(
+  List<AmcChecklistItem>? checklist,
+) {
+  final items = checklist ?? const <AmcChecklistItem>[];
+  final done = items.where((e) => e.done).length;
+  final total = items.length;
+  final percent = total == 0 ? 0 : ((done / total) * 100).round();
+  return (done: done, total: total, percent: percent);
+}
+
+/// Web visit groups: overdue | today | upcoming | completed | other
+String amcVisitGroupKey(AmcVisit row) {
+  if (row.isOverdue) return 'overdue';
+  if (row.isOpen && row.scheduledDate == todayIstYmd()) return 'today';
+  if (row.isOpen) return 'upcoming';
+  if (row.status == 'completed') return 'completed';
+  return 'other';
+}
+
+const amcVisitGroupMeta = <String, ({String label, String hint})>{
+  'overdue': (
+    label: 'Overdue',
+    hint: 'Past the visit date — send a technician',
+  ),
+  'today': (label: 'Due today', hint: "Scheduled for today in IST"),
+  'upcoming': (label: 'Upcoming', hint: 'Still on the calendar'),
+  'completed': (label: 'Completed', hint: 'Signed off or finished'),
+  'other': (
+    label: 'Skipped / cancelled',
+    hint: 'Not counted as maintenance done',
+  ),
+};
+
+List<({String key, String label, String hint, List<AmcVisit> rows})>
+    groupAmcVisits(List<AmcVisit> visits) {
+  final buckets = <String, List<AmcVisit>>{
+    'overdue': [],
+    'today': [],
+    'upcoming': [],
+    'completed': [],
+    'other': [],
+  };
+  for (final row in visits) {
+    buckets[amcVisitGroupKey(row)]!.add(row);
+  }
+  const order = ['overdue', 'today', 'upcoming', 'completed', 'other'];
+  return order
+      .where((key) => buckets[key]!.isNotEmpty)
+      .map((key) {
+        final meta = amcVisitGroupMeta[key]!;
+        return (
+          key: key,
+          label: meta.label,
+          hint: meta.hint,
+          rows: buckets[key]!,
+        );
+      })
+      .toList();
+}
+
+String amcVisitsPerYearLabel(int n) {
+  switch (n) {
+    case 1:
+      return '1 — annual';
+    case 2:
+      return '2 — every 6 months';
+    case 3:
+      return '3 — every 4 months';
+    case 4:
+      return '4 — quarterly';
+    default:
+      return '$n';
+  }
 }

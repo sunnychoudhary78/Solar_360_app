@@ -12,35 +12,44 @@ class AmcStatusChip extends StatelessWidget {
     super.key,
     required this.status,
     this.isOverdue = false,
+    this.forceOverdueLabel = false,
   });
 
   final String status;
   final bool isOverdue;
+  final bool forceOverdueLabel;
 
   @override
   Widget build(BuildContext context) {
-    if (isOverdue && (status == 'scheduled' || status == 'in_progress')) {
-      return _chip('Overdue', _amcOverdueRose, Colors.white);
+    if (forceOverdueLabel ||
+        (isOverdue && (status == 'scheduled' || status == 'in_progress'))) {
+      return _chip(
+        'Overdue',
+        _amcOverdueRose.withValues(alpha: .08),
+        _amcOverdueRose,
+      );
     }
+    final label = amcVisitStatusLabel(status);
     switch (status) {
       case 'in_progress':
-        return _chip(
-          amcVisitStatusLabel(status),
-          Colors.amber.shade700,
-          Colors.white,
-        );
+        return _chip(label, Colors.amber.shade50, Colors.amber.shade800);
       case 'completed':
-        return _chip(amcVisitStatusLabel(status), _amcEmerald, Colors.white);
+      case 'active':
+        return _chip(label, _amcEmerald.withValues(alpha: .08), _amcEmerald);
       case 'skipped':
+      case 'draft':
+        return _chip(label, Colors.blueGrey.shade50, Colors.blueGrey.shade600);
       case 'cancelled':
         return _chip(
-          amcVisitStatusLabel(status),
-          Colors.blueGrey.shade600,
-          Colors.white,
+          label,
+          _amcOverdueRose.withValues(alpha: .08),
+          _amcOverdueRose,
         );
+      case 'expired':
+        return _chip(label, Colors.amber.shade50, Colors.amber.shade800);
       case 'scheduled':
       default:
-        return _chip(amcVisitStatusLabel(status), _amcSky, Colors.white);
+        return _chip(label, _amcSky.withValues(alpha: .08), _amcSky);
     }
   }
 
@@ -50,6 +59,7 @@ class AmcStatusChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: fg.withValues(alpha: .25)),
       ),
       child: Text(
         label,

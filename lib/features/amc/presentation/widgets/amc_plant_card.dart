@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
 
-import 'package:solar_sales/core/theme/app_design.dart';
 import 'package:solar_sales/features/amc/data/models/amc_models.dart';
+import 'package:solar_sales/features/amc/presentation/widgets/amc_status_chip.dart';
+
+const _amcOverdueRose = Color(0xFFE11D48);
 
 class AmcPlantCard extends StatelessWidget {
   const AmcPlantCard({
     super.key,
     required this.plant,
-    this.canManage = false,
-    this.onOpenLead,
+    this.canCreate = false,
+    this.onOpenHistory,
     this.onStartAmc,
     this.onExtraVisit,
     this.onRenew,
   });
 
   final AmcPlant plant;
-  final bool canManage;
-  final VoidCallback? onOpenLead;
+  final bool canCreate;
+  final VoidCallback? onOpenHistory;
   final VoidCallback? onStartAmc;
   final VoidCallback? onExtraVisit;
   final VoidCallback? onRenew;
@@ -24,170 +26,134 @@ class AmcPlantCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final location = [
-      plant.city,
-      plant.district,
-      plant.state,
-    ].where((e) => e.trim().isNotEmpty).join(', ');
+    final contract = plant.contract;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: .45),
+        border: Border(
+          bottom: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: .45),
+          ),
         ),
-        boxShadow: AppShadows.card(scheme),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      plant.fullName.isEmpty ? 'Plant' : plant.fullName,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      [
-                        if (plant.leadCode.isNotEmpty) plant.leadCode,
-                        if (plant.capacity.isNotEmpty) plant.capacity,
-                      ].join(' · '),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
+          InkWell(
+            onTap: onOpenHistory,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  plant.plantLabel,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                 ),
-              ),
-              _AmcBadge(hasAmc: plant.hasActiveAmc),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  [
+                    plant.locationLabel,
+                    if (plant.mobile.isNotEmpty) plant.mobile,
+                    plant.systemSummary,
+                  ].join(' · '),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
           ),
-          if (location.isNotEmpty) ...[
-            const SizedBox(height: 6),
+          const SizedBox(height: 10),
+          if (contract != null) ...[
+            AmcStatusChip(status: contract.status),
+            const SizedBox(height: 4),
             Text(
-              location,
+              '${amcVisitStatusLabel(contract.status)} · ${contract.visitsPerYear}/year',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            Text(
+              '${formatAmcDate(contract.startDate)} – ${formatAmcDate(contract.endDate)}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
             ),
-          ],
-          if (plant.inverterSerialNumber.isNotEmpty) ...[
+            if (plant.visitTotal > 0) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(99),
+                      child: LinearProgressIndicator(
+                        value: plant.visitPercent / 100,
+                        minHeight: 6,
+                        backgroundColor: scheme.surfaceContainerHighest,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${plant.completedVisits}/${plant.visitTotal}',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 4),
             Text(
-              'Inverter: ${plant.inverterSerialNumber}',
-              style: Theme.of(context).textTheme.bodySmall,
+              plant.overdueVisits > 0
+                  ? '${plant.overdueVisits} overdue'
+                  : 'Next ${formatAmcDate(plant.nextVisitDate)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: plant.overdueVisits > 0
+                        ? _amcOverdueRose
+                        : scheme.onSurfaceVariant,
+                    fontWeight: plant.overdueVisits > 0
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                  ),
             ),
-          ],
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              _MetaChip(
-                label: 'Open ${plant.openVisits}',
-                color: scheme.primary,
-              ),
-              if (plant.overdueVisits > 0)
-                const _MetaChip(
-                  label: 'Overdue',
-                  color: Color(0xFFE11D48),
-                ),
-              if (plant.nextVisitDate.isNotEmpty)
-                _MetaChip(
-                  label: 'Next ${formatAmcDate(plant.nextVisitDate)}',
-                  color: scheme.onSurfaceVariant,
-                ),
-            ],
-          ),
+          ] else
+            Text(
+              'Not enrolled',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+            ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              if (onOpenLead != null)
-                OutlinedButton(
-                  onPressed: onOpenLead,
-                  child: const Text('Open lead'),
-                ),
-              if (canManage && !plant.hasActiveAmc && onStartAmc != null)
+              if (contract != null) ...[
+                if (canCreate && onExtraVisit != null)
+                  OutlinedButton(
+                    onPressed: onExtraVisit,
+                    child: const Text('Extra visit'),
+                  ),
+                if (canCreate && onRenew != null)
+                  OutlinedButton(
+                    onPressed: onRenew,
+                    child: const Text('Renew year'),
+                  ),
+                if (onOpenHistory != null)
+                  OutlinedButton(
+                    onPressed: onOpenHistory,
+                    child: const Text('History'),
+                  ),
+              ] else if (canCreate && onStartAmc != null)
                 FilledButton(
                   onPressed: onStartAmc,
                   child: const Text('Start AMC'),
                 ),
-              if (canManage && plant.hasActiveAmc && onExtraVisit != null)
-                OutlinedButton(
-                  onPressed: onExtraVisit,
-                  child: const Text('Extra visit'),
-                ),
-              if (canManage && plant.hasActiveAmc && onRenew != null)
-                OutlinedButton(
-                  onPressed: onRenew,
-                  child: const Text('Renew year'),
-                ),
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _AmcBadge extends StatelessWidget {
-  const _AmcBadge({required this.hasAmc});
-  final bool hasAmc;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = hasAmc ? const Color(0xFF059669) : Colors.blueGrey;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .12),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        hasAmc ? 'AMC' : 'No AMC',
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-}
-
-class _MetaChip extends StatelessWidget {
-  const _MetaChip({required this.label, required this.color});
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .10),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }

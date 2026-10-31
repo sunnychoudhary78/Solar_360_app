@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:solar_sales/core/providers/network_providers.dart';
@@ -11,6 +13,37 @@ final amcApiServiceProvider = Provider<AmcApiService>((ref) {
 
 enum AmcHomeTab { visits, plants }
 
+/// Web `VISIT_CHIPS` ids: '', overdue, today, month, in_progress, unassigned, done_month
+class AmcVisitChip {
+  const AmcVisitChip(this.id, this.label);
+  final String id;
+  final String label;
+}
+
+const amcVisitChips = <AmcVisitChip>[
+  AmcVisitChip('', 'All'),
+  AmcVisitChip('overdue', 'Overdue'),
+  AmcVisitChip('today', 'Due today'),
+  AmcVisitChip('month', 'This month'),
+  AmcVisitChip('in_progress', 'In progress'),
+  AmcVisitChip('unassigned', 'Unassigned'),
+  AmcVisitChip('done_month', 'Done this month'),
+];
+
+/// Web `PLANT_CHIPS`
+class AmcPlantChip {
+  const AmcPlantChip(this.id, this.label);
+  final String id;
+  final String label;
+}
+
+const amcPlantChips = <AmcPlantChip>[
+  AmcPlantChip('', 'All plants'),
+  AmcPlantChip('none', 'No AMC yet'),
+  AmcPlantChip('active', 'Active AMC'),
+  AmcPlantChip('overdue', 'Overdue visits'),
+];
+
 class AmcHomeState {
   const AmcHomeState({
     this.tab = AmcHomeTab.visits,
@@ -22,10 +55,10 @@ class AmcHomeState {
     this.plants = const [],
     this.isLoading = false,
     this.isRefreshing = false,
-    this.visitSearch = '',
-    this.plantSearch = '',
-    this.visitStatusFilter = '',
-    this.overdueOnly = false,
+    this.searchInput = '',
+    this.search = '',
+    this.visitFilter = '',
+    this.assigneeFilter = '',
     this.plantAmcFilter = '',
     this.error,
   });
@@ -39,12 +72,15 @@ class AmcHomeState {
   final List<AmcPlant> plants;
   final bool isLoading;
   final bool isRefreshing;
-  final String visitSearch;
-  final String plantSearch;
-  final String visitStatusFilter;
-  final bool overdueOnly;
+  final String searchInput;
+  final String search;
+  final String visitFilter;
+  final String assigneeFilter;
   final String plantAmcFilter;
   final String? error;
+
+  List<AmcPlant> get plantsWithAmc =>
+      plants.where((p) => p.contract?.id.isNotEmpty == true).toList();
 
   AmcHomeState copyWith({
     AmcHomeTab? tab,
@@ -56,10 +92,10 @@ class AmcHomeState {
     List<AmcPlant>? plants,
     bool? isLoading,
     bool? isRefreshing,
-    String? visitSearch,
-    String? plantSearch,
-    String? visitStatusFilter,
-    bool? overdueOnly,
+    String? searchInput,
+    String? search,
+    String? visitFilter,
+    String? assigneeFilter,
     String? plantAmcFilter,
     String? error,
     bool clearError = false,
@@ -74,10 +110,10 @@ class AmcHomeState {
       plants: plants ?? this.plants,
       isLoading: isLoading ?? this.isLoading,
       isRefreshing: isRefreshing ?? this.isRefreshing,
-      visitSearch: visitSearch ?? this.visitSearch,
-      plantSearch: plantSearch ?? this.plantSearch,
-      visitStatusFilter: visitStatusFilter ?? this.visitStatusFilter,
-      overdueOnly: overdueOnly ?? this.overdueOnly,
+      searchInput: searchInput ?? this.searchInput,
+      search: search ?? this.search,
+      visitFilter: visitFilter ?? this.visitFilter,
+      assigneeFilter: assigneeFilter ?? this.assigneeFilter,
       plantAmcFilter: plantAmcFilter ?? this.plantAmcFilter,
       error: clearError ? null : (error ?? this.error),
     );
@@ -85,46 +121,35 @@ class AmcHomeState {
 }
 
 class AmcHomeNotifier extends Notifier<AmcHomeState> {
+  Timer? _debounce;
+
   @override
-  AmcHomeState build() => const AmcHomeState();
+  AmcHomeState build() {
+    ref.onDispose(() => _debounce?.cancel());
+    return const AmcHomeState();
+  }
 
   AmcApiService get _api => ref.read(amcApiServiceProvider);
 
   Future<void> bootstrap() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final results = await Future.wait([
-        _api.meta(),
-        _api.summary(),
-        _api.assignees(),
-        _api.visits(
-          search: state.visitSearch,
-          status: state.visitStatusFilter.isEmpty
-              ? null
-              : state.visitStatusFilter,
-          overdue: state.overdueOnly,
-        ),
-        _api.plants(
-          search: state.plantSearch,
-          amc: state.plantAmcFilter.isEmpty ? null : state.plantAmcFilter,
-        ),
-      ]);
-      final visitResult = results[3] as AmcVisitListResult;
+      final meta = await _api.meta();
+      final summary = await _api.summary();
+      final assignees = await _api.assignees();
       state = state.copyWith(
-        meta: results[0] as AmcMeta,
-        summary: results[1] as AmcSummary,
-        assignees: results[2] as List<AmcAssignee>,
-        visits: visitResult.data,
-        visitSummary: visitResult.summary,
-        plants: results[4] as List<AmcPlant>,
-        isLoading: false,
-        clearError: true,
+        meta: meta,
+        summary: summary,
+        assignees: assignees,
       );
+      if (state.tab == AmcHomeTab.visits) {
+        await _reloadVisits();
+      } else {
+        await _reloadPlants();
+      }
+      state = state.copyWith(isLoading: false, clearError: true);
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: cleanError(e),
-      );
+      state = state.copyWith(isLoading: false, error: cleanError(e));
     }
   }
 
@@ -132,17 +157,15 @@ class AmcHomeNotifier extends Notifier<AmcHomeState> {
     if (state.isLoading) return;
     state = state.copyWith(isRefreshing: true, clearError: true);
     try {
-      await Future.wait([
-        _reloadSummary(),
-        _reloadVisits(),
-        _reloadPlants(),
-      ]);
+      await _reloadSummary();
+      if (state.tab == AmcHomeTab.visits) {
+        await _reloadVisits();
+      } else {
+        await _reloadPlants();
+      }
       state = state.copyWith(isRefreshing: false, clearError: true);
     } catch (e) {
-      state = state.copyWith(
-        isRefreshing: false,
-        error: cleanError(e),
-      );
+      state = state.copyWith(isRefreshing: false, error: cleanError(e));
     }
   }
 
@@ -152,11 +175,35 @@ class AmcHomeNotifier extends Notifier<AmcHomeState> {
   }
 
   Future<void> _reloadVisits() async {
+    String? status;
+    String? due;
+    String? completed;
+    var overdue = false;
+    var assigneeId = state.assigneeFilter;
+
+    switch (state.visitFilter) {
+      case 'overdue':
+        overdue = true;
+      case 'today':
+        due = 'today';
+      case 'month':
+        due = 'month';
+      case 'in_progress':
+        status = 'in_progress';
+      case 'unassigned':
+        assigneeId = 'unassigned';
+      case 'done_month':
+      case 'completed':
+        completed = 'month';
+    }
+
     final result = await _api.visits(
-      search: state.visitSearch,
-      status:
-          state.visitStatusFilter.isEmpty ? null : state.visitStatusFilter,
-      overdue: state.overdueOnly,
+      search: state.search,
+      status: status,
+      assigneeId: assigneeId.isEmpty ? null : assigneeId,
+      overdue: overdue,
+      due: due,
+      completed: completed,
     );
     state = state.copyWith(
       visits: result.data,
@@ -164,73 +211,113 @@ class AmcHomeNotifier extends Notifier<AmcHomeState> {
     );
   }
 
-  Future<void> _reloadPlants() async {
+  Future<void> _reloadPlants({bool silent = false}) async {
     final plants = await _api.plants(
-      search: state.plantSearch,
-      amc: state.plantAmcFilter.isEmpty ? null : state.plantAmcFilter,
+      search: silent ? null : state.search,
+      amc: silent
+          ? null
+          : (state.plantAmcFilter.isEmpty ? null : state.plantAmcFilter),
     );
     state = state.copyWith(plants: plants);
   }
 
-  void setTab(AmcHomeTab tab) {
+  Future<void> setTab(AmcHomeTab tab) async {
     if (state.tab == tab) return;
-    state = state.copyWith(tab: tab);
-  }
-
-  Future<void> setVisitSearch(String value) async {
-    state = state.copyWith(visitSearch: value);
-    try {
-      await _reloadVisits();
-    } catch (e) {
-      state = state.copyWith(error: cleanError(e));
-    }
-  }
-
-  Future<void> setPlantSearch(String value) async {
-    state = state.copyWith(plantSearch: value);
-    try {
-      await _reloadPlants();
-    } catch (e) {
-      state = state.copyWith(error: cleanError(e));
-    }
-  }
-
-  Future<void> setVisitStatusFilter(String value) async {
     state = state.copyWith(
-      visitStatusFilter: value,
-      overdueOnly: value.isEmpty ? state.overdueOnly : false,
+      tab: tab,
+      isLoading: true,
+      clearError: true,
+      visitFilter: tab == AmcHomeTab.plants ? state.visitFilter : state.visitFilter,
+      plantAmcFilter:
+          tab == AmcHomeTab.visits ? state.plantAmcFilter : state.plantAmcFilter,
+    );
+    // Match web: switching tab clears the other filter context in URL;
+    // keep filters in state but reload the active list.
+    try {
+      if (tab == AmcHomeTab.visits) {
+        await _reloadVisits();
+      } else {
+        await _reloadPlants();
+      }
+      state = state.copyWith(isLoading: false, clearError: true);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: cleanError(e));
+    }
+  }
+
+  void setSearchInput(String value) {
+    state = state.copyWith(searchInput: value);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      state = state.copyWith(search: value.trim());
+      try {
+        if (state.tab == AmcHomeTab.visits) {
+          await _reloadVisits();
+        } else {
+          await _reloadPlants();
+        }
+      } catch (e) {
+        state = state.copyWith(error: cleanError(e));
+      }
+    });
+  }
+
+  Future<void> setVisitFilter(String value) async {
+    state = state.copyWith(
+      tab: AmcHomeTab.visits,
+      visitFilter: value,
+      assigneeFilter: value == 'unassigned' ? '' : state.assigneeFilter,
+      isLoading: true,
+      clearError: true,
     );
     try {
       await _reloadVisits();
+      state = state.copyWith(isLoading: false, clearError: true);
     } catch (e) {
-      state = state.copyWith(error: cleanError(e));
+      state = state.copyWith(isLoading: false, error: cleanError(e));
     }
   }
 
-  Future<void> setOverdueOnly(bool value) async {
+  Future<void> setAssigneeFilter(String value) async {
+    if (value == 'unassigned') {
+      await setVisitFilter('unassigned');
+      return;
+    }
     state = state.copyWith(
-      overdueOnly: value,
-      visitStatusFilter: value ? '' : state.visitStatusFilter,
+      assigneeFilter: value,
+      visitFilter:
+          state.visitFilter == 'unassigned' ? '' : state.visitFilter,
+      isLoading: true,
+      clearError: true,
     );
     try {
       await _reloadVisits();
+      state = state.copyWith(isLoading: false, clearError: true);
     } catch (e) {
-      state = state.copyWith(error: cleanError(e));
+      state = state.copyWith(isLoading: false, error: cleanError(e));
     }
   }
 
   Future<void> setPlantAmcFilter(String value) async {
-    state = state.copyWith(plantAmcFilter: value);
+    state = state.copyWith(
+      tab: AmcHomeTab.plants,
+      plantAmcFilter: value,
+      isLoading: true,
+      clearError: true,
+    );
     try {
       await _reloadPlants();
+      state = state.copyWith(isLoading: false, clearError: true);
     } catch (e) {
-      state = state.copyWith(error: cleanError(e));
+      state = state.copyWith(isLoading: false, error: cleanError(e));
     }
   }
 
   Future<AmcPlant> startAmc(Map<String, dynamic> body) async {
     final plant = await _api.startContract(body);
-    await refresh();
+    await _reloadSummary();
+    await _reloadVisits();
+    await _reloadPlants();
     return plant;
   }
 
@@ -242,13 +329,25 @@ class AmcHomeNotifier extends Notifier<AmcHomeState> {
 
   Future<AmcVisit> createExtraVisit(Map<String, dynamic> body) async {
     final visit = await _api.createVisit(body);
-    await refresh();
+    await _reloadSummary();
+    await _reloadVisits();
     return visit;
   }
 
   Future<void> removeVisit(String id) async {
     await _api.removeVisit(id);
     await refresh();
+  }
+
+  Future<AmcPlant> loadPlant(String leadId) {
+    return _api.plant(leadId);
+  }
+
+  Future<void> ensurePlantsLoadedSilent() async {
+    if (state.plants.isNotEmpty) return;
+    try {
+      await _reloadPlants(silent: true);
+    } catch (_) {}
   }
 }
 

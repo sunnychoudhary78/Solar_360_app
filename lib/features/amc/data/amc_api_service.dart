@@ -61,6 +61,7 @@ class AmcApiService {
     String? assigneeId,
     bool overdue = false,
     String? due,
+    String? completed,
   }) async {
     final res = await _api.get(
       ApiEndpoints.amcVisits,
@@ -74,6 +75,7 @@ class AmcApiService {
           'assignee_id': assigneeId,
         if (overdue) 'overdue': 'true',
         if (due != null && due.isNotEmpty) 'due': due,
+        if (completed != null && completed.isNotEmpty) 'completed': completed,
       },
     );
     if (res is Map) {

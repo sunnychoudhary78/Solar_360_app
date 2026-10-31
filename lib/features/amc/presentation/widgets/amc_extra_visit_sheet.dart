@@ -4,7 +4,8 @@ import 'package:solar_sales/features/amc/data/models/amc_models.dart';
 
 Future<Map<String, dynamic>?> showAmcExtraVisitSheet(
   BuildContext context, {
-  required AmcPlant plant,
+  AmcPlant? plant,
+  required List<AmcPlant> plantsWithAmc,
   required List<AmcAssignee> assignees,
 }) {
   return showModalBottomSheet<Map<String, dynamic>>(
@@ -13,6 +14,7 @@ Future<Map<String, dynamic>?> showAmcExtraVisitSheet(
     useSafeArea: true,
     builder: (context) => _AmcExtraVisitSheet(
       plant: plant,
+      plantsWithAmc: plantsWithAmc,
       assignees: assignees,
     ),
   );
@@ -20,11 +22,13 @@ Future<Map<String, dynamic>?> showAmcExtraVisitSheet(
 
 class _AmcExtraVisitSheet extends StatefulWidget {
   const _AmcExtraVisitSheet({
-    required this.plant,
+    this.plant,
+    required this.plantsWithAmc,
     required this.assignees,
   });
 
-  final AmcPlant plant;
+  final AmcPlant? plant;
+  final List<AmcPlant> plantsWithAmc;
   final List<AmcAssignee> assignees;
 
   @override
@@ -33,21 +37,21 @@ class _AmcExtraVisitSheet extends StatefulWidget {
 
 class _AmcExtraVisitSheetState extends State<_AmcExtraVisitSheet> {
   late String _scheduledDate;
-  String? _assigneeId;
+  late String _contractId;
+  String _assigneeId = '';
   final _title = TextEditingController();
-  final _findings = TextEditingController();
   String? _error;
 
   @override
   void initState() {
     super.initState();
     _scheduledDate = todayIstYmd();
+    _contractId = widget.plant?.contract?.id ?? '';
   }
 
   @override
   void dispose() {
     _title.dispose();
-    _findings.dispose();
     super.dispose();
   }
 
@@ -69,22 +73,15 @@ class _AmcExtraVisitSheetState extends State<_AmcExtraVisitSheet> {
   }
 
   void _submit() {
-    final contractId = widget.plant.contract?.id ?? '';
-    if (contractId.isEmpty) {
-      setState(() => _error = 'This plant has no active AMC contract');
-      return;
-    }
-    if (_scheduledDate.isEmpty) {
-      setState(() => _error = 'Scheduled date is required');
+    if (_contractId.isEmpty) {
+      setState(() => _error = 'Select a plant with an active AMC');
       return;
     }
     Navigator.pop(context, {
-      'contract_id': contractId,
+      'contract_id': _contractId,
       'scheduled_date': _scheduledDate,
       if (_title.text.trim().isNotEmpty) 'title': _title.text.trim(),
-      if (_assigneeId != null && _assigneeId!.isNotEmpty)
-        'assignee_id': _assigneeId,
-      if (_findings.text.trim().isNotEmpty) 'findings': _findings.text.trim(),
+      'assignee_id': _assigneeId.isEmpty ? null : _assigneeId,
     });
   }
 
@@ -92,6 +89,7 @@ class _AmcExtraVisitSheetState extends State<_AmcExtraVisitSheet> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final lockedPlant = widget.plant;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottom),
@@ -119,15 +117,43 @@ class _AmcExtraVisitSheetState extends State<_AmcExtraVisitSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              '${widget.plant.leadCode} — ${widget.plant.fullName}',
+              'Add a one-off maintenance visit on this AMC.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
             ),
             const SizedBox(height: 16),
+            if (lockedPlant != null)
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Plant',
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(lockedPlant.plantLabel),
+              )
+            else
+              DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use
+                value: _contractId.isEmpty ? null : _contractId,
+                decoration: const InputDecoration(
+                  labelText: 'Plant',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.plantsWithAmc
+                    .where((p) => p.contract?.id.isNotEmpty == true)
+                    .map(
+                      (p) => DropdownMenuItem(
+                        value: p.contract!.id,
+                        child: Text(p.plantLabel),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _contractId = v ?? ''),
+              ),
+            const SizedBox(height: 12),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Scheduled date'),
+              title: const Text('Visit date'),
               subtitle: Text(formatAmcDate(_scheduledDate)),
               trailing: const Icon(Icons.calendar_today_outlined),
               onTap: _pickDate,
@@ -135,47 +161,35 @@ class _AmcExtraVisitSheetState extends State<_AmcExtraVisitSheet> {
             TextField(
               controller: _title,
               decoration: const InputDecoration(
-                labelText: 'Title (optional)',
+                labelText: 'Title',
+                hintText: 'Optional — e.g. Emergency cleaning',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use — match app pattern; initialValue is not controlled
-              value: _assigneeId ?? '',
+              // ignore: deprecated_member_use
+              value: _assigneeId,
               decoration: const InputDecoration(
-                labelText: 'Assignee (optional)',
+                labelText: 'Technician',
                 border: OutlineInputBorder(),
               ),
               items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('Unassigned'),
-                ),
+                const DropdownMenuItem(value: '', child: Text('Unassigned')),
                 ...widget.assignees.map(
-                  (a) => DropdownMenuItem<String>(
-                    value: a.id,
-                    child: Text(a.optionLabel),
-                  ),
+                  (a) => DropdownMenuItem(value: a.id, child: Text(a.name)),
                 ),
               ],
-              onChanged: (v) =>
-                  setState(() => _assigneeId = (v == null || v.isEmpty) ? null : v),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _findings,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                border: OutlineInputBorder(),
-              ),
+              onChanged: (v) => setState(() => _assigneeId = v ?? ''),
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(
                 _error!,
-                style: TextStyle(color: scheme.error, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
             const SizedBox(height: 16),
