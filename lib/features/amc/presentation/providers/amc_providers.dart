@@ -154,7 +154,9 @@ class AmcHomeNotifier extends Notifier<AmcHomeState> {
   }
 
   Future<void> refresh() async {
-    if (state.isLoading) return;
+    // Allow refresh even while a filter load is in flight (e.g. return from
+    // visit detail). Only skip duplicate pull-to-refresh.
+    if (state.isRefreshing) return;
     state = state.copyWith(isRefreshing: true, clearError: true);
     try {
       await _reloadSummary();
@@ -163,9 +165,17 @@ class AmcHomeNotifier extends Notifier<AmcHomeState> {
       } else {
         await _reloadPlants();
       }
-      state = state.copyWith(isRefreshing: false, clearError: true);
+      state = state.copyWith(
+        isRefreshing: false,
+        isLoading: false,
+        clearError: true,
+      );
     } catch (e) {
-      state = state.copyWith(isRefreshing: false, error: cleanError(e));
+      state = state.copyWith(
+        isRefreshing: false,
+        isLoading: false,
+        error: cleanError(e),
+      );
     }
   }
 
@@ -343,10 +353,19 @@ class AmcHomeNotifier extends Notifier<AmcHomeState> {
     return _api.plant(leadId);
   }
 
-  Future<void> ensurePlantsLoadedSilent() async {
-    if (state.plants.isNotEmpty) return;
+  /// Always fetch active-AMC plants for Extra visit (ignore current list filter).
+  Future<List<AmcPlant>> loadPlantsWithAmc() async {
+    final plants = await _api.plants(amc: 'active');
+    return plants
+        .where((p) => p.contract?.id.isNotEmpty == true)
+        .toList(growable: false);
+  }
+
+  Future<void> ensureAssigneesLoaded() async {
+    if (state.assignees.isNotEmpty) return;
     try {
-      await _reloadPlants(silent: true);
+      final assignees = await _api.assignees();
+      state = state.copyWith(assignees: assignees);
     } catch (_) {}
   }
 }

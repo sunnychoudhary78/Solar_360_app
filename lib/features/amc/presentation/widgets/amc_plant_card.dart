@@ -68,14 +68,19 @@ class AmcPlantCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           if (contract != null) ...[
-            AmcStatusChip(status: contract.status),
-            const SizedBox(height: 4),
-            Text(
-              '${amcVisitStatusLabel(contract.status)} · ${contract.visitsPerYear}/year',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+            Row(
+              children: [
+                AmcStatusChip(status: contract.status),
+                const SizedBox(width: 8),
+                Text(
+                  '${contract.visitsPerYear}/year',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
             ),
+            const SizedBox(height: 4),
             Text(
               '${formatAmcDate(contract.startDate)} – ${formatAmcDate(contract.endDate)}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -130,7 +135,7 @@ class AmcPlantCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              if (contract != null) ...[
+              if (plant.hasActiveAmc) ...[
                 if (canCreate && onExtraVisit != null)
                   OutlinedButton(
                     onPressed: onExtraVisit,
@@ -146,10 +151,17 @@ class AmcPlantCard extends StatelessWidget {
                     onPressed: onOpenHistory,
                     child: const Text('History'),
                   ),
-              ] else if (canCreate && onStartAmc != null)
+              ] else if (contract == null &&
+                  canCreate &&
+                  onStartAmc != null)
                 FilledButton(
                   onPressed: onStartAmc,
                   child: const Text('Start AMC'),
+                )
+              else if (contract != null && onOpenHistory != null)
+                OutlinedButton(
+                  onPressed: onOpenHistory,
+                  child: const Text('History'),
                 ),
             ],
           ),

@@ -12,6 +12,8 @@ import 'package:solar_sales/features/amc/presentation/widgets/amc_plant_history_
 import 'package:solar_sales/features/amc/presentation/widgets/amc_start_sheet.dart';
 import 'package:solar_sales/features/amc/presentation/widgets/amc_visit_card.dart';
 import 'package:solar_sales/features/auth/presentation/providers/auth_provider.dart';
+import 'package:solar_sales/shared/utils/app_snackbar.dart';
+import 'package:solar_sales/shared/utils/formatters.dart';
 import 'package:solar_sales/shared/widgets/app_bar.dart';
 import 'package:solar_sales/shared/widgets/async_states.dart';
 
@@ -78,13 +80,24 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
 
   Future<void> _extraVisit([AmcPlant? plant]) async {
     final notifier = ref.read(amcHomeProvider.notifier);
-    await notifier.ensurePlantsLoadedSilent();
+    await notifier.ensureAssigneesLoaded();
+    List<AmcPlant> plantsWithAmc = const [];
+    if (plant == null) {
+      try {
+        plantsWithAmc = await notifier.loadPlantsWithAmc();
+      } catch (e) {
+        if (!mounted) return;
+        // ignore: use_build_context_synchronously
+        showAppSnackBar(context, cleanError(e), isError: true);
+        return;
+      }
+    }
     if (!mounted) return;
     final state = ref.read(amcHomeProvider);
     final body = await showAmcExtraVisitSheet(
       context,
       plant: plant,
-      plantsWithAmc: state.plantsWithAmc,
+      plantsWithAmc: plantsWithAmc,
       assignees: state.assignees,
     );
     if (body == null || !mounted) return;
@@ -177,12 +190,18 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
               tooltip: 'Start AMC',
               onPressed: () async {
                 await notifier.setPlantAmcFilter('none');
+                if (!mounted) return;
+                showAppSnackBar(
+                  context,
+                  'Pick a plant without AMC, then tap Start AMC',
+                );
               },
               icon: const Icon(Icons.playlist_add_check_circle_outlined),
             ),
           IconButton(
             tooltip: 'Refresh',
-            onPressed: state.isLoading ? null : () => notifier.refresh(),
+            onPressed:
+                state.isRefreshing ? null : () => notifier.refresh(),
             icon: state.isRefreshing
                 ? const SizedBox(
                     width: 18,
@@ -302,34 +321,43 @@ class _AmcVisitsScreenState extends ConsumerState<AmcVisitsScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          // ignore: deprecated_member_use
-                          value: state.visitFilter == 'unassigned'
-                              ? 'unassigned'
-                              : state.assigneeFilter,
-                          decoration: const InputDecoration(
-                            labelText: 'Technician',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                              value: '',
-                              child: Text('All technicians'),
-                            ),
-                            const DropdownMenuItem(
-                              value: 'unassigned',
-                              child: Text('Unassigned'),
-                            ),
-                            ...state.assignees.map(
-                              (a) => DropdownMenuItem(
-                                value: a.id,
-                                child: Text(a.name),
+                        Builder(
+                          builder: (context) {
+                            final raw = state.visitFilter == 'unassigned'
+                                ? 'unassigned'
+                                : state.assigneeFilter;
+                            final known = raw.isEmpty ||
+                                raw == 'unassigned' ||
+                                state.assignees.any((a) => a.id == raw);
+                            final value = known ? raw : '';
+                            return DropdownButtonFormField<String>(
+                              // ignore: deprecated_member_use
+                              value: value,
+                              decoration: const InputDecoration(
+                                labelText: 'Technician',
+                                border: OutlineInputBorder(),
+                                isDense: true,
                               ),
-                            ),
-                          ],
-                          onChanged: (v) =>
-                              notifier.setAssigneeFilter(v ?? ''),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: '',
+                                  child: Text('All technicians'),
+                                ),
+                                const DropdownMenuItem(
+                                  value: 'unassigned',
+                                  child: Text('Unassigned'),
+                                ),
+                                ...state.assignees.map(
+                                  (a) => DropdownMenuItem(
+                                    value: a.id,
+                                    child: Text(a.name),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (v) =>
+                                  notifier.setAssigneeFilter(v ?? ''),
+                            );
+                          },
                         ),
                         const SizedBox(height: 12),
                         if (state.isLoading)

@@ -33,15 +33,49 @@ class _AmcVisitDetailScreenState extends ConsumerState<AmcVisitDetailScreen> {
   String _assigneeId = '';
   List<AmcChecklistItem> _checklist = const [];
   final _findings = TextEditingController();
+  final Map<String, TextEditingController> _noteControllers = {};
   bool _customerSignoff = false;
   bool _saving = false;
   String? _hydratedId;
   String? _photoPreview;
 
+  bool get _isClosed =>
+      _status == 'completed' ||
+      _status == 'skipped' ||
+      _status == 'cancelled';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(amcHomeProvider.notifier).ensureAssigneesLoaded();
+    });
+  }
+
   @override
   void dispose() {
     _findings.dispose();
+    for (final c in _noteControllers.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  void _syncNoteControllers(List<AmcChecklistItem> checklist) {
+    final keys = checklist.map((e) => e.key).toSet();
+    for (final key in _noteControllers.keys.toList()) {
+      if (!keys.contains(key)) {
+        _noteControllers.remove(key)?.dispose();
+      }
+    }
+    for (final item in checklist) {
+      final existing = _noteControllers[item.key];
+      if (existing == null) {
+        _noteControllers[item.key] = TextEditingController(text: item.notes);
+      } else if (existing.text != item.notes) {
+        existing.text = item.notes;
+      }
+    }
   }
 
   void _hydrate(AmcVisit visit) {
@@ -52,6 +86,7 @@ class _AmcVisitDetailScreenState extends ConsumerState<AmcVisitDetailScreen> {
     _status = visit.status;
     _assigneeId = visit.assigneeId ?? '';
     _checklist = visit.checklist.map((e) => e.copyWith()).toList();
+    _syncNoteControllers(_checklist);
     _findings.text = visit.findings;
     _customerSignoff = visit.customerSignoff;
   }
@@ -104,6 +139,7 @@ class _AmcVisitDetailScreenState extends ConsumerState<AmcVisitDetailScreen> {
         _status = updated.status;
         _assigneeId = updated.assigneeId ?? '';
         _checklist = updated.checklist.map((e) => e.copyWith()).toList();
+        _syncNoteControllers(_checklist);
         _findings.text = updated.findings;
         _customerSignoff = updated.customerSignoff;
         _saving = false;
@@ -375,7 +411,12 @@ class _AmcVisitDetailScreenState extends ConsumerState<AmcVisitDetailScreen> {
           _hydrate(visit);
           final current = _visit ?? visit;
           final progress = amcChecklistProgress(_checklist);
-          final readOnly = !canUpdate;
+          final readOnly = !canUpdate || _isClosed;
+          final assignees = home.assignees;
+          final assigneeInList =
+              _assigneeId.isEmpty || assignees.any((a) => a.id == _assigneeId);
+          final assigneeDropdownValue =
+              assigneeInList ? _assigneeId : _assigneeId;
 
           return Stack(
             children: [
@@ -555,7 +596,7 @@ class _AmcVisitDetailScreenState extends ConsumerState<AmcVisitDetailScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           // ignore: deprecated_member_use
-                          value: _assigneeId,
+                          value: assigneeDropdownValue,
                           decoration: const InputDecoration(
                             labelText: 'Technician',
                             border: OutlineInputBorder(),
@@ -565,7 +606,16 @@ class _AmcVisitDetailScreenState extends ConsumerState<AmcVisitDetailScreen> {
                               value: '',
                               child: Text('Unassigned'),
                             ),
-                            ...home.assignees.map(
+                            if (!assigneeInList && _assigneeId.isNotEmpty)
+                              DropdownMenuItem(
+                                value: _assigneeId,
+                                child: Text(
+                                  current.assignee?.name.isNotEmpty == true
+                                      ? current.assignee!.name
+                                      : 'Assigned (inactive)',
+                                ),
+                              ),
+                            ...assignees.map(
                               (a) => DropdownMenuItem(
                                 value: a.id,
                                 child: Text(a.name),
@@ -637,8 +687,13 @@ class _AmcVisitDetailScreenState extends ConsumerState<AmcVisitDetailScreen> {
                                     controlAffinity:
                                         ListTileControlAffinity.leading,
                                   ),
-                                  TextFormField(
-                                    initialValue: item.notes,
+                                  TextField(
+                                    controller: _noteControllers.putIfAbsent(
+                                      item.key,
+                                      () => TextEditingController(
+                                        text: item.notes,
+                                      ),
+                                    ),
                                     enabled: !readOnly,
                                     decoration: const InputDecoration(
                                       hintText: 'Notes',
@@ -789,7 +844,7 @@ class _AmcVisitDetailScreenState extends ConsumerState<AmcVisitDetailScreen> {
                       ],
                     ),
                   ),
-                  if (canUpdate)
+                  if (canUpdate && !_isClosed)
                     SafeArea(
                       top: false,
                       child: Container(
